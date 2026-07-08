@@ -102,11 +102,12 @@ Olive Wood `#775533`, Midnight Violet `#290024`.
 - [x] Meta apple-touch-icon / theme-color
 - [x] Bisa di-install ("Add to Home Screen") & buka offline (shell tercache)
 
-## R. Responsive Layout
-- [x] Sidebar jadi drawer + hamburger di layar kecil (<lg), statis di tablet/desktop
-- [x] Kasir POS: berdampingan di lg, bertumpuk (katalog di atas, keranjang di bawah) di layar kecil
-- [x] Grid & tabel responsif (sm/md/lg/xl), overflow aman di mobile
-- [x] Modal & struk max-w-full agar muat di semua viewport
+## R. Responsive Layout (portrait + landscape)
+- [x] Manifest `orientation: "any"` → bisa portrait & landscape
+- [x] Sidebar statis di tablet/desktop (≥md), drawer + hamburger di layar kecil
+- [x] Kasir POS: berdampingan di layar lebar (≥lg), bertumpuk di layar kecil (portrait)
+- [x] Grid & tabel responsif (sm/md/lg/xl), overflow aman, kartu `truncate`
+- [x] Modal & struk `max-w-full` muat di semua viewport & orientasi
 
 ## Belum diimplementasikan (butuh backend/native — lih. plan-opencode.md)
 - Integrasi Xendit/Midtrans sungguhan (webhook)

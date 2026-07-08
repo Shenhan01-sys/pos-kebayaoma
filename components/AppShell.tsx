@@ -48,7 +48,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     <div className="flex min-h-screen">
       {/* Sidebar — static on lg, drawer on smaller */}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex w-60 flex-col bg-violet text-beige transform transition-transform duration-200 lg:static lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-40 flex w-60 flex-col bg-violet text-beige transform transition-transform duration-200 md:static md:translate-x-0 ${
           open ? "translate-x-0" : "-translate-x-full"
         }`}
       >
@@ -71,13 +71,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       {open && (
         <div
           onClick={() => setOpen(false)}
-          className="fixed inset-0 z-30 bg-black/40 lg:hidden"
+          className="fixed inset-0 z-30 bg-black/40 md:hidden"
         />
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Mobile top bar */}
-        <header className="flex items-center gap-3 bg-violet px-3 py-3 text-beige lg:hidden">
+        <header className="flex items-center gap-3 bg-violet px-3 py-3 text-beige md:hidden">
           <button
             onClick={() => setOpen(true)}
             className="text-xl leading-none"

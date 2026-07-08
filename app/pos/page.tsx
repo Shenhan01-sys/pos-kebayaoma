@@ -72,7 +72,7 @@ export default function PosPage() {
           ))}
         </div>
 
-        <div className="grid flex-1 grid-cols-2 gap-3 overflow-auto content-start md:grid-cols-3 xl:grid-cols-4">
+        <div className="grid flex-1 grid-cols-2 gap-2 overflow-auto content-start sm:gap-3 md:grid-cols-3 xl:grid-cols-4">
           {filtered.map((p) => (
             <button
               key={p.id}
@@ -85,7 +85,7 @@ export default function PosPage() {
               >
                 {p.name}
               </div>
-              <div className="text-sm font-semibold leading-tight">{p.name}</div>
+              <div className="truncate text-sm font-semibold leading-tight">{p.name}</div>
               <div className="text-xs text-gray-500">
                 {p.variants.length} varian
               </div>
