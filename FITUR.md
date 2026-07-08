@@ -95,6 +95,13 @@ Olive Wood `#775533`, Midnight Violet `#290024`.
 - [x] qrcode.react untuk generate QR
 - [x] Build production sukses (13 routes)
 
+## Q. PWA (installable + offline)
+- [x] `manifest.json` (standalone, landscape, icon SVG)
+- [x] Service worker `sw.js` (network-first + cache fallback untuk navigasi & aset)
+- [x] Register SW otomatis di production (RegisterSW)
+- [x] Meta apple-touch-icon / theme-color
+- [x] Bisa di-install ("Add to Home Screen") & buka offline (shell tercache)
+
 ## Belum diimplementasikan (butuh backend/native — lih. plan-opencode.md)
 - Integrasi Xendit/Midtrans sungguhan (webhook)
 - Supabase (DB, Auth, RLS, Realtime, Storage)
