@@ -1,0 +1,29 @@
+# dependencies
+node_modules/
+
+# next.js
+.next/
+out/
+
+# vercel
+.vercel/
+
+# logs / local
+*.log
+dev.pid
+
+# env (none needed for dummy FE, but keep safe)
+.env
+.env*.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# research artifacts (not part of the app)
+research_posfeatures.json
+research_posfeatures.log
+research_result.json
+
+dev.err
+dev.log
