@@ -26,9 +26,9 @@ export default function PosPage() {
     );
 
   return (
-    <div className="flex h-full gap-4">
+    <div className="flex flex-col gap-4 lg:h-full lg:flex-row">
       {/* Catalog */}
-      <section className="flex-1 flex flex-col">
+      <section className="flex flex-1 flex-col">
         <div className="mb-3 flex flex-wrap items-center gap-2">
           <input
             value={query}
@@ -101,7 +101,7 @@ export default function PosPage() {
       </section>
 
       {/* Cart */}
-      <aside className="flex w-80 shrink-0 flex-col rounded-xl bg-white p-3 shadow">
+      <aside className="flex w-full shrink-0 flex-col rounded-xl bg-white p-3 shadow lg:w-80">
         <h2 className="mb-2 text-lg font-bold">Keranjang</h2>
         <div className="flex-1 space-y-2 overflow-auto">
           {lines.length === 0 && (
