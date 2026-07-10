@@ -1,29 +1,35 @@
 # dependencies
-node_modules/
+/node_modules
+/.pnp
+.pnp.js
 
 # next.js
-.next/
-out/
+/.next/
+/out/
+/build
+
+# production
+/dist
+
+# misc
+.DS_Store
+*.pem
+npm-debug.log*
+server.log
+server.err
+dev.log
+dev.err
+dev.pid
+research_*.json
+research_*.log
+
+# local env files
+.env*.local
+.env
 
 # vercel
-.vercel/
+.vercel
 
-# logs / local
-*.log
-dev.pid
-
-# env (none needed for dummy FE, but keep safe)
-.env
-.env*.local
-
-# OS
-.DS_Store
-Thumbs.db
-
-# research artifacts (not part of the app)
-research_posfeatures.json
-research_posfeatures.log
-research_result.json
-
-dev.err
-dev.log
+# typescript
+*.tsbuildinfo
+next-env.d.ts

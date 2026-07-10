@@ -12,6 +12,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "echarts": "^5.6.0",
     "next": "^14.2.35",
     "qrcode.react": "3.1.0",
     "react": "18.3.1",

@@ -4,19 +4,29 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { useSettings } from "@/store/settings";
+import { Icon, type IconName } from "@/components/icons";
+import LoadingScreen from "@/components/LoadingScreen";
 
-const links = [
-  { href: "/", label: "Dashboard" },
-  { href: "/pos", label: "Kasir POS" },
-  { href: "/products", label: "Produk" },
-  { href: "/inventory", label: "Inventori" },
-  { href: "/customers", label: "Pelanggan" },
-  { href: "/staff", label: "Staff" },
-  { href: "/transactions", label: "Transaksi" },
-  { href: "/shifts", label: "Shift" },
-  { href: "/reports", label: "Laporan" },
-  { href: "/settings", label: "Pengaturan" },
+const links: { href: string; label: string; icon: IconName }[] = [
+  { href: "/", label: "Dashboard", icon: "dashboard" },
+  { href: "/pos", label: "Kasir POS", icon: "pos" },
+  { href: "/products", label: "Produk", icon: "products" },
+  { href: "/inventory", label: "Inventori", icon: "inventory" },
+  { href: "/customers", label: "Pelanggan", icon: "customers" },
+  { href: "/staff", label: "Staff", icon: "staff" },
+  { href: "/transactions", label: "Transaksi", icon: "transactions" },
+  { href: "/shifts", label: "Shift", icon: "shifts" },
+  { href: "/reports", label: "Laporan", icon: "reports" },
+  { href: "/settings", label: "Pengaturan", icon: "settings" },
 ];
+
+const initials = (name: string) =>
+  name
+    .split(" ")
+    .map((w) => w[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -24,7 +34,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
 
   const nav = (
-    <nav className="flex-1 px-2 space-y-1 overflow-y-auto">
+    <nav className="relative z-10 flex-1 space-y-1 overflow-y-auto pretty-scroll px-2 py-2">
       {links.map((l) => {
         const active =
           l.href === "/" ? pathname === "/" : pathname.startsWith(l.href);
@@ -33,11 +43,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             key={l.href}
             href={l.href}
             onClick={() => setOpen(false)}
-            className={`block rounded-lg px-3 py-2 text-sm font-medium ${
-              active ? "bg-olive" : "hover:bg-brand-800"
+            className={`flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-semibold transition ${
+              active
+                ? "bg-custard text-ink shadow-soft"
+                : "text-ink/70 hover:bg-black/5 hover:text-ink"
             }`}
           >
-            {l.label}
+            <Icon name={l.icon} size={19} className={active ? "text-apricot" : "text-olive"} />
+            <span>{l.label}</span>
           </Link>
         );
       })}
@@ -46,24 +59,45 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen">
-      {/* Sidebar — static on lg, drawer on smaller */}
+      <LoadingScreen />
+      {/* Sidebar — floating light panel on desktop, drawer on small screens */}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex w-60 flex-col bg-violet text-beige transform transition-transform duration-200 md:static md:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-40 flex w-64 flex-col p-3 transition-transform duration-200 md:static md:translate-x-0 ${
           open ? "translate-x-0" : "-translate-x-full"
         }`}
       >
-        <div className="px-3 py-4 text-lg font-bold leading-tight">
-          {s.storeName.split(" ")[0]}
-          <span className="text-apricot">
-            {s.storeName.split(" ").slice(1).join(" ")}
-          </span>
-          <div className="text-[10px] font-normal text-custard">POS Tablet</div>
-        </div>
-        {nav}
-        <div className="px-3 py-3 text-xs text-custard border-t border-brand-800">
-          Kasir: <span className="text-white">{s.cashierName}</span>
-          <div className="mt-1 inline-block rounded bg-green-600 px-1.5 py-0.5 text-[10px]">
-            Shift Buka
+        <div className="relative flex h-full w-60 flex-col overflow-hidden rounded-[28px] bg-white p-3 shadow-soft-lg ring-1 ring-black/5">
+          {/* Decorative solid blobs */}
+          <div className="pointer-events-none absolute -bottom-10 -right-10 h-40 w-40 rounded-full bg-apricot/10" />
+          <div className="pointer-events-none absolute -left-8 top-1/3 h-28 w-28 rounded-full bg-violet/5" />
+
+          <div className="relative z-10 flex items-center gap-3 px-3 pb-3 pt-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-violet text-lg shadow-soft">
+              🪡
+            </div>
+            <div className="leading-tight">
+              <div className="text-base font-extrabold text-ink">
+                {s.storeName.split(" ")[0]}
+                <span className="text-apricot">
+                  {" "}
+                  {s.storeName.split(" ").slice(1).join(" ")}
+                </span>
+              </div>
+              <div className="text-[10px] font-medium text-olive">POS Tablet</div>
+            </div>
+          </div>
+
+          {nav}
+
+          <div className="relative z-10 m-2 flex items-center gap-3 rounded-2xl bg-beige p-2.5">
+            <div className="avatar h-9 w-9 bg-violet">{initials(s.cashierName)}</div>
+            <div className="min-w-0 leading-tight">
+              <div className="truncate text-xs font-bold text-ink">{s.cashierName}</div>
+              <div className="text-[10px] text-olive">Kasir aktif</div>
+            </div>
+            <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-success/15 px-2 py-0.5 text-[10px] font-bold text-success">
+              <span className="h-1.5 w-1.5 rounded-full bg-success" /> Shift
+            </span>
           </div>
         </div>
       </aside>
@@ -71,24 +105,24 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       {open && (
         <div
           onClick={() => setOpen(false)}
-          className="fixed inset-0 z-30 bg-black/40 md:hidden"
+          className="fixed inset-0 z-30 bg-black/40 backdrop-blur-sm md:hidden"
         />
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Mobile top bar */}
-        <header className="flex items-center gap-3 bg-violet px-3 py-3 text-beige md:hidden">
+        <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-black/5 bg-white/70 px-3 py-2.5 backdrop-blur-md md:hidden">
           <button
             onClick={() => setOpen(true)}
-            className="text-xl leading-none"
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-black/5 text-ink"
             aria-label="Buka menu"
           >
-            ☰
+            <Icon name="menu" size={20} />
           </button>
-          <span className="font-bold">{s.storeName}</span>
+          <span className="font-bold text-ink">{s.storeName}</span>
         </header>
 
-        <main className="flex-1 overflow-auto p-3 sm:p-4">{children}</main>
+        <main className="flex-1 overflow-auto p-3 sm:p-5">{children}</main>
       </div>
     </div>
   );

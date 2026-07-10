@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useData } from "@/store/data";
 import { type Product, type Variant } from "@/lib/dummy";
+import { Icon } from "@/components/icons";
 
 let vid = 5000;
 const newVid = () => `nv${++vid}`;
@@ -70,38 +71,38 @@ export default function ProductForm({
 
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Labeled label="Nama Produk">
-          <input value={name} onChange={(e) => setName(e.target.value)} className="inp" />
+          <input value={name} onChange={(e) => setName(e.target.value)} className="input" />
         </Labeled>
         <Labeled label="SKU">
-          <input value={sku} onChange={(e) => setSku(e.target.value)} className="inp" />
+          <input value={sku} onChange={(e) => setSku(e.target.value)} className="input" />
         </Labeled>
         <Labeled label="Kategori">
-          <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className="inp">
+          <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className="input">
             {categories.map((c) => (
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
           </select>
         </Labeled>
         <Labeled label="Brand / Season">
-          <input value={`${brand} ${season}`} onChange={(e) => { const [b, ...s] = e.target.value.split(" "); setBrand(b); setSeason(s.join(" ")); }} className="inp" placeholder="Brand Season" />
+          <input value={`${brand} ${season}`} onChange={(e) => { const [b, ...s] = e.target.value.split(" "); setBrand(b); setSeason(s.join(" ")); }} className="input" placeholder="Brand Season" />
         </Labeled>
         <Labeled label="Bahan">
-          <input value={fabric} onChange={(e) => setFabric(e.target.value)} className="inp" />
+          <input value={fabric} onChange={(e) => setFabric(e.target.value)} className="input" />
         </Labeled>
         <Labeled label="Perawatan">
-          <input value={care} onChange={(e) => setCare(e.target.value)} className="inp" />
+          <input value={care} onChange={(e) => setCare(e.target.value)} className="input" />
         </Labeled>
         <Labeled label="Tags (pisah koma)">
-          <input value={tags} onChange={(e) => setTags(e.target.value)} className="inp" />
+          <input value={tags} onChange={(e) => setTags(e.target.value)} className="input" />
         </Labeled>
         <Labeled label="Harga Coret (compare-at)">
-          <input value={compareAt} onChange={(e) => setCompareAt(e.target.value)} className="inp" placeholder="opsional" />
+          <input value={compareAt} onChange={(e) => setCompareAt(e.target.value)} className="input" placeholder="opsional" />
         </Labeled>
       </div>
       <Labeled label="Deskripsi">
-        <textarea value={description} onChange={(e) => setDescription(e.target.value)} className="inp" rows={2} />
+        <textarea value={description} onChange={(e) => setDescription(e.target.value)} className="input" rows={2} />
       </Labeled>
 
       <div>
@@ -114,22 +115,22 @@ export default function ProductForm({
                 { id: newVid(), sku: "", size: "", color: "", colorCode: "#775533", stock: 0, costPrice: 0, sellingPrice: 0, barcode: "" },
               ])
             }
-            className="rounded bg-apricot px-2 py-1 text-xs text-white"
+            className="btn-soft px-3 py-1.5 text-xs"
           >
-            + Varian
+            <Icon name="plus" size={14} /> Varian
           </button>
         </div>
         <div className="space-y-2">
           {variants.map((v, i) => (
-            <div key={v.id} className="grid grid-cols-4 gap-2 rounded-lg border p-2 text-xs">
-              <input className="inp" placeholder="Size" value={v.size} onChange={(e) => setVar(i, { size: e.target.value })} />
-              <input className="inp" placeholder="Warna" value={v.color} onChange={(e) => setVar(i, { color: e.target.value })} />
-              <input className="inp" placeholder="SKU" value={v.sku} onChange={(e) => setVar(i, { sku: e.target.value })} />
-              <input className="inp" placeholder="Barcode" value={v.barcode ?? ""} onChange={(e) => setVar(i, { barcode: e.target.value })} />
-              <input className="inp" type="number" placeholder="Modal" value={v.costPrice} onChange={(e) => setVar(i, { costPrice: Number(e.target.value) })} />
-              <input className="inp" type="number" placeholder="Harga" value={v.sellingPrice} onChange={(e) => setVar(i, { sellingPrice: Number(e.target.value) })} />
-              <input className="inp" type="number" placeholder="Stok" value={v.stock} onChange={(e) => setVar(i, { stock: Number(e.target.value) })} />
-              <button onClick={() => setVariants((vs) => vs.filter((_, idx) => idx !== i))} className="rounded bg-red-100 text-red-700">
+            <div key={v.id} className="grid grid-cols-2 gap-2 rounded-2xl bg-beige/60 p-3 text-xs sm:grid-cols-4">
+              <input className="input" placeholder="Size" value={v.size} onChange={(e) => setVar(i, { size: e.target.value })} />
+              <input className="input" placeholder="Warna" value={v.color} onChange={(e) => setVar(i, { color: e.target.value })} />
+              <input className="input" placeholder="SKU" value={v.sku} onChange={(e) => setVar(i, { sku: e.target.value })} />
+              <input className="input" placeholder="Barcode" value={v.barcode ?? ""} onChange={(e) => setVar(i, { barcode: e.target.value })} />
+              <input className="input" type="number" placeholder="Modal" value={v.costPrice} onChange={(e) => setVar(i, { costPrice: Number(e.target.value) })} />
+              <input className="input" type="number" placeholder="Harga" value={v.sellingPrice} onChange={(e) => setVar(i, { sellingPrice: Number(e.target.value) })} />
+              <input className="input" type="number" placeholder="Stok" value={v.stock} onChange={(e) => setVar(i, { stock: Number(e.target.value) })} />
+              <button onClick={() => setVariants((vs) => vs.filter((_, idx) => idx !== i))} className="btn-danger px-2 py-1.5 text-xs">
                 Hapus
               </button>
             </div>
@@ -142,7 +143,7 @@ export default function ProductForm({
         Produk aktif (tampil di kasir & profil)
       </label>
 
-      <button onClick={submit} className="w-full rounded-lg bg-olive px-3 py-2 font-bold text-beige">
+      <button onClick={submit} className="btn-violet w-full py-3 text-base">
         {product ? "Simpan Perubahan" : "Tambah Produk"}
       </button>
     </div>

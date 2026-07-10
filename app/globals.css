@@ -2,42 +2,122 @@
 @tailwind components;
 @tailwind utilities;
 
-@layer components {
-  .inp {
-    @apply w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-apricot focus:outline-none;
+@layer base {
+  html {
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    @apply bg-beige bg-grad-page text-ink font-sans;
+  }
+
+  /* Numeric / financial figures feel more "iOS" with tabular figures */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
   }
 }
 
-html,
-body {
-  height: 100%;
+@layer components {
+  /* ---------- Card ---------- */
+  .card {
+    @apply rounded-3xl bg-white/90 shadow-soft ring-1 ring-black/5 backdrop-blur-sm;
+  }
+  .card-pad {
+    @apply p-4 sm:p-5;
+  }
+  .card-soft {
+    @apply rounded-3xl bg-white/70 shadow-soft ring-1 ring-white/60;
+  }
+
+  /* ---------- Buttons ---------- */
+  .btn {
+    @apply inline-flex select-none items-center justify-center gap-2 rounded-full px-4 py-2.5 text-sm font-semibold transition active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply btn bg-apricot text-ink shadow-glow hover:brightness-105;
+  }
+  .btn-violet {
+    @apply btn bg-violet/10 text-violet hover:bg-violet/15;
+  }
+  .btn-success {
+    @apply btn bg-success/15 text-success hover:bg-success/25;
+  }
+  .btn-ghost {
+    @apply btn bg-black/5 text-ink hover:bg-black/10;
+  }
+  .btn-soft {
+    @apply btn bg-custard/60 text-olive hover:bg-custard;
+  }
+  .btn-danger {
+    @apply btn bg-danger/10 text-danger hover:bg-danger/20;
+  }
+  .btn-outline {
+    @apply btn ring-1 ring-black/10 bg-white text-ink hover:bg-black/5;
+  }
+
+  /* ---------- Inputs ---------- */
+  .input {
+    @apply w-full rounded-2xl border border-black/10 bg-white/80 px-3.5 py-2.5 text-sm text-ink shadow-inset outline-none transition placeholder:text-gray-400 focus:border-apricot focus:ring-2 focus:ring-apricot/30;
+  }
+  /* Backwards-compatible alias for legacy usages */
+  .inp { @apply input; }
+
+  .input-ghost {
+    @apply w-full rounded-2xl border border-transparent bg-black/5 px-3.5 py-2.5 text-sm outline-none transition focus:bg-white focus:ring-2 focus:ring-apricot/30;
+  }
+
+  /* ---------- Segmented control / pill filters ---------- */
+  .seg {
+    @apply inline-flex items-center gap-1 rounded-full bg-black/5 p-1;
+  }
+  .seg-item {
+    @apply rounded-full px-3.5 py-1.5 text-sm font-medium text-ink/70 transition;
+  }
+  .seg-item-active {
+    @apply bg-white text-ink shadow-soft;
+  }
+
+  /* ---------- Pills / badges ---------- */
+  .pill {
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold;
+  }
+  .pill-success { @apply pill bg-success/15 text-success; }
+  .pill-warning { @apply pill bg-warning/15 text-warning; }
+  .pill-danger  { @apply pill bg-danger/15 text-danger; }
+  .pill-violet  { @apply pill bg-brand-800/15 text-brand-800; }
+  .pill-apricot { @apply pill bg-apricot/15 text-apricot; }
+  .pill-muted   { @apply pill bg-black/5 text-ink/60; }
+
+  /* ---------- Section heading ---------- */
+  .section-title {
+    @apply text-base font-bold text-ink;
+  }
+
+  /* ---------- Avatar ---------- */
+  .avatar {
+    @apply flex shrink-0 items-center justify-center rounded-full bg-grad-apricot text-sm font-bold text-white shadow-soft;
+  }
 }
 
-body {
-  @apply bg-beige text-ink;
-}
+/* Hide scrollbar for horizontal rails (kept from original) */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
-/* Hide scrollbar for horizontal product rail */
-.no-scrollbar::-webkit-scrollbar {
-  display: none;
+/* Thin pretty scrollbar for inner scroll areas */
+.pretty-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+.pretty-scroll::-webkit-scrollbar-thumb {
+  background: rgba(119,85,51,0.25); border-radius: 999px;
 }
-.no-scrollbar {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
-}
+.pretty-scroll::-webkit-scrollbar-track { background: transparent; }
 
 @media print {
-  body * {
-    visibility: hidden;
-  }
+  body { background: #fff; }
+  body * { visibility: hidden; }
   #print-area,
-  #print-area * {
-    visibility: visible;
-  }
+  #print-area * { visibility: visible; }
   #print-area {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 80mm;
+    position: absolute; left: 0; top: 0; width: 80mm;
+    box-shadow: none !important;
   }
 }

@@ -26,24 +26,24 @@ export default function CategoryManager({ onClose }: { onClose: () => void }) {
       <div className="w-[420px] max-w-full rounded-xl bg-white p-5 shadow-xl">
         <div className="mb-3 flex items-center justify-between">
           <h3 className="text-lg font-bold">Kelola Kategori</h3>
-          <button onClick={onClose} className="text-gray-400">✕</button>
+          <button onClick={onClose} className="text-gray-600">✕</button>
         </div>
 
         <div className="mb-3 flex gap-2">
-          <input className="inp" placeholder="Nama kategori" value={name} onChange={(e) => setName(e.target.value)} />
-          <input className="inp" placeholder="slug" value={slug} onChange={(e) => setSlug(e.target.value)} />
+          <input className="input" placeholder="Nama kategori" value={name} onChange={(e) => setName(e.target.value)} />
+          <input className="input" placeholder="slug" value={slug} onChange={(e) => setSlug(e.target.value)} />
         </div>
-        <button onClick={save} className="mb-3 w-full rounded-lg bg-apricot px-3 py-2 text-sm font-bold text-white">
+        <button onClick={save} className="btn-primary mb-3 w-full">
           {editId ? "Update" : "Tambah Kategori"}
         </button>
 
-        <ul className="space-y-1">
+        <ul className="space-y-1.5">
           {categories.map((c) => (
-            <li key={c.id} className="flex items-center justify-between rounded-lg border p-2 text-sm">
-              <span>{c.name} <span className="text-gray-400">({c.slug})</span></span>
+            <li key={c.id} className="flex items-center justify-between rounded-2xl bg-beige/60 p-2.5 text-sm">
+              <span>{c.name} <span className="text-gray-600">({c.slug})</span></span>
               <div className="flex gap-1">
-                <button onClick={() => { setEditId(c.id); setName(c.name); setSlug(c.slug); }} className="rounded bg-beige px-2 py-1 text-xs">Edit</button>
-                <button onClick={() => deleteCategory(c.id)} className="rounded bg-red-100 px-2 py-1 text-xs text-red-700">Hapus</button>
+                <button onClick={() => { setEditId(c.id); setName(c.name); setSlug(c.slug); }} className="btn-ghost px-2.5 py-1 text-xs">Edit</button>
+                <button onClick={() => deleteCategory(c.id)} className="btn-danger px-2.5 py-1 text-xs">Hapus</button>
               </div>
             </li>
           ))}

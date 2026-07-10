@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { transactions as dummyTx, formatRupiah, type Transaction } from "@/lib/dummy";
 import { getAllTransactions, subscribeTransactions } from "@/store/cart";
+import { Icon } from "@/components/icons";
 
 export default function VerifyPage({ params }: { params: { id: string } }) {
   const [tx, setTx] = useState<Transaction | null | undefined>(undefined);
@@ -13,12 +14,13 @@ export default function VerifyPage({ params }: { params: { id: string } }) {
     return subscribeTransactions(sync);
   }, [params.id]);
 
-  if (tx === undefined) return <div className="p-6">Memverifikasi…</div>;
+  if (tx === undefined) return <div className="p-6 text-center text-gray-500">Memverifikasi…</div>;
 
   if (tx === null)
     return (
-      <div className="mx-auto max-w-md p-6 text-center text-red-600">
-        Transaksi tidak ditemukan.
+      <div className="mx-auto max-w-md p-6 text-center text-danger">
+        <Icon name="alert" size={32} className="mx-auto" />
+        <p className="mt-2">Transaksi tidak ditemukan.</p>
       </div>
     );
 
@@ -26,49 +28,51 @@ export default function VerifyPage({ params }: { params: { id: string } }) {
 
   return (
     <div className="mx-auto max-w-md p-4">
-      <div
-        className={`rounded-2xl p-5 text-center shadow ${
-          paid ? "bg-green-50" : "bg-amber-50"
-        }`}
-      >
-        <div className="text-3xl">{paid ? "✅" : "⏳"}</div>
-        <h1 className="mt-2 text-lg font-bold">
+      <div className="card card-pad text-center">
+        <div
+          className={`mx-auto flex h-14 w-14 items-center justify-center rounded-full ${
+            paid ? "bg-success/15 text-success" : "bg-apricot/15 text-apricot"
+          }`}
+        >
+          <Icon name={paid ? "check" : "transactions"} size={30} />
+        </div>
+        <h1 className="mt-3 text-lg font-extrabold text-ink">
           {paid ? "Pembayaran Terverifikasi" : "Menunggu Pembayaran"}
         </h1>
-        <div className="mt-1 text-sm text-gray-600">{tx.number}</div>
+        <div className="mt-1 text-sm text-gray-500">{tx.number}</div>
       </div>
 
-      <div className="mt-3 rounded-xl bg-white p-4 shadow">
-        <div className="flex justify-between text-sm">
-          <span className="text-gray-500">Tanggal</span>
-          <span>{new Date(tx.createdAt).toLocaleString("id-ID")}</span>
-        </div>
-        <div className="flex justify-between text-sm">
-          <span className="text-gray-500">Kasir</span>
-          <span>{tx.cashier}</span>
-        </div>
-        <div className="flex justify-between text-sm">
-          <span className="text-gray-500">Metode</span>
-          <span className="uppercase">{tx.paymentMethod}</span>
-        </div>
-        <div className="mt-2 border-t pt-2">
+      <div className="card card-pad mt-3">
+        <Row label="Tanggal" value={new Date(tx.createdAt).toLocaleString("id-ID")} />
+        <Row label="Kasir" value={tx.cashier} />
+        <Row label="Metode" value={tx.paymentMethod.toUpperCase()} />
+        <div className="mt-2 space-y-1 border-t border-black/5 pt-2">
           {tx.items.map((it, i) => (
             <div key={i} className="flex justify-between text-sm">
-              <span>
-                {it.name} ({it.size}/{it.color}) x{it.quantity}
+              <span className="text-ink">
+                {it.name} <span className="text-gray-500">({it.size}/{it.color}) x{it.quantity}</span>
               </span>
-              <span>{formatRupiah(it.total)}</span>
+              <span className="font-medium tnum">{formatRupiah(it.total)}</span>
             </div>
           ))}
         </div>
-        <div className="mt-2 flex justify-between border-t pt-2 font-bold">
+        <div className="mt-2 flex justify-between border-t border-black/5 pt-2 text-base font-extrabold">
           <span>Total</span>
-          <span className="text-brand-700">{formatRupiah(tx.total)}</span>
+          <span className="text-olive tnum">{formatRupiah(tx.total)}</span>
         </div>
       </div>
-      <p className="mt-2 text-center text-xs text-gray-400">
+      <p className="mt-2 text-center text-xs text-gray-500">
         Verifikasi resmi Kebaya Oma
       </p>
+    </div>
+  );
+}
+
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex justify-between text-sm">
+      <span className="text-gray-600">{label}</span>
+      <span className="font-medium text-ink">{value}</span>
     </div>
   );
 }

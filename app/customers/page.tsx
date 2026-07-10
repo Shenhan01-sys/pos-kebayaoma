@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useData } from "@/store/data";
 import { getAllTransactions } from "@/store/cart";
 import { formatRupiah, type Customer } from "@/lib/dummy";
+import { Icon } from "@/components/icons";
 
 export default function CustomersPage() {
   const { customers, addCustomer, updateCustomer, deleteCustomer } = useData();
@@ -32,32 +33,43 @@ export default function CustomersPage() {
     setEditing(null);
   }
 
+  const initials = (n: string) =>
+    n.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase();
+
   return (
     <div>
       <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Pelanggan</h1>
-        <button onClick={openAdd} className="rounded-lg bg-apricot px-3 py-2 text-sm font-bold text-white">+ Pelanggan</button>
+        <h1 className="text-2xl font-extrabold tracking-tight text-ink">Pelanggan</h1>
+        <button onClick={openAdd} className="btn-primary">
+          <Icon name="plus" size={16} /> Pelanggan
+        </button>
       </div>
 
       <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
         {customers.map((c) => {
           const txs = getAllTransactions([]).filter((t) => t.customerName === c.name && t.status === "paid");
           return (
-            <div key={c.id} className="rounded-xl bg-white p-4 shadow">
-              <div className="flex items-start justify-between">
-                <div>
-                  <div className="font-bold">{c.name}</div>
-                  <div className="text-xs text-gray-500">{c.phone}</div>
+            <div key={c.id} className="card card-pad">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-3">
+                  <span className="avatar h-10 w-10 bg-grad-olive">{initials(c.name)}</span>
+                  <div className="min-w-0">
+                    <div className="truncate font-bold text-ink">{c.name}</div>
+                    <div className="text-xs text-gray-600">{c.phone}</div>
+                  </div>
                 </div>
-                <div className="flex gap-1">
-                  <button onClick={() => setHistory(c)} className="rounded bg-beige px-2 py-1 text-xs">Riwayat</button>
-                  <button onClick={() => openEdit(c)} className="rounded bg-apricot px-2 py-1 text-xs text-white">Edit</button>
-                  <button onClick={() => deleteCustomer(c.id)} className="rounded bg-red-100 px-2 py-1 text-xs text-red-700">Hapus</button>
+                <div className="flex shrink-0 gap-1">
+                  <button onClick={() => setHistory(c)} className="btn-ghost px-2.5 py-1 text-xs">Riwayat</button>
+                  <button onClick={() => openEdit(c)} className="btn-primary px-2.5 py-1 text-xs">Edit</button>
+                  <button onClick={() => deleteCustomer(c.id)} className="btn-danger px-2.5 py-1 text-xs">Hapus</button>
                 </div>
               </div>
-              <div className="mt-2 text-sm">
-                <div>Total belanja: <b>{formatRupiah(c.totalPurchases + txs.reduce((s, t) => s + t.total, 0))}</b></div>
-                <div className="text-gray-500">Transaksi: {txs.length}</div>
+              <div className="mt-3 flex items-center justify-between rounded-2xl bg-beige/60 px-3 py-2 text-sm">
+                <span className="text-gray-600">Total belanja</span>
+                <b className="tnum text-olive">{formatRupiah(c.totalPurchases + txs.reduce((s, t) => s + t.total, 0))}</b>
+              </div>
+              <div className="mt-1 text-right text-xs text-gray-600">
+                {txs.length} transaksi
               </div>
             </div>
           );
@@ -65,37 +77,45 @@ export default function CustomersPage() {
       </div>
 
       {(adding || editing) && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-[420px] max-w-full rounded-xl bg-white p-5 shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 backdrop-blur-sm sm:items-center sm:p-4">
+          <div className="w-full max-w-[420px] rounded-t-4xl bg-white p-5 shadow-soft-xl sm:rounded-3xl">
             <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-lg font-bold">{editing ? "Edit Pelanggan" : "Tambah Pelanggan"}</h3>
-              <button onClick={() => { setAdding(false); setEditing(null); }} className="text-gray-400">✕</button>
+              <h3 className="text-lg font-bold text-ink">{editing ? "Edit Pelanggan" : "Tambah Pelanggan"}</h3>
+              <button onClick={() => { setAdding(false); setEditing(null); }} className="flex h-8 w-8 items-center justify-center rounded-full bg-black/5 text-gray-600">
+                <Icon name="close" size={16} />
+              </button>
             </div>
             <div className="space-y-2">
-              <input className="inp" placeholder="Nama" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-              <input className="inp" placeholder="Telepon" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+              <input className="input" placeholder="Nama" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+              <input className="input" placeholder="Telepon" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
             </div>
-            <button onClick={save} className="mt-3 w-full rounded-lg bg-olive py-2 font-bold text-beige">Simpan</button>
+            <button onClick={save} className="btn-violet mt-3 w-full py-3">Simpan</button>
           </div>
         </div>
       )}
 
       {history && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-[420px] max-w-full rounded-xl bg-white p-5 shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 backdrop-blur-sm sm:items-center sm:p-4">
+          <div className="w-full max-w-[420px] rounded-t-4xl bg-white p-5 shadow-soft-xl sm:rounded-3xl">
             <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-lg font-bold">Riwayat: {history.name}</h3>
-              <button onClick={() => setHistory(null)} className="text-gray-400">✕</button>
+              <h3 className="text-lg font-bold text-ink">Riwayat: {history.name}</h3>
+              <button onClick={() => setHistory(null)} className="flex h-8 w-8 items-center justify-center rounded-full bg-black/5 text-gray-600">
+                <Icon name="close" size={16} />
+              </button>
             </div>
-            <ul className="max-h-80 space-y-1 overflow-auto text-sm">
+            <ul className="max-h-80 space-y-1 overflow-auto text-sm pretty-scroll">
               {getAllTransactions([]).filter((t) => t.customerName === history.name).map((t) => (
-                <li key={t.id} className="flex justify-between border-b py-1">
-                  <span>{t.number}<br /><span className="text-xs text-gray-400">{new Date(t.createdAt).toLocaleDateString("id-ID")}</span></span>
-                  <span className="font-semibold">{formatRupiah(t.total)}</span>
+                <li key={t.id} className="flex justify-between border-b border-black/5 py-2">
+                  <span className="font-mono text-xs text-gray-600">
+                    {t.number}
+                    <br />
+                    <span className="text-xs text-gray-600">{new Date(t.createdAt).toLocaleDateString("id-ID")}</span>
+                  </span>
+                  <span className="font-semibold tnum text-ink">{formatRupiah(t.total)}</span>
                 </li>
               ))}
               {getAllTransactions([]).filter((t) => t.customerName === history.name).length === 0 && (
-                <li className="text-gray-400">Belum ada transaksi.</li>
+                <li className="py-4 text-center text-gray-600">Belum ada transaksi.</li>
               )}
             </ul>
           </div>

@@ -11,13 +11,19 @@ import { useCart, addTransaction, nextTxNumber } from "@/store/cart";
 import { useSettings } from "@/store/settings";
 import { useData } from "@/store/data";
 import Receipt from "@/components/Receipt";
+import { Icon } from "@/components/icons";
 
 function mockQrisString(amount: number, ref: string): string {
-  // Pseudo QRIS (dummy) — real integration uses Xendit/Midtrans dynamic QR
   return `00020101021226ID.CO.KEBAYAOMA.WWW011893600912345678${ref}5204583253033605802ID5909KEBAYAOMA6011JAKARTASELAT6304${String(
     amount
   ).padStart(10, "0")}`;
 }
+
+const methodMeta: Record<PaymentMethod, { label: string; icon: "qris" | "cash" | "transfer" }> = {
+  qris: { label: "QRIS", icon: "qris" },
+  cash: { label: "Tunai", icon: "cash" },
+  transfer: { label: "Transfer", icon: "transfer" },
+};
 
 export default function CheckoutModal({ onClose }: { onClose: () => void }) {
   const { lines, total, clear, discount, setDiscount, customerName } = useCart();
@@ -25,10 +31,10 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
   const { adjustStock } = useData();
   const [method, setMethod] = useState<PaymentMethod>("qris");
   const [paid, setPaid] = useState<Transaction | null>(null);
-  const [cashPaid, setCashPaid] = useState<string>(
-    String(total()).padStart(0, "0")
+  const [cashPaid, setCashPaid] = useState<string>(String(total()));
+  const [ref] = useState(
+    () => "QRX-" + Math.random().toString(36).slice(2, 8).toUpperCase()
   );
-  const [ref] = useState(() => "QRX-" + Math.random().toString(36).slice(2, 8).toUpperCase());
 
   const rawSubtotal = lines.reduce((s, l) => s + l.unitPrice * l.quantity, 0);
   const disc = discount;
@@ -81,25 +87,28 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
 
   if (paid) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-        <div className="max-h-full overflow-auto rounded-xl bg-white p-5 shadow-xl w-[360px]">
-          <div className="mb-3 text-center text-green-600 font-bold">
-            ✓ Pembayaran Berhasil
+      <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 backdrop-blur-sm sm:items-center sm:p-4">
+        <div className="max-h-full w-full max-w-[380px] overflow-auto rounded-t-4xl bg-white p-5 shadow-soft-xl sm:rounded-3xl">
+          <div className="mb-3 flex flex-col items-center text-center">
+            <span className="flex h-14 w-14 items-center justify-center rounded-full bg-grad-success text-white shadow-glow">
+              <Icon name="check" size={30} />
+            </span>
+            <div className="mt-2 text-lg font-extrabold text-ink">
+              Pembayaran Berhasil
+            </div>
+            <div className="text-sm text-gray-600 tnum">{formatRupiah(grand)}</div>
           </div>
           <Receipt tx={paid} />
           <div className="mt-4 flex gap-2">
-            <button
-              onClick={() => window.print()}
-              className="flex-1 rounded-lg bg-brand-600 px-3 py-2 text-white text-sm"
-            >
-              Print Nota
+            <button onClick={() => window.print()} className="btn-violet flex-1">
+              <Icon name="printer" size={16} /> Print Nota
             </button>
             <button
               onClick={() => {
                 clear();
                 onClose();
               }}
-              className="flex-1 rounded-lg bg-gray-200 px-3 py-2 text-sm"
+              className="btn-ghost flex-1"
             >
               Selesai
             </button>
@@ -110,88 +119,100 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-[420px] max-w-full rounded-xl bg-white p-5 shadow-xl">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-lg font-bold">Pembayaran</h2>
-          <button onClick={onClose} className="text-gray-400">
-            ✕
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 backdrop-blur-sm sm:items-center sm:p-4">
+      <div className="w-full max-w-[440px] overflow-hidden rounded-t-4xl bg-white shadow-soft-xl sm:rounded-3xl">
+        <div className="flex items-center justify-between bg-beige px-5 py-4">
+          <div>
+            <div className="text-xs font-medium text-olive">Total Bayar</div>
+            <div className="text-2xl font-extrabold text-ink tnum">{formatRupiah(grand)}</div>
+          </div>
+          <button
+            onClick={onClose}
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-black/5 text-ink"
+            aria-label="Tutup"
+          >
+            <Icon name="close" size={18} />
           </button>
         </div>
 
-        <div className="mb-3 text-right text-xl font-bold text-brand-700">
-          {formatRupiah(grand)}
-        </div>
-
-        {customerName && (
-          <div className="mb-2 text-sm text-olive">Pelanggan: {customerName}</div>
-        )}
-
-        <div className="mb-3 flex items-center gap-2">
-          <label className="text-sm text-gray-600">Diskon</label>
-          <input
-            type="number"
-            min={0}
-            value={discount}
-            onChange={(e) => setDiscount(Number(e.target.value) || 0)}
-            className="w-32 rounded-lg border px-2 py-1 text-right"
-          />
-        </div>
-
-        <div className="mb-4 grid grid-cols-3 gap-2">
-          {(["qris", "cash", "transfer"] as PaymentMethod[]).map((m) => (
-            <button
-              key={m}
-              onClick={() => setMethod(m)}
-              className={`rounded-lg border px-2 py-2 text-sm font-medium ${
-                method === m
-                  ? "border-brand-600 bg-brand-50 text-brand-700"
-                  : "border-gray-300"
-              }`}
-            >
-              {m === "qris" ? "QRIS" : m === "cash" ? "Tunai" : "Transfer"}
-            </button>
-          ))}
-        </div>
-
-        {method === "qris" && (
-          <div className="flex flex-col items-center">
-            <div className="rounded-lg border p-2 bg-white">
-              <QRCodeSVG value={mockQrisString(grand, ref)} size={180} level="M" />
+        <div className="card-pad">
+          {customerName && (
+            <div className="mb-3 flex items-center gap-2 rounded-2xl bg-beige/60 px-3 py-2 text-sm text-olive">
+              <Icon name="customers" size={16} /> Pelanggan: {customerName}
             </div>
-            <p className="mt-2 text-center text-xs text-gray-500">
-              Scan dengan e-wallet (dummy). Klik tombol untuk simulasi.
+          )}
+
+          <div className="mb-3 flex items-center gap-2">
+            <label className="text-sm font-medium text-gray-600">Diskon</label>
+            <div className="relative ml-auto w-36">
+              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-600">
+                Rp
+              </span>
+              <input
+                type="number"
+                min={0}
+                value={discount}
+                onChange={(e) => setDiscount(Number(e.target.value) || 0)}
+                className="input pl-9 text-right tnum"
+              />
+            </div>
+          </div>
+
+          {/* Method segmented control */}
+          <div className="seg mb-4 w-full">
+            {(["qris", "cash", "transfer"] as PaymentMethod[]).map((m) => (
+              <button
+                key={m}
+                onClick={() => setMethod(m)}
+                className={`seg-item flex flex-1 items-center justify-center gap-1.5 ${
+                  method === m ? "seg-item-active" : ""
+                }`}
+              >
+                <Icon name={methodMeta[m].icon} size={16} />
+                {methodMeta[m].label}
+              </button>
+            ))}
+          </div>
+
+          {method === "qris" && (
+            <div className="flex flex-col items-center rounded-2xl bg-beige/60 p-4">
+              <div className="rounded-2xl bg-white p-3 shadow-soft">
+                <QRCodeSVG value={mockQrisString(grand, ref)} size={176} level="M" />
+              </div>
+              <p className="mt-2 text-center text-xs text-gray-600">
+                Scan dengan e-wallet (dummy). Klik tombol untuk simulasi.
+              </p>
+            </div>
+          )}
+
+          {method === "cash" && (
+            <div className="space-y-2 rounded-2xl bg-beige/60 p-4">
+              <label className="block text-sm font-medium text-gray-600">Uang Diterima</label>
+              <input
+                type="number"
+                value={cashPaid}
+                onChange={(e) => setCashPaid(e.target.value)}
+                className="input text-right text-lg font-semibold tnum"
+              />
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-600">Kembali</span>
+                <span className="font-bold text-success tnum">
+                  {formatRupiah(Math.max(0, (Number(cashPaid) || 0) - grand))}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {method === "transfer" && (
+            <p className="rounded-2xl bg-beige/60 p-4 text-sm text-gray-600">
+              Instruksi transfer ke rekening tokok (dummy).
             </p>
-          </div>
-        )}
+          )}
 
-        {method === "cash" && (
-          <div className="space-y-2">
-            <label className="block text-sm text-gray-600">Uang Diterima</label>
-            <input
-              type="number"
-              value={cashPaid}
-              onChange={(e) => setCashPaid(e.target.value)}
-              className="w-full rounded-lg border px-3 py-2 text-right"
-            />
-            <div className="text-right text-sm">
-              Kembali: {formatRupiah(Math.max(0, (Number(cashPaid) || 0) - grand))}
-            </div>
-          </div>
-        )}
-
-        {method === "transfer" && (
-          <p className="text-sm text-gray-500">
-            Instruksi transfer ke rekening tokok (dummy).
-          </p>
-        )}
-
-        <button
-          onClick={finish}
-          className="mt-4 w-full rounded-lg bg-brand-600 px-3 py-3 font-bold text-white"
-        >
-          {method === "qris" ? "Simulasikan Pembayaran" : "Konfirmasi"}
-        </button>
+          <button onClick={finish} className="btn-primary mt-4 w-full py-3 text-base">
+            {method === "qris" ? "Simulasikan Pembayaran" : "Konfirmasi"}
+          </button>
+        </div>
       </div>
     </div>
   );
