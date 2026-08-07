@@ -9,37 +9,7 @@ import PrintBarcodeModal from "@/components/PrintBarcodeModal";
 import { Icon } from "@/components/icons";
 
 export default function ProductsPage() {
-  // TEMPORARY: Use dummy data directly (bypass Supabase)
-  const dummyProducts = [
-    {
-      id: "p1",
-      name: "Kebaya Modern Pink",
-      sku: "KBY-001",
-      categoryId: "cat1",
-      active: true,
-      fabric: "Silk",
-      variants: [
-        { id: "v1", size: "S", color: "Pink", sellingPrice: 450000, stock: 5, barcode: "8995501S" },
-        { id: "v2", size: "M", color: "Pink", sellingPrice: 450000, stock: 3, barcode: "8995501M" }
-      ]
-    },
-    {
-      id: "p2", 
-      name: "Kebaya Encim Biru",
-      sku: "KBY-002",
-      categoryId: "cat1",
-      active: true,
-      fabric: "Cotton",
-      variants: [
-        { id: "v3", size: "M", color: "Blue", sellingPrice: 520000, stock: 8, barcode: "8995502M" }
-      ]
-    }
-  ];
-  
-  const products = dummyProducts;
-  const categories = [{ id: "cat1", name: "Kebaya" }];
-  const deleteProduct = (id: string) => console.log("Delete:", id);
-  
+  const { products, categories, deleteProduct } = useData();
   const [cat, setCat] = useState("all");
   const [editing, setEditing] = useState<Product | null>(null);
   const [adding, setAdding] = useState(false);
@@ -54,7 +24,7 @@ export default function ProductsPage() {
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-2xl font-extrabold tracking-tight text-ink">🛍️ Produk (HALAMAN PRODUCTS)</h1>
+        <h1 className="text-2xl font-extrabold tracking-tight text-ink">Produk</h1>
         <div className="flex gap-2">
           <button onClick={() => setCatOpen(true)} className="btn-ghost">
             <Icon name="tag" size={16} /> Kategori
