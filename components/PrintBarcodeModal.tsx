@@ -15,7 +15,8 @@ export default function PrintBarcodeModal({
   isOpen,
   onClose,
   productId,
-}: PrintBarcodeModalProps) {
+  onPrint,
+}: PrintBarcodeModalProps & { onPrint: (labels: any[]) => void }) {
   const { products } = useData();
   const [selectedVariants, setSelectedVariants] = useState<Record<string, number>>({});
   const [labelSize, setLabelSize] = useState<"60x30" | "50x25" | "40x20">("60x30");
@@ -59,10 +60,16 @@ export default function PrintBarcodeModal({
     }));
   };
 
-  // Print handler - redirect to print page (same tab)
+  // Print handler - collect labels and pass to parent
   const handlePrint = () => {
-    const selectedIds = Object.keys(selectedVariants).join(",");
-    window.location.href = `/print-barcode?ids=${selectedIds}`;
+    const labelsToPrint: any[] = [];
+    allVariants.forEach(({ product, variant }) => {
+      if (selectedVariants[variant.id]) {
+        labelsToPrint.push({ product, variant });
+      }
+    });
+    onPrint(labelsToPrint);
+    onClose();
   };
 
   // Calculate total labels

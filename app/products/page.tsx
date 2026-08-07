@@ -18,6 +18,8 @@ export default function ProductsPage() {
   const [catOpen, setCatOpen] = useState(false);
   const [toDelete, setToDelete] = useState<Product | null>(null);
   const [printBarcode, setPrintBarcode] = useState<string | null>(null);
+  const [printLabels, setPrintLabels] = useState<any[]>([]); // Labels to print
+  const [showPrintArea, setShowPrintArea] = useState(false); // Show hidden print area
 
   const filtered = cat === "all" ? products : products.filter((p) => p.categoryId === cat);
   const catName = (id: string) => categories.find((c) => c.id === id)?.name ?? "—";
@@ -109,6 +111,14 @@ export default function ProductsPage() {
           isOpen={!!printBarcode}
           onClose={() => setPrintBarcode(null)}
           productId={printBarcode}
+          onPrint={(labels) => {
+            setPrintLabels(labels);
+            setShowPrintArea(true);
+            setTimeout(() => {
+              window.print();
+              setShowPrintArea(false);
+            }, 1000);
+          }}
         />
       )}
 
@@ -126,6 +136,25 @@ export default function ProductsPage() {
       )}
 
       {catOpen && <CategoryManager onClose={() => setCatOpen(false)} />}
+
+      {/* Hidden Print Area */}
+      {showPrintArea && (
+        <div className="hidden print:block print:absolute print:top-0 print:left-0 print:z-50">
+          {printLabels.map(({ product, variant }) => (
+            <div key={variant.id} className="label-container">
+              <BarcodeLabel
+                barcode={variant.barcode || variant.sku}
+                productName={product.name}
+                color={variant.color}
+                size={variant.size}
+                price={variant.sellingPrice}
+                width={60}
+                height={30}
+              />
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
