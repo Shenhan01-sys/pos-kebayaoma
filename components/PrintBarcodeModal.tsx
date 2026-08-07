@@ -1,8 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import html2canvas from "html2canvas";
-import jsPDF from "jspdf";
+import { pdf } from "@react-pdf/renderer";
 import JsBarcode from "jsbarcode";
 import { Dialog, DialogPanel, DialogTitle } from "@headlessui/react";
 import BarcodeLabel from "./BarcodeLabel";
@@ -62,10 +61,37 @@ export default function PrintBarcodeModal({
     }));
   };
 
-  // Print handler - redirect to print page
-  const handlePrint = () => {
-    const selectedIds = Object.keys(selectedVariants).join(",");
-    window.open(`/print-barcode?ids=${selectedIds}`, "_blank");
+  // Print handler - generate PDF using react-pdf
+  const handlePrint = async () => {
+    // Collect selected labels
+    const labelsToPrint: any[] = [];
+    allVariants.forEach(({ product, variant }) => {
+      if (selectedVariants[variant.id]) {
+        labelsToPrint.push({
+          productName: product.name,
+          size: variant.size,
+          price: variant.sellingPrice,
+          barcode: variant.barcode || variant.sku,
+        });
+      }
+    });
+
+    // Import PDF document dynamically (to avoid SSR issues)
+    const { BarcodeLabelPDF } = await import("./BarcodeLabelPDF");
+    const doc = <BarcodeLabelPDF labels={labelsToPrint} />;
+    
+    // Generate PDF blob
+    const asBlob = await pdf(doc).toBlob();
+    const url = URL.createObjectURL(asBlob);
+    
+    // Download PDF
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "barcode-labels.pdf";
+    link.click();
+    
+    // Cleanup
+    URL.revokeObjectURL(url);
     onClose();
   };
 
