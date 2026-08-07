@@ -61,20 +61,32 @@ export default function PrintBarcodeModal({
     }));
   };
 
-  // Print handler - generate PDF using react-pdf
+  // Print handler - generate PDF using react-pdf with real barcodes
   const handlePrint = async () => {
-    // Collect selected labels
+    // Collect selected labels and generate barcode images
     const labelsToPrint: any[] = [];
-    allVariants.forEach(({ product, variant }) => {
+    
+    for (const { product, variant } of allVariants) {
       if (selectedVariants[variant.id]) {
+        // Generate barcode image as base64
+        const canvas = document.createElement("canvas");
+        JsBarcode(canvas, variant.barcode || variant.sku, {
+          format: "CODE128",
+          width: 2,
+          height: 60,
+          displayValue: false,
+        });
+        const barcodeImage = canvas.toDataURL("image/png");
+        
         labelsToPrint.push({
           productName: product.name,
           size: variant.size,
           price: variant.sellingPrice,
           barcode: variant.barcode || variant.sku,
+          barcodeImage, // Pass barcode image to PDF
         });
       }
-    });
+    }
 
     // Import PDF document dynamically (to avoid SSR issues)
     const { BarcodeLabelPDF } = await import("./BarcodeLabelPDF");

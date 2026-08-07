@@ -6,6 +6,7 @@ interface LabelData {
   size: string;
   price: number;
   barcode: string;
+  barcodeImage: string; // base64 image
 }
 
 interface BarcodeLabelPDFProps {
@@ -22,9 +23,9 @@ export function BarcodeLabelPDF({ labels }: BarcodeLabelPDFProps) {
       <Page size={[60, 30]} style={styles.page}> {/* 60x30mm */}
         {labels.map((label, index) => (
           <View key={index} style={styles.label}>
-            {/* Barcode (placeholder) */}
+            {/* Barcode (real image) */}
             <View style={styles.barcodeContainer}>
-              <Image style={styles.barcode} src={barcodeImage} />
+              <Image style={styles.barcode} src={label.barcodeImage} />
               <Text style={styles.barcodeText}>{label.barcode}</Text>
             </View>
             
