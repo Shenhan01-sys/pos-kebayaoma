@@ -10,6 +10,7 @@ export default function PrintBarcodePage() {
   const variantIds = searchParams.get("ids")?.split(",") || [];
   const { products } = useData();
   const [labels, setLabels] = useState<any[]>([]);
+  const [readyToPrint, setReadyToPrint] = useState(false);
 
   useEffect(() => {
     // Collect all variants that match the IDs
@@ -27,17 +28,26 @@ export default function PrintBarcodePage() {
     setLabels(allLabels);
   }, [variantIds, products]);
 
-  // Auto-trigger print when page loads
+  // Wait for labels to render, then trigger print
   useEffect(() => {
     if (labels.length > 0) {
-      setTimeout(() => {
-        window.print();
-      }, 1000); // Delay to ensure rendering
+      // Wait 2 seconds for barcodes to render
+      const timer = setTimeout(() => {
+        setReadyToPrint(true);
+      }, 2000);
+      return () => clearTimeout(timer);
     }
   }, [labels]);
 
+  // Trigger print when ready
+  useEffect(() => {
+    if (readyToPrint) {
+      window.print();
+    }
+  }, [readyToPrint]);
+
   return (
-    <div className="p-8 print:p-0">
+    <div className="p-8 print:p-0 print:absolute print:top-0 print:left-0">
       {/* Header (hidden in print) */}
       <div className="mb-8 print:hidden">
         <h1 className="text-2xl font-bold">Print Barcode Labels</h1>
@@ -50,10 +60,10 @@ export default function PrintBarcodePage() {
         </button>
       </div>
 
-      {/* Labels (visible in print) */}
+      {/* All Labels (visible in print) */}
       <div className="print-area">
         {labels.map(({ product, variant }) => (
-          <div key={variant.id} className="label-container mb-4">
+          <div key={variant.id} className="label-container">
             <BarcodeLabel
               barcode={variant.barcode || variant.sku}
               productName={product.name}
@@ -68,7 +78,7 @@ export default function PrintBarcodePage() {
       </div>
 
       {/* Print Styles */}
-      <style jsx>{`
+      <style jsx global>{`
         @media print {
           body * {
             visibility: hidden;
@@ -85,6 +95,8 @@ export default function PrintBarcodePage() {
           }
           .label-container {
             page-break-inside: avoid;
+            margin: 10px;
+            display: inline-block;
           }
         }
       `}</style>

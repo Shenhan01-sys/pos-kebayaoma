@@ -59,10 +59,10 @@ export default function PrintBarcodeModal({
     }));
   };
 
-  // Print handler - redirect to print page
+  // Print handler - redirect to print page (same tab)
   const handlePrint = () => {
     const selectedIds = Object.keys(selectedVariants).join(",");
-    window.open(`/print-barcode?ids=${selectedIds}`, "_blank");
+    window.location.href = `/print-barcode?ids=${selectedIds}`;
   };
 
   // Calculate total labels
