@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useData } from "@/store/data";
-import BarcodeLabel from "@/components/BarcodeLabel";
 import { useSearchParams } from "next/navigation";
 
 export default function PrintBarcodePage() {
@@ -10,93 +9,164 @@ export default function PrintBarcodePage() {
   const variantIds = searchParams.get("ids")?.split(",") || [];
   const { products } = useData();
   const [labels, setLabels] = useState<any[]>([]);
-  const [readyToPrint, setReadyToPrint] = useState(false);
 
   useEffect(() => {
-    // Collect all variants that match the IDs
     const allLabels: any[] = [];
     products.forEach((product) => {
       product.variants.forEach((variant) => {
         if (variantIds.includes(variant.id)) {
-          allLabels.push({
-            product,
-            variant,
-          });
+          allLabels.push({ product, variant });
         }
       });
     });
     setLabels(allLabels);
   }, [variantIds, products]);
 
-  // Wait for labels to render, then trigger print
+  // Auto-trigger print when ready
   useEffect(() => {
     if (labels.length > 0) {
-      // Wait 2 seconds for barcodes to render
       const timer = setTimeout(() => {
-        setReadyToPrint(true);
+        window.print();
       }, 2000);
       return () => clearTimeout(timer);
     }
   }, [labels]);
 
-  // Trigger print when ready
-  useEffect(() => {
-    if (readyToPrint) {
-      window.print();
-    }
-  }, [readyToPrint]);
-
   return (
-    <div className="p-8 print:p-0 print:absolute print:top-0 print:left-0">
+    <div className="print-page">
       {/* Header (hidden in print) */}
-      <div className="mb-8 print:hidden">
-        <h1 className="text-2xl font-bold">Print Barcode Labels</h1>
-        <p className="text-gray-600">{labels.length} labels ready to print</p>
-        <button
-          onClick={() => window.print()}
-          className="mt-4 px-6 py-3 bg-[#775533] text-white rounded-xl font-bold"
-        >
+      <div className="no-print" style={{ padding: "20px", textAlign: "center" }}>
+        <h1>Printing {labels.length} Barcode Labels...</h1>
+        <button onClick={() => window.print()} style={{ padding: "10px 20px", fontSize: "16px" }}>
           Print Now
         </button>
       </div>
 
-      {/* All Labels (visible in print) */}
-      <div className="print-area">
+      {/* Labels (visible in print) */}
+      <div className="labels-container">
         {labels.map(({ product, variant }) => (
-          <div key={variant.id} className="label-container">
-            <BarcodeLabel
-              barcode={variant.barcode || variant.sku}
-              productName={product.name}
-              color={variant.color}
-              size={variant.size}
-              price={variant.sellingPrice}
-              width={60}
-              height={30}
-            />
+          <div key={variant.id} className="label-item">
+            {/* Barcode */}
+            <div className="barcode-container">
+              <svg className="barcode-svg" data-barcode={variant.barcode || variant.sku}></svg>
+            </div>
+            {/* Product Info */}
+            <div className="info-container">
+              <div className="product-name">{product.name}</div>
+              <div className="variant-info">Size: {variant.size}</div>
+              <div className="price">Rp {variant.sellingPrice.toLocaleString("id-ID")}</div>
+            </div>
           </div>
         ))}
       </div>
 
-      {/* Print Styles */}
+      {/* Generate barcodes on client */}
+      <script dangerouslySetInnerHTML={{
+        __html: `
+          document.querySelectorAll('.barcode-svg').forEach((svg) => {
+            const barcode = svg.getAttribute('data-barcode');
+            if (barcode && window.JsBarcode) {
+              window.JsBarcode(svg, barcode, {
+                format: 'CODE128',
+                width: 1.5,
+                height: 40,
+                displayValue: false
+              });
+            }
+          });
+        `
+      }} />
+
+      {/* Styles */}
       <style jsx global>{`
+        body {
+          margin: 0;
+          padding: 0;
+        }
+        
+        .print-page {
+          padding: 20px;
+        }
+        
+        .labels-container {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 10px;
+        }
+        
+        .label-item {
+          width: 60mm;
+          height: 30mm;
+          border: 1px solid #ccc;
+          display: flex;
+          align-items: center;
+          padding: 8px;
+          box-sizing: border-box;
+          page-break-inside: avoid;
+        }
+        
+        .barcode-container {
+          flex: 1;
+          overflow: hidden;
+        }
+        
+        .barcode-svg {
+          width: 100%;
+          height: 50px;
+        }
+        
+        .info-container {
+          text-align: right;
+          padding-left: 12px;
+          flex-shrink: 0;
+        }
+        
+        .product-name {
+          font-weight: bold;
+          font-size: 11px;
+          color: #3a1430;
+        }
+        
+        .variant-info {
+          font-size: 9px;
+          color: #666;
+        }
+        
+        .price {
+          font-weight: bold;
+          color: #775533;
+          font-size: 10px;
+          margin-top: 2px;
+        }
+        
         @media print {
           body * {
             visibility: hidden;
           }
-          .print-area,
-          .print-area * {
+          
+          .print-page,
+          .print-page * {
             visibility: visible;
           }
-          .print-area {
+          
+          .print-page {
             position: absolute;
             left: 0;
             top: 0;
             width: 100%;
           }
-          .label-container {
+          
+          .no-print {
+            display: none !important;
+          }
+          
+          .labels-container {
+            display: block;
+          }
+          
+          .label-item {
             page-break-inside: avoid;
-            margin: 10px;
-            display: inline-block;
+            break-inside: avoid;
           }
         }
       `}</style>
