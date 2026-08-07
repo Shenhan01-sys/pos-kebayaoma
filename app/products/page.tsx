@@ -111,14 +111,6 @@ export default function ProductsPage() {
           isOpen={!!printBarcode}
           onClose={() => setPrintBarcode(null)}
           productId={printBarcode}
-          onPrint={(labels) => {
-            setPrintLabels(labels);
-            setShowPrintArea(true);
-            setTimeout(() => {
-              window.print();
-              setShowPrintArea(false);
-            }, 1000);
-          }}
         />
       )}
 

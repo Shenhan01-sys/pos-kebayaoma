@@ -15,8 +15,7 @@ export default function PrintBarcodeModal({
   isOpen,
   onClose,
   productId,
-  onPrint,
-}: PrintBarcodeModalProps & { onPrint: (labels: any[]) => void }) {
+}: PrintBarcodeModalProps) {
   const { products } = useData();
   const [selectedVariants, setSelectedVariants] = useState<Record<string, number>>({});
   const [labelSize, setLabelSize] = useState<"60x30" | "50x25" | "40x20">("60x30");
@@ -60,16 +59,60 @@ export default function PrintBarcodeModal({
     }));
   };
 
-  // Print handler - collect labels and pass to parent
+  // Print handler - print directly from modal
   const handlePrint = () => {
-    const labelsToPrint: any[] = [];
+    // Render labels in a hidden print area
+    const printArea = document.createElement("div");
+    printArea.id = "print-area-temp";
+    printArea.style.position = "absolute";
+    printArea.style.left = "-9999px";
+    printArea.style.top = "0";
+    
+    // Add labels to print area
     allVariants.forEach(({ product, variant }) => {
       if (selectedVariants[variant.id]) {
-        labelsToPrint.push({ product, variant });
+        // Create label element (simplified - in real app, render BarcodeLabel)
+        const label = document.createElement("div");
+        label.className = "label-container";
+        label.innerHTML = `
+          <div style="width: 60mm; height: 30mm; border: 1px solid #ccc; display: flex; align-items: center; padding: 8px;">
+            <div style="flex: 1;">
+              <svg class="barcode"></svg>
+              <div style="font-size: 8px; text-align: center;">${variant.barcode || variant.sku}</div>
+            </div>
+            <div style="text-align: right; padding-left: 12px;">
+              <div style="font-weight: bold; font-size: 11px;">${product.name}</div>
+              <div style="font-size: 9px; color: #666;">Size: ${variant.size}</div>
+              <div style="font-weight: bold; color: #775533; font-size: 10px; margin-top: 2px;">
+                Rp ${variant.sellingPrice.toLocaleString("id-ID")}
+              </div>
+            </div>
+          </div>
+        `;
+        printArea.appendChild(label);
       }
     });
-    onPrint(labelsToPrint);
-    onClose();
+    
+    document.body.appendChild(printArea);
+    
+    // Generate barcodes in print area
+    printArea.querySelectorAll(".barcode").forEach((svg: any, index: number) => {
+      const variant = allVariants[index]?.variant;
+      if (variant) {
+        JsBarcode(svg, variant.barcode || variant.sku, {
+          format: "CODE128",
+          width: 1.5,
+          height: 50,
+          displayValue: false,
+        });
+      }
+    });
+    
+    // Print
+    setTimeout(() => {
+      window.print();
+      document.body.removeChild(printArea);
+    }, 500);
   };
 
   // Calculate total labels
