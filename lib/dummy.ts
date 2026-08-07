@@ -78,9 +78,9 @@ export interface Transaction {
 
 export interface Shift {
   id: string;
-  user: string;
-  start: string;
-  end?: string;
+  staff_name: string;
+  opened_at: string;
+  closed_at?: string;
   startingCash: number;
   endingCash?: number;
   totalTransactions: number;
@@ -688,8 +688,8 @@ export const transactions: Transaction[] = [
 export const shifts: Shift[] = [
   {
     id: "s1",
-    user: "Ani",
-    start: "2025-01-15T09:00:00+07:00",
+    staff_name: "Ani",
+    opened_at: "2025-01-15T09:00:00+07:00",
     startingCash: 500000,
     totalTransactions: 14,
     totalSales: 6750000,

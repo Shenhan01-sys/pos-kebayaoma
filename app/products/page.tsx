@@ -1,21 +1,52 @@
 "use client";
 
 import { useState } from "react";
-import { QRCodeSVG } from "qrcode.react";
 import { useData } from "@/store/data";
 import { formatRupiah, BASE_URL, type Product } from "@/lib/dummy";
 import ProductForm from "@/components/ProductForm";
 import CategoryManager from "@/components/CategoryManager";
+import PrintBarcodeModal from "@/components/PrintBarcodeModal";
 import { Icon } from "@/components/icons";
 
 export default function ProductsPage() {
-  const { products, categories, deleteProduct } = useData();
+  // TEMPORARY: Use dummy data directly (bypass Supabase)
+  const dummyProducts = [
+    {
+      id: "p1",
+      name: "Kebaya Modern Pink",
+      sku: "KBY-001",
+      categoryId: "cat1",
+      active: true,
+      fabric: "Silk",
+      variants: [
+        { id: "v1", size: "S", color: "Pink", sellingPrice: 450000, stock: 5, barcode: "8995501S" },
+        { id: "v2", size: "M", color: "Pink", sellingPrice: 450000, stock: 3, barcode: "8995501M" }
+      ]
+    },
+    {
+      id: "p2", 
+      name: "Kebaya Encim Biru",
+      sku: "KBY-002",
+      categoryId: "cat1",
+      active: true,
+      fabric: "Cotton",
+      variants: [
+        { id: "v3", size: "M", color: "Blue", sellingPrice: 520000, stock: 8, barcode: "8995502M" }
+      ]
+    }
+  ];
+  
+  const products = dummyProducts;
+  const categories = [{ id: "cat1", name: "Kebaya" }];
+  const deleteProduct = (id: string) => console.log("Delete:", id);
+  
   const [cat, setCat] = useState("all");
   const [editing, setEditing] = useState<Product | null>(null);
   const [adding, setAdding] = useState(false);
   const [qr, setQr] = useState<string | null>(null);
   const [catOpen, setCatOpen] = useState(false);
   const [toDelete, setToDelete] = useState<Product | null>(null);
+  const [printBarcode, setPrintBarcode] = useState<string | null>(null);
 
   const filtered = cat === "all" ? products : products.filter((p) => p.categoryId === cat);
   const catName = (id: string) => categories.find((c) => c.id === id)?.name ?? "—";
@@ -23,7 +54,7 @@ export default function ProductsPage() {
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-2xl font-extrabold tracking-tight text-ink">Produk</h1>
+        <h1 className="text-2xl font-extrabold tracking-tight text-ink">🛍️ Produk (HALAMAN PRODUCTS)</h1>
         <div className="flex gap-2">
           <button onClick={() => setCatOpen(true)} className="btn-ghost">
             <Icon name="tag" size={16} /> Kategori
@@ -54,6 +85,7 @@ export default function ProductsPage() {
               </div>
               <div className="flex shrink-0 gap-1">
                 <button onClick={() => setQr(p.sku)} className="btn-ghost px-2.5 py-1 text-xs">Label QR</button>
+                <button onClick={() => setPrintBarcode(p.id)} className="btn-ghost px-2.5 py-1 text-xs">Print Barcode</button>
                 <button onClick={() => setEditing(p)} className="btn-primary px-2.5 py-1 text-xs">Edit</button>
                 <button onClick={() => setToDelete(p)} className="btn-danger px-2.5 py-1 text-xs">Hapus</button>
               </div>
@@ -97,6 +129,14 @@ export default function ProductsPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {printBarcode && (
+        <PrintBarcodeModal
+          isOpen={!!printBarcode}
+          onClose={() => setPrintBarcode(null)}
+          productId={printBarcode}
+        />
       )}
 
       {qr && (

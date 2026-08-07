@@ -18,15 +18,15 @@ export default function ShiftsPage() {
             <div key={s.id} className="card card-pad">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <span className="avatar h-10 w-10 bg-grad-violet">{s.user.slice(0, 1).toUpperCase()}</span>
-                  <div className="font-bold text-ink">{s.user}</div>
+                  <span className="avatar h-10 w-10 bg-grad-violet">{s.staff_name.slice(0, 1).toUpperCase()}</span>
+                  <div className="font-bold text-ink">{s.staff_name}</div>
                 </div>
                 <span className={`pill ${isClosed ? "pill-muted" : "pill-success"}`}>
                   {isClosed ? "Tutup" : s.status}
                 </span>
               </div>
               <div className="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
-                <Stat label="Mulai" value={new Date(s.start).toLocaleString("id-ID")} />
+                 <Stat label="Mulai" value={new Date(s.opened_at).toLocaleString("id-ID")} />
                 <Stat label="Modal Awal" value={formatRupiah(s.startingCash)} />
                 <Stat label="Total Transaksi" value={String(s.totalTransactions)} />
                 <Stat label="Total Penjualan" value={formatRupiah(s.totalSales)} accent />
