@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { QRCodeSVG } from "qrcode.react";
 import { useData } from "@/store/data";
 import { formatRupiah, BASE_URL, type Product } from "@/lib/dummy";
 import ProductForm from "@/components/ProductForm";
