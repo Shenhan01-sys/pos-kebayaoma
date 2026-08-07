@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import html2canvas from "html2canvas";
+import jsPDF from "jspdf";
 import JsBarcode from "jsbarcode";
 import { Dialog, DialogPanel, DialogTitle } from "@headlessui/react";
 import BarcodeLabel from "./BarcodeLabel";
@@ -60,76 +62,82 @@ export default function PrintBarcodeModal({
     }));
   };
 
-  // Print handler - render labels in hidden div, then print
-  const handlePrint = () => {
-    // Create hidden print area
-    const printArea = document.createElement("div");
-    printArea.id = "barcode-print-area";
-    printArea.style.position = "fixed";
-    printArea.style.left = "-9999px";
-    printArea.style.top = "0";
-    printArea.style.zIndex = "-9999";
+  // Print handler - generate PDF using html2canvas + jsPDF
+  const handlePrint = async () => {
+    // Create temporary div to render labels
+    const tempDiv = document.createElement("div");
+    tempDiv.id = "temp-barcode-render";
+    tempDiv.style.position = "absolute";
+    tempDiv.style.left = "-9999px";
+    tempDiv.style.top = "0";
     
-    // Add labels
+    // Add labels to temp div
     allVariants.forEach(({ product, variant }) => {
       if (selectedVariants[variant.id]) {
         const label = document.createElement("div");
-        label.className = "barcode-label";
-        label.style.width = "60mm";
-        label.style.height = "30mm";
-        label.style.border = "1px solid #ccc";
+        label.className = "barcode-label-print";
+        label.style.width = "226px"; // ~60mm
+        label.style.height = "113px"; // ~30mm
         label.style.display = "flex";
         label.style.alignItems = "center";
         label.style.padding = "8px";
+        label.style.border = "1px solid #ccc";
+        label.style.margin = "10px";
         label.style.boxSizing = "border-box";
+        label.style.backgroundColor = "white";
         
         label.innerHTML = `
           <div style="flex: 1; overflow: hidden;">
-            <svg class="barcode-svg" style="width: 100%; height: 50%;"></svg>
-            <div style="font-size: 8px; text-align: center; margin-top: 2px;">${variant.barcode || variant.sku}</div>
+            <svg class="barcode-svg" style="width: 100%; height: 50px;"></svg>
+            <div style="font-size: 10px; text-align: center; margin-top: 4px; font-family: monospace;">${variant.barcode || variant.sku}</div>
           </div>
-          <div style="text-align: right; padding-left: 12px; flex-shrink: 0;">
-            <div style="font-weight: bold; font-size: 11px; color: #3a1430;">${product.name}</div>
-            <div style="font-size: 9px; color: #666;">Size: ${variant.size}</div>
-            <div style="font-weight: bold; color: #775533; font-size: 10px; margin-top: 2px;">
+          <div style="text-align: right; padding-left: 16px; flex-shrink: 0;">
+            <div style="font-weight: bold; font-size: 12px; color: #3a1430; font-family: Arial;">${product.name}</div>
+            <div style="font-size: 10px; color: #666; margin-top: 2px;">Size: ${variant.size}</div>
+            <div style="font-weight: bold; color: #775533; font-size: 11px; margin-top: 4px;">
               Rp ${variant.sellingPrice.toLocaleString("id-ID")}
             </div>
           </div>
         `;
         
-        printArea.appendChild(label);
+        tempDiv.appendChild(label);
       }
     });
     
-    document.body.appendChild(printArea);
+    document.body.appendChild(tempDiv);
     
     // Generate barcodes
-    setTimeout(() => {
-      printArea.querySelectorAll(".barcode-svg").forEach((svg: any, idx: number) => {
-        const variant = allVariants[idx]?.variant;
-        if (variant && svg) {
-          JsBarcode(svg, variant.barcode || variant.sku, {
-            format: "CODE128",
-            width: 1.5,
-            height: 40,
-            displayValue: false,
-            margin: 0,
-          });
-        }
-      });
-      
-      // Wait for barcodes to render, then print
-      setTimeout(() => {
-        window.print();
-        // Clean up after print
-        setTimeout(() => {
-          const el = document.getElementById("barcode-print-area");
-          if (el) el.remove();
-        }, 1000);
-      }, 500);
-    }, 100);
+    tempDiv.querySelectorAll(".barcode-svg").forEach((svg: any, idx: number) => {
+      const variant = allVariants[idx]?.variant;
+      if (variant && svg) {
+        JsBarcode(svg, variant.barcode || variant.sku, {
+          format: "CODE128",
+          width: 1.5,
+          height: 40,
+          displayValue: false,
+          margin: 0,
+        });
+      }
+    });
     
-    onClose(); // Close modal after setting up print
+    // Wait for barcodes to render, then generate PDF
+    setTimeout(async () => {
+      try {
+        const canvas = await html2canvas(tempDiv, { scale: 2 });
+        const imgData = canvas.toDataURL("image/png");
+        const pdf = new jsPDF("l", "mm", "A4"); // Landscape A4
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = pdf.internal.pageSize.getHeight();
+        pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
+        pdf.save("barcode-labels.pdf");
+      } catch (err) {
+        console.error("PDF generation failed:", err);
+      } finally {
+        document.body.removeChild(tempDiv);
+      }
+    }, 1000);
+    
+    onClose();
   };
 
   // Calculate total labels
