@@ -36,9 +36,7 @@ export default function PrintBarcodeModal({
       });
       setSelectedVariants(allVariants);
     }
-  }, [isOpen, productId]);
-
-  if (!product) return null;
+   }, [isOpen, productId]);
 
   // Handle checkbox toggle
   const toggleVariant = (variantId: string) => {
