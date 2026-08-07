@@ -30,6 +30,9 @@ export default function ProductsPage() {
           <button onClick={() => setCatOpen(true)} className="btn-ghost">
             <Icon name="tag" size={16} /> Kategori
           </button>
+          <button onClick={() => setPrintBarcode("all")} className="btn-ghost">
+            <Icon name="printer" size={16} /> Print Barcode
+          </button>
           <button onClick={() => setAdding(true)} className="btn-primary">
             <Icon name="plus" size={16} /> Produk
           </button>
@@ -56,7 +59,6 @@ export default function ProductsPage() {
               </div>
               <div className="flex shrink-0 gap-1">
                 <button onClick={() => setQr(p.sku)} className="btn-ghost px-2.5 py-1 text-xs">Label QR</button>
-                <button onClick={() => setPrintBarcode(p.id)} className="btn-ghost px-2.5 py-1 text-xs">Print Barcode</button>
                 <button onClick={() => setEditing(p)} className="btn-primary px-2.5 py-1 text-xs">Edit</button>
                 <button onClick={() => setToDelete(p)} className="btn-danger px-2.5 py-1 text-xs">Hapus</button>
               </div>

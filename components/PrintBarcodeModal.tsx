@@ -20,8 +20,23 @@ export default function PrintBarcodeModal({
   const [selectedVariants, setSelectedVariants] = useState<Record<string, number>>({});
   const [labelSize, setLabelSize] = useState<"60x30" | "50x25" | "40x20">("60x30");
 
-  // Find product
-  const product = products.find((p) => p.id === productId);
+  // Get products to print
+  const productsToPrint = productId === "all" 
+    ? products 
+    : products.filter((p) => p.id === productId);
+
+  // Auto-check all variants on open
+  useEffect(() => {
+    if (isOpen) {
+      const allVariants: Record<string, number> = {};
+      productsToPrint.forEach((p) => {
+        p.variants.forEach((v) => {
+          allVariants[v.id] = 1; // Default 1 copy each
+        });
+      });
+      setSelectedVariants(allVariants);
+    }
+  }, [isOpen, productId]);
 
   if (!product) return null;
 
@@ -56,6 +71,14 @@ export default function PrintBarcodeModal({
   // Calculate total labels
   const totalLabels = Object.values(selectedVariants).reduce((a, b) => a + b, 0);
 
+  // Get all variants from selected products
+  const allVariants = productsToPrint.flatMap((p) =>
+    p.variants.map((v) => ({
+      product: p,
+      variant: v,
+    }))
+  );
+
   return (
     <Dialog open={isOpen} onClose={onClose} className="relative z-50">
       {/* Overlay */}
@@ -69,45 +92,47 @@ export default function PrintBarcodeModal({
             <DialogTitle className="text-xl font-bold text-[#3a1430]">
               Print Barcode Label
             </DialogTitle>
-            <p className="text-sm text-gray-600 mt-1">{product.name}</p>
+            <p className="text-sm text-gray-600 mt-1">
+              {productId === "all" ? `All Products (${productsToPrint.length})` : productsToPrint[0]?.name}
+            </p>
           </div>
 
           {/* Body */}
           <div className="p-6">
-            {/* Quick Actions */}
-            <div className="grid grid-cols-2 gap-3 mb-6">
-              <button
-                onClick={() => {
-                  const all: Record<string, number> = {};
-                  product.variants.forEach((v) => {
-                    if (v.stock > 0) all[v.id] = 1;
-                  });
-                  setSelectedVariants(all);
-                }}
-                className="p-4 bg-[#775533]/10 text-[#775533] rounded-xl hover:bg-[#775533]/20 transition text-center"
-              >
-                <div className="font-bold text-sm">Print All In Stock</div>
-                <div className="text-xs mt-1">
-                  {product.variants.filter((v) => v.stock > 0).length} variants
-                </div>
-              </button>
-              <button
-                onClick={() => {
-                  setSelectedVariants({});
-                }}
-                className="p-4 bg-gray-100 rounded-xl hover:bg-gray-200 transition text-center"
-              >
-                <div className="font-bold text-sm">Clear All</div>
-                <div className="text-xs mt-1">Reset selection</div>
-              </button>
-            </div>
+             {/* Quick Actions */}
+             <div className="grid grid-cols-2 gap-3 mb-6">
+               <button
+                 onClick={() => {
+                   const all: Record<string, number> = {};
+                   allVariants.forEach(({ variant }) => {
+                     if (variant.stock > 0) all[variant.id] = 1;
+                   });
+                   setSelectedVariants(all);
+                 }}
+                 className="p-4 bg-[#775533]/10 text-[#775533] rounded-xl hover:bg-[#775533]/20 transition text-center"
+               >
+                 <div className="font-bold text-sm">Select All In Stock</div>
+                 <div className="text-xs mt-1">
+                   {allVariants.filter(({ variant }) => variant.stock > 0).length} variants
+                 </div>
+               </button>
+               <button
+                 onClick={() => {
+                   setSelectedVariants({});
+                 }}
+                 className="p-4 bg-gray-100 rounded-xl hover:bg-gray-200 transition text-center"
+               >
+                 <div className="font-bold text-sm">Clear All</div>
+                 <div className="text-xs mt-1">Reset selection</div>
+               </button>
+             </div>
 
-            {/* Variant List */}
-            <div className="mb-6">
-              <h3 className="text-sm font-semibold text-[#3a1430] mb-3">
-                Pilih Variant:
-              </h3>
-              {product.variants.map((variant) => (
+             {/* Variant List */}
+             <div className="mb-6">
+               <h3 className="text-sm font-semibold text-[#3a1430] mb-3">
+                 Pilih Variant yang akan di-print:
+               </h3>
+               {allVariants.map(({ product, variant }) => (
                 <div
                   key={variant.id}
                   className="flex items-center gap-3 p-3 border border-gray-200 rounded-xl mb-2 hover:bg-[#F2F5E2]/50 cursor-pointer"
@@ -118,14 +143,14 @@ export default function PrintBarcodeModal({
                     onChange={() => toggleVariant(variant.id)}
                     className="w-5 h-5 text-[#775533] rounded focus:ring-[#775533]"
                   />
-                  <div className="flex-1">
-                    <div className="font-medium text-sm">
-                      Size: {variant.size} - {variant.color}
-                    </div>
-                    <div className="text-xs text-gray-600">
-                      Barcode: {variant.barcode || "N/A"} | Stock: {variant.stock}
-                    </div>
-                  </div>
+                   <div className="flex-1">
+                     <div className="font-medium text-sm">
+                       {product.name} - Size: {variant.size} - {variant.color}
+                     </div>
+                     <div className="text-xs text-gray-600">
+                       Barcode: {variant.barcode || "N/A"} | Stock: {variant.stock}
+                     </div>
+                   </div>
                   {selectedVariants[variant.id] && (
                     <input
                       type="number"
@@ -174,13 +199,13 @@ export default function PrintBarcodeModal({
             {Object.keys(selectedVariants).length > 0 && (
               <div className="mb-6 p-4 bg-[#F2F5E2] rounded-xl">
                 <h3 className="text-sm font-semibold text-[#3a1430] mb-3">
-                  Preview:
+                  Preview ({Object.keys(selectedVariants).length} labels):
                 </h3>
-                <div className="flex justify-center">
-                  {product.variants
-                    .filter((v) => selectedVariants[v.id])
-                    .slice(0, 1)
-                    .map((variant) => (
+                <div className="space-y-2">
+                  {allVariants
+                    .filter(({ variant }) => selectedVariants[variant.id])
+                    .slice(0, 3) // Show max 3 previews
+                    .map(({ product, variant }) => (
                       <BarcodeLabel
                         key={variant.id}
                         barcode={variant.barcode || variant.sku}
@@ -192,6 +217,11 @@ export default function PrintBarcodeModal({
                         height={labelSize === "60x30" ? 30 : labelSize === "50x25" ? 25 : 20}
                       />
                     ))}
+                  {Object.keys(selectedVariants).length > 3 && (
+                    <p className="text-xs text-gray-600 text-center">
+                      +{Object.keys(selectedVariants).length - 3} more labels...
+                    </p>
+                  )}
                 </div>
               </div>
             )}
