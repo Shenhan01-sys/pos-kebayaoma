@@ -59,11 +59,10 @@ export default function PrintBarcodeModal({
     }));
   };
 
-  // Print handler
+  // Print handler - redirect to print page
   const handlePrint = () => {
-    // In a real app, this would generate a print-friendly page
-    // For now, we'll use window.print() with a hidden print area
-    window.print();
+    const selectedIds = Object.keys(selectedVariants).join(",");
+    window.open(`/print-barcode?ids=${selectedIds}`, "_blank");
   };
 
   // Calculate total labels
