@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { pdf } from "@react-pdf/renderer";
+import jsPDF from "jspdf";
 import JsBarcode from "jsbarcode";
 import { Dialog, DialogPanel, DialogTitle } from "@headlessui/react";
 import BarcodeLabel from "./BarcodeLabel";
@@ -61,49 +61,53 @@ export default function PrintBarcodeModal({
     }));
   };
 
-  // Print handler - generate PDF using react-pdf with real barcodes
+  // Print handler - generate PDF using jsPDF with real barcodes
   const handlePrint = async () => {
-    // Collect selected labels and generate barcode images
-    const labelsToPrint: any[] = [];
-    
+    const doc = new jsPDF({
+      orientation: "landscape",
+      unit: "mm",
+      format: [60, 30], // 60x30mm per label
+    });
+
+    let count = 0;
+
     for (const { product, variant } of allVariants) {
       if (selectedVariants[variant.id]) {
-        // Generate barcode image as base64
+        // Generate barcode image on canvas
         const canvas = document.createElement("canvas");
         JsBarcode(canvas, variant.barcode || variant.sku, {
           format: "CODE128",
           width: 2,
-          height: 60,
-          displayValue: false,
+          height: 40,
+          displayValue: true,
+          fontSize: 10,
+          margin: 2,
         });
-        const barcodeImage = canvas.toDataURL("image/png");
         
-        labelsToPrint.push({
-          productName: product.name,
-          size: variant.size,
-          price: variant.sellingPrice,
-          barcode: variant.barcode || variant.sku,
-          barcodeImage, // Pass barcode image to PDF
-        });
+        // Convert canvas to image with delay to ensure render
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        const barcodeImage = canvas.toDataURL("image/png");
+
+        // Add barcode image to PDF
+        doc.addImage(barcodeImage, "PNG", 5, 5, 50, 15);
+
+        // Add product info
+        doc.setFontSize(8);
+        doc.text(product.name, 5, 22);
+        doc.setFontSize(7);
+        doc.text(`Size: ${variant.size} | Rp ${variant.sellingPrice.toLocaleString("id-ID")}`, 5, 26);
+
+        count++;
+
+        // Add new page if not last label
+        if (count < Object.keys(selectedVariants).length) {
+          doc.addPage([60, 30], "landscape");
+        }
       }
     }
 
-    // Import PDF document dynamically (to avoid SSR issues)
-    const { BarcodeLabelPDF } = await import("./BarcodeLabelPDF");
-    const doc = <BarcodeLabelPDF labels={labelsToPrint} />;
-    
-    // Generate PDF blob
-    const asBlob = await pdf(doc).toBlob();
-    const url = URL.createObjectURL(asBlob);
-    
     // Download PDF
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "barcode-labels.pdf";
-    link.click();
-    
-    // Cleanup
-    URL.revokeObjectURL(url);
+    doc.save("barcode-labels.pdf");
     onClose();
   };
 
