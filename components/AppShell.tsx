@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useSettings } from "@/store/settings";
+import { useData } from "@/store/data";
 import { Icon, type IconName } from "@/components/icons";
 import LoadingScreen from "@/components/LoadingScreen";
 
@@ -32,6 +33,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const s = useSettings();
   const [open, setOpen] = useState(false);
+
+  // Load data from Supabase once on app start
+  useEffect(() => {
+    useData.getState().fetchProducts();
+    useData.getState().fetchCategories();
+    useData.getState().fetchCustomers();
+  }, []);
 
   const nav = (
     <nav className="relative z-10 flex-1 space-y-1 overflow-y-auto pretty-scroll px-2 py-2">

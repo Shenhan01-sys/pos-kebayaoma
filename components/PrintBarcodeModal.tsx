@@ -61,50 +61,115 @@ export default function PrintBarcodeModal({
     }));
   };
 
-  // Print handler - generate PDF using jsPDF with real barcodes
-  const handlePrint = async () => {
+  // Print handler - generate PDF with multi-label grid on A4
+  const handlePrint = () => {
+    const labelWidth = labelSize === "60x30" ? 60 : labelSize === "50x25" ? 50 : 40;
+    const labelHeight = labelSize === "60x30" ? 30 : labelSize === "50x25" ? 25 : 20;
+    const margin = 5;
+    const gap = 2;
+
     const doc = new jsPDF({
-      orientation: "landscape",
+      orientation: "portrait",
       unit: "mm",
-      format: [60, 30], // 60x30mm per label
+      format: "a4", // 210 x 297 mm - many labels per page
     });
 
-    let count = 0;
+    // Grid: how many labels fit per A4 page
+    const cols = Math.floor((210 - margin * 2 + gap) / (labelWidth + gap));
+    const rows = Math.floor((297 - margin * 2 + gap) / (labelHeight + gap));
+    const perPage = cols * rows;
 
-    for (const { product, variant } of allVariants) {
-      if (selectedVariants[variant.id]) {
-        // Generate barcode image on canvas
-        const canvas = document.createElement("canvas");
-        JsBarcode(canvas, variant.barcode || variant.sku, {
-          format: "CODE128",
-          width: 2,
-          height: 40,
-          displayValue: true,
-          fontSize: 10,
-          margin: 2,
+    // Collect labels (expanded by copy count)
+    const labels: {
+      name: string;
+      color?: string;
+      size: string;
+      price: number;
+      barcode: string;
+      image: string;
+    }[] = [];
+
+    allVariants.forEach(({ product, variant }) => {
+      const count = selectedVariants[variant.id] || 0;
+      if (count === 0) return;
+
+      // Generate barcode image once per variant
+      const canvas = document.createElement("canvas");
+      JsBarcode(canvas, variant.barcode || variant.sku, {
+        format: "CODE128",
+        width: 2,
+        height: 40,
+        displayValue: false,
+        margin: 0,
+      });
+      const image = canvas.toDataURL("image/png");
+
+      for (let c = 0; c < count; c++) {
+        labels.push({
+          name: product.name,
+          color: variant.color,
+          size: variant.size,
+          price: variant.sellingPrice,
+          barcode: variant.barcode || variant.sku,
+          image,
         });
-        
-        // Convert canvas to image with delay to ensure render
-        await new Promise((resolve) => setTimeout(resolve, 100));
-        const barcodeImage = canvas.toDataURL("image/png");
-
-        // Add barcode image to PDF
-        doc.addImage(barcodeImage, "PNG", 5, 5, 50, 15);
-
-        // Add product info
-        doc.setFontSize(8);
-        doc.text(product.name, 5, 22);
-        doc.setFontSize(7);
-        doc.text(`Size: ${variant.size} | Rp ${variant.sellingPrice.toLocaleString("id-ID")}`, 5, 26);
-
-        count++;
-
-        // Add new page if not last label
-        if (count < Object.keys(selectedVariants).length) {
-          doc.addPage([60, 30], "landscape");
-        }
       }
-    }
+    });
+
+    // Draw labels in grid
+    labels.forEach((label, i) => {
+      if (i > 0 && i % perPage === 0) doc.addPage("a4", "portrait");
+
+      const posInPage = i % perPage;
+      const col = posInPage % cols;
+      const row = Math.floor(posInPage / cols);
+      const x = margin + col * (labelWidth + gap);
+      const y = margin + row * (labelHeight + gap);
+
+      // Label border (light, for cutting)
+      doc.setDrawColor(200, 200, 200);
+      doc.rect(x, y, labelWidth, labelHeight);
+
+      // Layout: barcode left (~68%), info right
+      const infoX = x + labelWidth * 0.68;
+      const infoW = labelWidth - (infoX - x) - 2;
+
+      // Barcode image
+      const barcodeW = infoX - x - 3;
+      const barcodeH = Math.min(barcodeW * 0.4, labelHeight * 0.55);
+      doc.addImage(label.image, "PNG", x + 1.5, y + 2, barcodeW, barcodeH);
+
+      // Barcode text below image
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(6);
+      doc.setTextColor(80, 80, 80);
+      doc.text(label.barcode, x + 1.5 + barcodeW / 2, y + barcodeH + 5, {
+        align: "center",
+      });
+
+      // Product info (right column)
+      doc.setTextColor(58, 20, 48); // #3a1430
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8);
+      const nameLines = doc.splitTextToSize(label.name, infoW).slice(0, 2);
+      doc.text(nameLines, infoX, y + 4);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(6.5);
+      doc.setTextColor(100, 100, 100);
+      let textY = y + 4 + nameLines.length * 3.5;
+      if (label.color) {
+        doc.text(label.color, infoX, textY);
+        textY += 3.5;
+      }
+      doc.text(`Size: ${label.size}`, infoX, textY);
+
+      // Price at bottom of label
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8);
+      doc.setTextColor(119, 85, 51); // #775533
+      doc.text(`Rp ${label.price.toLocaleString("id-ID")}`, infoX, y + labelHeight - 4);
+    });
 
     // Download PDF
     doc.save("barcode-labels.pdf");

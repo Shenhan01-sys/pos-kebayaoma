@@ -13,7 +13,6 @@
   },
   "dependencies": {
     "@headlessui/react": "^2.2.10",
-    "@react-pdf/renderer": "^4.5.1",
     "@supabase/supabase-js": "^2.112.1",
     "@types/jsbarcode": "^3.11.4",
     "dotenv": "^17.4.2",
