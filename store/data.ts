@@ -10,7 +10,7 @@ export type Role = "admin" | "manager" | "cashier";
 export interface Staff {
   id: string;
   name: string;
-  pin: string;
+  pin?: string;
   role: Role;
   phone?: string;
   email?: string;
@@ -51,6 +51,7 @@ interface DataState {
   fetchProducts: () => Promise<void>;
   fetchCategories: () => Promise<void>;
   fetchCustomers: () => Promise<void>;
+  fetchStaff: () => Promise<void>;
 
   // categories
   addCategory: (c: Omit<Category, "id">) => Promise<void>;
@@ -81,9 +82,9 @@ interface DataState {
   deleteCustomer: (id: string) => Promise<void>;
 
   // staff
-  addStaff: (s: Omit<Staff, "id">) => void;
-  updateStaff: (id: string, patch: Partial<Staff>) => void;
-  deleteStaff: (id: string) => void;
+  addStaff: (s: { name: string; pin: string; role: Role; phone?: string; active: boolean }) => Promise<void>;
+  updateStaff: (id: string, patch: { name?: string; pin?: string; role?: Role; phone?: string; active?: boolean }) => Promise<void>;
+  deleteStaff: (id: string) => Promise<void>;
 }
 
 export const useData = create<DataState>()(
@@ -92,11 +93,7 @@ export const useData = create<DataState>()(
       products: [],
       categories: [],
       customers: [],
-      staff: [
-        { id: "st1", name: "Ani", pin: "1234", role: "admin", active: true },
-        { id: "st2", name: "Budi", pin: "2345", role: "cashier", active: true },
-        { id: "st3", name: "Citra", pin: "3456", role: "manager", active: true },
-      ],
+      staff: [],
       movements: [],
       loading: false,
       error: null,
@@ -509,16 +506,82 @@ export const useData = create<DataState>()(
         }
       },
 
-      addStaff: (st) =>
-        set((s) => ({ staff: [...s.staff, { ...st, id: `st-${Date.now()}` }] })),
+      fetchStaff: async () => {
+        try {
+          const { data, error } = await supabase
+            .from('staff')
+            .select('*')
+            .order('name');
 
-      updateStaff: (id, patch) =>
-        set((s) => ({
-          staff: s.staff.map((st) => (st.id === id ? { ...st, ...patch } : st))
-        })),
+          if (error) throw error;
 
-      deleteStaff: (id) =>
-        set((s) => ({ staff: s.staff.filter((st) => st.id !== id) })),
+          const staff = data.map((st) => ({
+            id: st.id,
+            name: st.name,
+            role: st.role,
+            phone: st.phone,
+            active: st.active,
+          }));
+
+          set({ staff });
+        } catch (error: any) {
+          set({ error: error.message });
+        }
+      },
+
+      addStaff: async (s) => {
+        const { data: session } = await supabase.auth.getSession();
+        try {
+          const res = await fetch("/api/staff", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${session.session?.access_token ?? ""}`,
+            },
+            body: JSON.stringify({ action: "create", ...s }),
+          });
+          if (!res.ok) throw new Error((await res.json()).error ?? "Gagal menambah staff");
+          await get().fetchStaff();
+        } catch (error: any) {
+          set({ error: error.message });
+        }
+      },
+
+      updateStaff: async (id, patch) => {
+        const { data: session } = await supabase.auth.getSession();
+        try {
+          const res = await fetch("/api/staff", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${session.session?.access_token ?? ""}`,
+            },
+            body: JSON.stringify({ action: "update", id, ...patch }),
+          });
+          if (!res.ok) throw new Error((await res.json()).error ?? "Gagal memperbarui staff");
+          await get().fetchStaff();
+        } catch (error: any) {
+          set({ error: error.message });
+        }
+      },
+
+      deleteStaff: async (id) => {
+        const { data: session } = await supabase.auth.getSession();
+        try {
+          const res = await fetch("/api/staff", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${session.session?.access_token ?? ""}`,
+            },
+            body: JSON.stringify({ action: "delete", id }),
+          });
+          if (!res.ok) throw new Error((await res.json()).error ?? "Gagal menghapus staff");
+          await get().fetchStaff();
+        } catch (error: any) {
+          set({ error: error.message });
+        }
+      },
     }),
     { name: "kebaya-oma-data" }
   )

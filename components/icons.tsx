@@ -125,6 +125,19 @@ const paths: Record<string, React.ReactNode> = {
     </>
   ),
   menu: <path d="M4 7h16M4 12h16M4 17h16" />,
+  "arrow-left": <path d="M19 12H5M11 6l-6 6 6 6" />,
+  backspace: (
+    <>
+      <path d="M20 5H9l-6 7 6 7h11a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1Z" />
+      <path d="m12.5 9.5 5 5M17.5 9.5l-5 5" />
+    </>
+  ),
+  logout: (
+    <>
+      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+      <path d="m16 17 5-5-5-5M21 12H9" />
+    </>
+  ),
   edit: (
     <>
       <path d="M14 4.5 19.5 10 9 20.5 4.5 21 5 16.5 14 4.5Z" />

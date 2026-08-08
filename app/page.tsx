@@ -6,6 +6,7 @@ import { transactions as dummyTx, formatRupiah, type Transaction } from "@/lib/d
 import { getAllTransactions, subscribeTransactions } from "@/store/cart";
 import { useSettings } from "@/store/settings";
 import { useData } from "@/store/data";
+import { useAuth } from "@/store/auth";
 import { Icon, type IconName } from "@/components/icons";
 import EChart from "@/components/EChart";
 import type { EChartsOption } from "echarts";
@@ -35,6 +36,7 @@ const methodColor: Record<string, string> = {
 export default function DashboardPage() {
   const [live, setLive] = useState<Transaction[]>([]);
   const s = useSettings();
+  const auth = useAuth();
   const { products } = useData();
   useEffect(() => {
     const sync = () => setLive(getAllTransactions(dummyTx));
@@ -148,7 +150,7 @@ export default function DashboardPage() {
             </div>
             <div>
               <h1 className="text-2xl font-extrabold tracking-tight text-ink">
-                Halo, {s.cashierName} 👋
+                Halo, {auth.staff?.name ?? s.cashierName} 👋
               </h1>
               <p className="text-sm text-olive/80">{s.storeName} · {s.address}</p>
             </div>

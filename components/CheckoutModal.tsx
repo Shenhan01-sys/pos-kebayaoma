@@ -10,6 +10,7 @@ import {
 import { useCart, addTransaction, nextTxNumber } from "@/store/cart";
 import { useSettings } from "@/store/settings";
 import { useData } from "@/store/data";
+import { useAuth } from "@/store/auth";
 import Receipt from "@/components/Receipt";
 import { Icon } from "@/components/icons";
 
@@ -28,6 +29,8 @@ const methodMeta: Record<PaymentMethod, { label: string; icon: "qris" | "cash" |
 export default function CheckoutModal({ onClose }: { onClose: () => void }) {
   const { lines, total, clear, discount, setDiscount, customerName } = useCart();
   const s = useSettings();
+  const auth = useAuth();
+  const cashierName = auth.staff?.name ?? s.cashierName;
   const { adjustStock } = useData();
   const [method, setMethod] = useState<PaymentMethod>("qris");
   const [paid, setPaid] = useState<Transaction | null>(null);
@@ -47,7 +50,7 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
     return {
       id: "t" + Date.now(),
       number: nextTxNumber(),
-      cashier: s.cashierName,
+      cashier: cashierName,
       customerName: customerName ?? undefined,
       status: "paid",
       paymentMethod: method,
@@ -80,7 +83,7 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
     const tx = buildTx("paid", amt);
     addTransaction(tx);
     lines.forEach((l) =>
-      adjustStock(l.variantId, -l.quantity, "sale", s.cashierName, "Penjualan")
+      adjustStock(l.variantId, -l.quantity, "sale", cashierName, "Penjualan")
     );
     setPaid(tx);
   }

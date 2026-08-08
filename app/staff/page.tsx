@@ -2,12 +2,16 @@
 
 import { useState } from "react";
 import { useData, type Role, type Staff } from "@/store/data";
+import { useAuth } from "@/store/auth";
 import { Icon } from "@/components/icons";
 
 export default function StaffPage() {
   const { staff, addStaff, updateStaff, deleteStaff } = useData();
+  const auth = useAuth();
+  const isAdmin = auth.staff?.role === "admin";
   const [editing, setEditing] = useState<Staff | null>(null);
   const [adding, setAdding] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [form, setForm] = useState({ name: "", pin: "", role: "cashier" as Role, phone: "", active: true });
 
   function openAdd() {
@@ -16,16 +20,36 @@ export default function StaffPage() {
     setEditing(null);
   }
   function openEdit(s: Staff) {
-    setForm({ name: s.name, pin: s.pin, role: s.role, phone: s.phone ?? "", active: s.active });
+    setForm({ name: s.name, pin: "", role: s.role, phone: s.phone ?? "", active: s.active });
     setAdding(false);
     setEditing(s);
   }
-  function save() {
-    if (!form.name || !form.pin) return;
-    if (editing) updateStaff(editing.id, { name: form.name, pin: form.pin, role: form.role, phone: form.phone, active: form.active });
-    else addStaff({ name: form.name, pin: form.pin, role: form.role, phone: form.phone, active: form.active });
+  async function save() {
+    if (!form.name) return;
+    if (editing) {
+      if (!form.pin) {
+        const { pin, ...rest } = form;
+        void pin;
+        setBusy(true);
+        await updateStaff(editing.id, rest);
+      } else {
+        setBusy(true);
+        await updateStaff(editing.id, form);
+      }
+    } else {
+      if (!form.pin) return;
+      setBusy(true);
+      await addStaff(form);
+    }
+    setBusy(false);
     setAdding(false);
     setEditing(null);
+  }
+  async function remove(s: Staff) {
+    if (!confirm(`Hapus ${s.name}? Akun login staff ini juga akan dihapus.`)) return;
+    setBusy(true);
+    await deleteStaff(s.id);
+    setBusy(false);
   }
 
   const roleLabel: Record<Role, string> = { admin: "Admin", manager: "Manager", cashier: "Kasir" };
@@ -41,10 +65,18 @@ export default function StaffPage() {
     <div>
       <div className="mb-4 flex items-center justify-between">
         <h1 className="text-2xl font-extrabold tracking-tight text-ink">Staff & Peran</h1>
-        <button onClick={openAdd} className="btn-primary">
-          <Icon name="plus" size={16} /> Staff
-        </button>
+        {isAdmin && (
+          <button onClick={openAdd} className="btn-primary">
+            <Icon name="plus" size={16} /> Staff
+          </button>
+        )}
       </div>
+
+      {!isAdmin && (
+        <div className="mb-4 rounded-2xl bg-apricot/15 px-4 py-3 text-sm text-ink">
+          Hanya admin yang bisa menambah, mengubah, atau menghapus staff.
+        </div>
+      )}
 
       <div className="space-y-3">
         {staff.map((s) => (
@@ -55,14 +87,19 @@ export default function StaffPage() {
                 <div className="flex items-center gap-2 font-bold text-ink">
                   <span className="truncate">{s.name}</span>
                   {!s.active && <span className="pill-muted">Nonaktif</span>}
+                  {auth.staff?.id === s.id && <span className="pill-muted">Anda</span>}
                 </div>
-                <div className="text-xs text-gray-600">PIN {s.pin} · {s.phone ?? "—"}</div>
+                <div className="text-xs text-gray-600">PIN tersimpan · {s.phone ?? "—"}</div>
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-1">
               <span className={`pill ${rolePill[s.role]}`}>{roleLabel[s.role]}</span>
-              <button onClick={() => openEdit(s)} className="btn-primary px-2.5 py-1 text-xs">Edit</button>
-              <button onClick={() => deleteStaff(s.id)} className="btn-danger px-2.5 py-1 text-xs">Hapus</button>
+              {isAdmin && (
+                <>
+                  <button onClick={() => openEdit(s)} className="btn-primary px-2.5 py-1 text-xs">Edit</button>
+                  <button onClick={() => remove(s)} disabled={busy} className="btn-danger px-2.5 py-1 text-xs">Hapus</button>
+                </>
+              )}
             </div>
           </div>
         ))}
@@ -79,7 +116,7 @@ export default function StaffPage() {
             </div>
             <div className="space-y-2">
               <input className="input" placeholder="Nama" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-              <input className="input" placeholder="PIN (4-6 digit)" value={form.pin} onChange={(e) => setForm({ ...form, pin: e.target.value })} />
+              <input className="input" type="password" inputMode="numeric" maxLength={6} placeholder={editing ? "PIN baru (4-6 digit, kosongkan jika tetap)" : "PIN (4-6 digit)"} value={form.pin} onChange={(e) => setForm({ ...form, pin: e.target.value.replace(/\D/g, "") })} />
               <select className="input" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as Role })}>
                 <option value="admin">Admin</option>
                 <option value="manager">Manager</option>
@@ -90,7 +127,9 @@ export default function StaffPage() {
                 <input type="checkbox" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} /> Aktif
               </label>
             </div>
-            <button onClick={save} className="btn-violet mt-3 w-full py-3">Simpan</button>
+            <button onClick={save} disabled={busy} className="btn-violet mt-3 w-full py-3 disabled:opacity-50">
+              {busy ? "Menyimpan…" : "Simpan"}
+            </button>
           </div>
         </div>
       )}

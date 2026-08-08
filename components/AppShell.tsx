@@ -5,8 +5,10 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useSettings } from "@/store/settings";
 import { useData } from "@/store/data";
+import { useAuth } from "@/store/auth";
 import { Icon, type IconName } from "@/components/icons";
 import LoadingScreen from "@/components/LoadingScreen";
+import LoginScreen from "@/components/LoginScreen";
 
 const links: { href: string; label: string; icon: IconName }[] = [
   { href: "/", label: "Dashboard", icon: "dashboard" },
@@ -32,14 +34,24 @@ const initials = (name: string) =>
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const s = useSettings();
+  const auth = useAuth();
   const [open, setOpen] = useState(false);
+
+  // Init auth (session + staff profile)
+  useEffect(() => {
+    useAuth.getState().init();
+  }, []);
 
   // Load data from Supabase once on app start
   useEffect(() => {
     useData.getState().fetchProducts();
     useData.getState().fetchCategories();
     useData.getState().fetchCustomers();
+    useData.getState().fetchStaff();
   }, []);
+
+  if (!auth.initialized) return <LoadingScreen />;
+  if (!auth.session) return <LoginScreen />;
 
   const nav = (
     <nav className="relative z-10 flex-1 space-y-1 overflow-y-auto pretty-scroll px-2 py-2">
@@ -98,14 +110,25 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           {nav}
 
           <div className="relative z-10 m-2 flex items-center gap-3 rounded-2xl bg-beige p-2.5">
-            <div className="avatar h-9 w-9 bg-violet">{initials(s.cashierName)}</div>
-            <div className="min-w-0 leading-tight">
-              <div className="truncate text-xs font-bold text-ink">{s.cashierName}</div>
-              <div className="text-[10px] text-olive">Kasir aktif</div>
+            <div className="avatar h-9 w-9 bg-violet">
+              {initials(auth.staff?.name ?? s.cashierName)}
             </div>
-            <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-success/15 px-2 py-0.5 text-[10px] font-bold text-success">
-              <span className="h-1.5 w-1.5 rounded-full bg-success" /> Shift
-            </span>
+            <div className="min-w-0 leading-tight">
+              <div className="truncate text-xs font-bold text-ink">
+                {auth.staff?.name ?? s.cashierName}
+              </div>
+              <div className="text-[10px] text-olive">
+                {auth.staff ? `${auth.staff.role} · kasir aktif` : "Kasir aktif"}
+              </div>
+            </div>
+            <button
+              onClick={() => useAuth.getState().logout()}
+              className="ml-auto inline-flex h-8 w-8 items-center justify-center rounded-full bg-white text-olive shadow-soft transition hover:text-danger"
+              aria-label="Keluar"
+              title="Keluar"
+            >
+              <Icon name="logout" size={16} />
+            </button>
           </div>
         </div>
       </aside>
