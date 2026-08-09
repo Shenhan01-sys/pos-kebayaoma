@@ -127,8 +127,12 @@ export function setTransactionStatus(id: string, status: Transaction["status"]) 
 
 export function subscribeTransactions(l: () => void) {
   listeners.add(l);
+  const unsub = useData.subscribe((state, prev) => {
+    if (state.transactions !== prev.transactions) l();
+  });
   return () => {
     listeners.delete(l);
+    unsub();
   };
 }
 
