@@ -674,7 +674,8 @@ export const useData = create<DataState>()(
 
       setTransactionStatus: async (id, status) => {
         try {
-          const exists = get().transactions.some((t) => t.id === id);
+          const prev = get().transactions.find((t) => t.id === id);
+          const exists = !!prev;
           if (exists) {
             const { error } = await supabase
               .from('transactions')
@@ -689,6 +690,24 @@ export const useData = create<DataState>()(
               t.id === id ? { ...t, status } : t
             ),
           }));
+
+          // Batal/refund dari status paid → kembalikan stok (movement return)
+          if (
+            exists &&
+            prev.status === "paid" &&
+            (status === "cancelled" || status === "refunded")
+          ) {
+            for (const item of prev.items) {
+              await get().adjustStock(
+                item.variantId,
+                item.quantity,
+                "return",
+                prev.cashier,
+                status === "refunded" ? "Refund" : "Pembatalan",
+                prev.number
+              );
+            }
+          }
         } catch (error: any) {
           set({ error: error.message });
         }
