@@ -80,27 +80,27 @@ export default function StaffPage() {
 
       <div className="space-y-3">
         {staff.map((s) => (
-          <div key={s.id} className="card card-pad">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex min-w-0 items-center gap-3">
-                <span className="avatar h-10 w-10 bg-grad-violet">{initials(s.name)}</span>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 font-bold text-ink">
-                    <span className="truncate">{s.name}</span>
-                    {!s.active && <span className="pill-muted">Nonaktif</span>}
-                    {auth.staff?.id === s.id && <span className="pill-muted">Anda</span>}
-                  </div>
-                  <div className="text-xs text-gray-600">PIN tersimpan · {s.phone ?? "—"}</div>
+          <div key={s.id} className="card card-pad flex items-center justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="avatar h-10 w-10 bg-grad-violet">{initials(s.name)}</span>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 font-bold text-ink">
+                  <span className="truncate">{s.name}</span>
+                  {!s.active && <span className="pill-muted">Nonaktif</span>}
+                  {auth.staff?.id === s.id && <span className="pill-muted">Anda</span>}
                 </div>
+                <div className="text-xs text-gray-600">PIN tersimpan · {s.phone ?? "—"}</div>
               </div>
-              <span className={`pill shrink-0 ${rolePill[s.role]}`}>{roleLabel[s.role]}</span>
             </div>
-            {isAdmin && (
-              <div className="mt-3 flex items-center justify-center gap-2">
-                <button onClick={() => openEdit(s)} className="btn-primary px-3 py-1.5 text-xs">Edit</button>
-                <button onClick={() => remove(s)} disabled={busy} className="btn-danger px-3 py-1.5 text-xs">Hapus</button>
-              </div>
-            )}
+            <div className="flex shrink-0 items-center gap-1">
+              <span className={`pill ${rolePill[s.role]}`}>{roleLabel[s.role]}</span>
+              {isAdmin && (
+                <>
+                  <button onClick={() => openEdit(s)} className="btn-primary px-2.5 py-1 text-xs">Edit</button>
+                  <button onClick={() => remove(s)} disabled={busy} className="btn-danger px-2.5 py-1 text-xs">Hapus</button>
+                </>
+              )}
+            </div>
           </div>
         ))}
       </div>
