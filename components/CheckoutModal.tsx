@@ -83,7 +83,14 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
     const tx = buildTx("paid", amt);
     const saved = await addTransaction(tx);
     lines.forEach((l) =>
-      adjustStock(l.variantId, -l.quantity, "sale", cashierName, "Penjualan")
+      adjustStock(
+        l.variantId,
+        -l.quantity,
+        "sale",
+        cashierName,
+        "Penjualan",
+        saved?.number ?? tx.number
+      )
     );
     setPaid(saved ?? tx);
   }
