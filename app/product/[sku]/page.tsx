@@ -2,15 +2,77 @@
 
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { getProductBySku, categoryName, formatRupiah } from "@/lib/dummy";
+import { useEffect, useState } from "react";
+import { formatRupiah, type Product } from "@/lib/dummy";
+import { supabase } from "@/lib/supabase";
 import { useSettings } from "@/store/settings";
-import { useState } from "react";
 import { Icon } from "@/components/icons";
 
 export default function ProductProfilePage({ params }: { params: { sku: string } }) {
-  const product = getProductBySku(params.sku);
   const s = useSettings();
+  const [product, setProduct] = useState<Product | null>(null);
+  const [category, setCategory] = useState("—");
+  const [loading, setLoading] = useState(true);
   const [img, setImg] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data: p, error } = await supabase
+        .from("products")
+        .select(`*, variants (*)`)
+        .eq("sku", params.sku)
+        .maybeSingle();
+      if (cancelled) return;
+      if (error || !p) {
+        setLoading(false);
+        return;
+      }
+      setProduct({
+        id: p.id,
+        sku: p.sku,
+        name: p.name,
+        description: p.description,
+        categoryId: p.category_id,
+        images: p.images || [],
+        tags: p.tags || [],
+        active: p.active,
+        fabric: p.fabric,
+        care: p.care,
+        variants: (p.variants ?? []).map((v: any) => ({
+          id: v.id,
+          sku: v.sku,
+          size: v.size,
+          color: v.color,
+          colorCode: v.color_code,
+          stock: v.stock,
+          sellingPrice: v.selling_price,
+          costPrice: v.cost_price,
+          barcode: v.barcode,
+        })),
+      });
+      const { data: cat } = await supabase
+        .from("categories")
+        .select("name")
+        .eq("id", p.category_id)
+        .maybeSingle();
+      if (!cancelled) {
+        setCategory(cat?.name ?? "—");
+        setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [params.sku]);
+
+  if (loading) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center text-sm text-gray-600">
+        Memuat…
+      </div>
+    );
+  }
   if (!product) notFound();
 
   const minPrice = Math.min(...product.variants.map((v) => v.sellingPrice));
@@ -22,7 +84,7 @@ export default function ProductProfilePage({ params }: { params: { sku: string }
         <div className="text-xs font-semibold text-apricot">{s.storeName}</div>
         <h1 className="text-xl font-extrabold text-ink">{product.name}</h1>
         <div className="text-xs text-gray-600">
-          {product.sku} · {categoryName(product.categoryId)}
+          {product.sku} · {category}
         </div>
 
         <div className="mt-3 flex h-56 items-center justify-center overflow-hidden rounded-2xl bg-grad-olive text-center text-white shadow-soft">

@@ -3,7 +3,14 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { supabase } from "@/lib/supabase";
-import type { Product, Variant, Category, Customer } from "@/lib/dummy";
+import type {
+  Product,
+  Variant,
+  Category,
+  Customer,
+  Transaction,
+  TransactionItem,
+} from "@/lib/dummy";
 
 export type Role = "admin" | "manager" | "cashier";
 
@@ -44,6 +51,7 @@ interface DataState {
   customers: Customer[];
   staff: Staff[];
   movements: Movement[];
+  transactions: Transaction[];
   loading: boolean;
   error: string | null;
 
@@ -52,6 +60,11 @@ interface DataState {
   fetchCategories: () => Promise<void>;
   fetchCustomers: () => Promise<void>;
   fetchStaff: () => Promise<void>;
+  fetchTransactions: () => Promise<void>;
+
+  // transactions
+  saveTransaction: (tx: Omit<Transaction, "id" | "items"> & { items: TransactionItem[] }) => Promise<Transaction | null>;
+  setTransactionStatus: (id: string, status: Transaction["status"]) => Promise<void>;
 
   // categories
   addCategory: (c: Omit<Category, "id">) => Promise<void>;
@@ -95,6 +108,7 @@ export const useData = create<DataState>()(
       customers: [],
       staff: [],
       movements: [],
+      transactions: [],
       loading: false,
       error: null,
 
@@ -524,6 +538,157 @@ export const useData = create<DataState>()(
           }));
 
           set({ staff });
+        } catch (error: any) {
+          set({ error: error.message });
+        }
+      },
+
+      fetchTransactions: async () => {
+        try {
+          const { data, error } = await supabase
+            .from('transactions')
+            .select(`
+              *,
+              transaction_items (*)
+            `)
+            .order('created_at', { ascending: false })
+            .limit(500);
+
+          if (error) throw error;
+
+          const transactions = data.map((t) => ({
+            id: t.id,
+            number: t.number,
+            cashier: t.cashier,
+            customerId: t.customer_id ?? undefined,
+            customerName: t.customer_name ?? undefined,
+            status: t.status,
+            paymentMethod: t.payment_method,
+            paymentStatus: t.payment_status,
+            subtotal: t.subtotal,
+            tax: t.tax,
+            discount: t.discount,
+            total: t.total,
+            amountPaid: t.amount_paid,
+            change: t.change,
+            qrisRef: t.qris_ref ?? undefined,
+            createdAt: t.created_at,
+            items: (t.transaction_items ?? []).map((i: any) => ({
+              productId: i.product_id,
+              variantId: i.variant_id,
+              name: i.name,
+              sku: i.sku,
+              size: i.size,
+              color: i.color,
+              quantity: i.quantity,
+              unitPrice: i.unit_price,
+              discount: i.discount,
+              total: i.total,
+            })),
+          }));
+
+          set({ transactions });
+        } catch (error: any) {
+          set({ error: error.message });
+        }
+      },
+
+      saveTransaction: async (tx) => {
+        try {
+          const customer = tx.customerName
+            ? get().customers.find((c) => c.name === tx.customerName)
+            : undefined;
+
+          const { data: header, error: headerError } = await supabase
+            .from('transactions')
+            .insert([{
+              store_id: process.env.NEXT_PUBLIC_STORE_ID,
+              number: tx.number,
+              cashier: tx.cashier,
+              customer_id: customer?.id ?? null,
+              customer_name: tx.customerName ?? null,
+              status: tx.status,
+              payment_method: tx.paymentMethod,
+              payment_status: tx.paymentStatus,
+              subtotal: tx.subtotal,
+              tax: tx.tax,
+              discount: tx.discount,
+              total: tx.total,
+              amount_paid: tx.amountPaid,
+              change: tx.change,
+              qris_ref: tx.qrisRef ?? null,
+            }])
+            .select()
+            .single();
+
+          if (headerError) throw headerError;
+
+          const { error: itemsError } = await supabase
+            .from('transaction_items')
+            .insert(tx.items.map((i) => ({
+              transaction_id: header.id,
+              product_id: i.productId,
+              variant_id: i.variantId,
+              name: i.name,
+              sku: i.sku,
+              size: i.size,
+              color: i.color,
+              quantity: i.quantity,
+              unit_price: i.unitPrice,
+              discount: i.discount,
+              total: i.total,
+            })));
+
+          if (itemsError) throw itemsError;
+
+          const saved: Transaction = {
+            id: header.id,
+            number: header.number,
+            cashier: header.cashier,
+            customerId: header.customer_id ?? undefined,
+            customerName: header.customer_name ?? undefined,
+            status: header.status,
+            paymentMethod: header.payment_method,
+            paymentStatus: header.payment_status,
+            subtotal: header.subtotal,
+            tax: header.tax,
+            discount: header.discount,
+            total: header.total,
+            amountPaid: header.amount_paid,
+            change: header.change,
+            qrisRef: header.qris_ref ?? undefined,
+            createdAt: header.created_at,
+            items: tx.items,
+          };
+
+          set((s) => ({
+            transactions: [saved, ...s.transactions.filter((x) => x.id !== saved.id)],
+          }));
+
+          return saved;
+        } catch (error: any) {
+          set({ error: error.message });
+          return null;
+        }
+      },
+
+      setTransactionStatus: async (id, status) => {
+        try {
+          const exists = get().transactions.some((t) => t.id === id);
+          if (exists) {
+            const { error } = await supabase
+              .from('transactions')
+              .update({ status })
+              .eq('id', id);
+
+            if (error) throw error;
+          }
+
+          set((s) => ({
+            transactions: s.transactions.map((t) =>
+              t.id === id ? { ...t, status } : t
+            ),
+          }));
         } catch (error: any) {
           set({ error: error.message });
         }

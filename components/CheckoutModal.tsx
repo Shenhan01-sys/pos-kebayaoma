@@ -78,14 +78,14 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
     };
   }
 
-  function finish() {
+  async function finish() {
     const amt = method === "cash" ? Number(cashPaid) || grand : grand;
     const tx = buildTx("paid", amt);
-    addTransaction(tx);
+    const saved = await addTransaction(tx);
     lines.forEach((l) =>
       adjustStock(l.variantId, -l.quantity, "sale", cashierName, "Penjualan")
     );
-    setPaid(tx);
+    setPaid(saved ?? tx);
   }
 
   if (paid) {

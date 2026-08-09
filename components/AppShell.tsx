@@ -23,6 +23,8 @@ const links: { href: string; label: string; icon: IconName }[] = [
   { href: "/settings", label: "Pengaturan", icon: "settings" },
 ];
 
+const PUBLIC_PREFIXES = ["/product/"];
+
 const initials = (name: string) =>
   name
     .split(" ")
@@ -37,6 +39,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const auth = useAuth();
   const [open, setOpen] = useState(false);
 
+  const isPublic = PUBLIC_PREFIXES.some((p) => pathname.startsWith(p));
+
   // Init auth (session + staff profile)
   useEffect(() => {
     useAuth.getState().init();
@@ -48,7 +52,18 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     useData.getState().fetchCategories();
     useData.getState().fetchCustomers();
     useData.getState().fetchStaff();
+    useData.getState().fetchTransactions();
   }, []);
+
+  // Public pages (e.g. product profile from QR label) render without shell/login
+  if (isPublic) {
+    return (
+      <div className="min-h-screen bg-beige/40">
+        <LoadingScreen />
+        {children}
+      </div>
+    );
+  }
 
   if (!auth.initialized) return <LoadingScreen />;
   if (!auth.session) return <LoginScreen />;

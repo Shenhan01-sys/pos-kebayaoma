@@ -5,6 +5,7 @@ import {
   type Variant,
   type Transaction,
 } from "@/lib/dummy";
+import { useData } from "@/store/data";
 
 export interface CartLine {
   key: string; // variantId
@@ -95,30 +96,33 @@ export const useCart = create<CartState>((set, get) => ({
   total: () => Math.max(0, get().subtotal() - get().discount),
 }));
 
-// In-memory transaction log (dummy, replaced by Supabase later)
-let txLog: Transaction[] = [];
+// Transaction log — disimpan ke Supabase via useData; dummy sebagai fallback
 const overrides = new Map<string, Transaction["status"]>();
 const listeners = new Set<() => void>();
 
 export function getTransactions(): Transaction[] {
-  return txLog;
+  return useData.getState().transactions;
 }
 
 export function getAllTransactions(dummy: Transaction[]): Transaction[] {
-  const base = [...txLog, ...dummy];
+  const base = [...useData.getState().transactions, ...dummy];
   return base.map((t) =>
     overrides.has(t.id) ? { ...t, status: overrides.get(t.id)! } : t
   );
 }
 
-export function addTransaction(t: Transaction) {
-  txLog = [t, ...txLog];
+export async function addTransaction(
+  t: Omit<Transaction, "id" | "items"> & { items: Transaction["items"] }
+): Promise<Transaction | null> {
+  const saved = await useData.getState().saveTransaction(t);
   listeners.forEach((l) => l());
+  return saved;
 }
 
 export function setTransactionStatus(id: string, status: Transaction["status"]) {
   overrides.set(id, status);
   listeners.forEach((l) => l());
+  useData.getState().setTransactionStatus(id, status);
 }
 
 export function subscribeTransactions(l: () => void) {
@@ -131,10 +135,14 @@ export function subscribeTransactions(l: () => void) {
 export function nextTxNumber(): string {
   const d = new Date();
   const pad = (n: number) => String(n).padStart(2, "0");
-  const seq = String(txLog.length + 1).padStart(3, "0");
-  return `TRX-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(
+  const datePrefix = `TRX-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(
     d.getDate()
-  )}-${seq}`;
+  )}-`;
+  const seq =
+    useData
+      .getState()
+      .transactions.filter((t) => t.number.startsWith(datePrefix)).length + 1;
+  return `${datePrefix}${String(seq).padStart(3, "0")}`;
 }
 
 export { products };
