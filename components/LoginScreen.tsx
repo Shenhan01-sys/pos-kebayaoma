@@ -114,9 +114,9 @@ export default function LoginScreen() {
                 <button
                   key={i}
                   onClick={() => key(k)}
-                  className="h-16 rounded-2xl bg-white text-xl font-extrabold text-ink shadow-soft ring-1 ring-black/5 transition active:scale-95 active:bg-beige"
+                  className="flex h-16 items-center justify-center rounded-2xl bg-white text-xl font-extrabold text-ink shadow-soft ring-1 ring-black/5 transition active:scale-95 active:bg-beige"
                 >
-                  {k === "back" ? <Icon name="backspace" size={22} /> : k}
+                  {k === "back" ? <span className="text-2xl leading-none">⌫</span> : k}
                 </button>
               )
             )}
