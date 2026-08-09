@@ -98,6 +98,9 @@ interface DataState {
   addStaff: (s: { name: string; pin: string; role: Role; phone?: string; active: boolean }) => Promise<void>;
   updateStaff: (id: string, patch: { name?: string; pin?: string; role?: Role; phone?: string; active?: boolean }) => Promise<void>;
   deleteStaff: (id: string) => Promise<void>;
+
+  // realtime
+  subscribeRealtime: () => void;
 }
 
 export const useData = create<DataState>()(
@@ -765,6 +768,37 @@ export const useData = create<DataState>()(
         } catch (error: any) {
           set({ error: error.message });
         }
+      },
+
+      subscribeRealtime: () => {
+        supabase
+          .channel('pos-db-changes')
+          .on(
+            'postgres_changes',
+            { event: 'UPDATE', schema: 'public', table: 'variants' },
+            (payload) => {
+              const v = payload.new as { id: string; stock: number };
+              set((s) => ({
+                products: s.products.map((p) => ({
+                  ...p,
+                  variants: p.variants.map((x) =>
+                    x.id === v.id ? { ...x, stock: v.stock } : x
+                  ),
+                })),
+              }));
+            }
+          )
+          .on(
+            'postgres_changes',
+            { event: 'INSERT', schema: 'public', table: 'transactions' },
+            () => get().fetchTransactions()
+          )
+          .on(
+            'postgres_changes',
+            { event: 'UPDATE', schema: 'public', table: 'transactions' },
+            () => get().fetchTransactions()
+          )
+          .subscribe();
       },
     }),
     { name: "kebaya-oma-data" }

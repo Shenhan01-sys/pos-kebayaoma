@@ -53,6 +53,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     useData.getState().fetchCustomers();
     useData.getState().fetchStaff();
     useData.getState().fetchTransactions();
+    useData.getState().subscribeRealtime();
   }, []);
 
   // Public pages (e.g. product profile from QR label) render without shell/login
