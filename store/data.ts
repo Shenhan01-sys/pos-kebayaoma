@@ -140,6 +140,9 @@ export const useData = create<DataState>()(
             active: p.active,
             fabric: p.fabric,
             care: p.care,
+            season: p.season ?? undefined,
+            brand: p.brand ?? undefined,
+            compareAt: p.compare_at ?? undefined,
             variants: p.variants.map((v: any) => ({
               id: v.id,
               sku: v.sku,
@@ -196,7 +199,12 @@ export const useData = create<DataState>()(
             name: c.name,
             phone: c.phone,
             totalPurchases: c.total_purchases,
-            visitCount: c.visit_count
+            visitCount: c.visit_count,
+            email: c.email ?? undefined,
+            address: c.address ?? undefined,
+            birthday: c.birthday ?? undefined,
+            notes: c.notes ?? undefined,
+            tags: c.tags ?? []
           }));
 
           set({ customers, loading: false });
@@ -272,6 +280,9 @@ export const useData = create<DataState>()(
               active: p.active,
               fabric: p.fabric,
               care: p.care,
+              season: p.season ?? null,
+              brand: p.brand ?? null,
+              compare_at: p.compareAt ?? null,
               store_id: process.env.NEXT_PUBLIC_STORE_ID
             }])
             .select()
@@ -281,7 +292,14 @@ export const useData = create<DataState>()(
 
           // Insert variants
           const variants = p.variants.map(v => ({
-            ...v,
+            sku: v.sku,
+            size: v.size,
+            color: v.color,
+            color_code: v.colorCode,
+            stock: v.stock,
+            selling_price: v.sellingPrice,
+            cost_price: v.costPrice,
+            barcode: v.barcode ?? null,
             product_id: product.id
           }));
 
@@ -300,16 +318,81 @@ export const useData = create<DataState>()(
 
       updateProduct: async (id, patch) => {
         try {
+          const { variants, ...rest } = patch as Partial<Product> & { variants?: Variant[] };
+          const fields: Record<string, unknown> = {
+            ...(rest.sku !== undefined && { sku: rest.sku }),
+            ...(rest.name !== undefined && { name: rest.name }),
+            ...(rest.description !== undefined && { description: rest.description }),
+            ...(rest.categoryId !== undefined && { category_id: rest.categoryId }),
+            ...(rest.images !== undefined && { images: rest.images }),
+            ...(rest.tags !== undefined && { tags: rest.tags }),
+            ...(rest.active !== undefined && { active: rest.active }),
+            ...(rest.fabric !== undefined && { fabric: rest.fabric }),
+            ...(rest.care !== undefined && { care: rest.care }),
+            ...(rest.season !== undefined && { season: rest.season ?? null }),
+            ...(rest.brand !== undefined && { brand: rest.brand ?? null }),
+            ...(rest.compareAt !== undefined && { compare_at: rest.compareAt ?? null }),
+          };
+
           const { error } = await supabase
             .from('products')
-            .update(patch)
+            .update(fields)
             .eq('id', id);
 
           if (error) throw error;
 
-          set((s) => ({
-            products: s.products.map((p) => (p.id === id ? { ...p, ...patch } : p))
-          }));
+          if (variants) {
+            const existing = get().products.find((p) => p.id === id)?.variants ?? [];
+            const existingIds = new Set(existing.map((v) => v.id));
+            const incomingIds = new Set(variants.map((v) => v.id));
+
+            for (const v of variants) {
+              if (!existingIds.has(v.id)) {
+                const { error: insErr } = await supabase
+                  .from('variants')
+                  .insert([{
+                    sku: v.sku,
+                    size: v.size,
+                    color: v.color,
+                    color_code: v.colorCode,
+                    stock: v.stock,
+                    selling_price: v.sellingPrice,
+                    cost_price: v.costPrice,
+                    barcode: v.barcode ?? null,
+                    product_id: id,
+                  }]);
+                if (insErr) throw insErr;
+              } else {
+                const { error: updErr } = await supabase
+                  .from('variants')
+                  .update({
+                    sku: v.sku,
+                    size: v.size,
+                    color: v.color,
+                    color_code: v.colorCode,
+                    stock: v.stock,
+                    selling_price: v.sellingPrice,
+                    cost_price: v.costPrice,
+                    barcode: v.barcode,
+                  })
+                  .eq('id', v.id);
+                if (updErr) throw updErr;
+              }
+            }
+
+            for (const v of existing) {
+              if (!incomingIds.has(v.id)) {
+                const { error: delErr } = await supabase
+                  .from('variants')
+                  .delete()
+                  .eq('id', v.id);
+                if (delErr) throw delErr;
+              }
+            }
+          }
+
+          // Refresh products
+          await get().fetchProducts();
         } catch (error: any) {
           set({ error: error.message });
         }
@@ -468,6 +551,11 @@ export const useData = create<DataState>()(
             .insert([{
               name: c.name,
               phone: c.phone,
+              email: c.email ?? null,
+              address: c.address ?? null,
+              birthday: c.birthday ?? null,
+              notes: c.notes ?? null,
+              tags: c.tags ?? [],
               store_id: process.env.NEXT_PUBLIC_STORE_ID
             }])
             .select()
@@ -481,7 +569,12 @@ export const useData = create<DataState>()(
               name: data.name,
               phone: data.phone,
               totalPurchases: data.total_purchases,
-              visitCount: data.visit_count
+              visitCount: data.visit_count,
+              email: data.email ?? undefined,
+              address: data.address ?? undefined,
+              birthday: data.birthday ?? undefined,
+              notes: data.notes ?? undefined,
+              tags: data.tags ?? []
             }]
           }));
         } catch (error: any) {
@@ -491,15 +584,25 @@ export const useData = create<DataState>()(
 
       updateCustomer: async (id, patch) => {
         try {
+          const fields: Record<string, unknown> = {
+            ...(patch.name !== undefined && { name: patch.name }),
+            ...(patch.phone !== undefined && { phone: patch.phone }),
+            ...(patch.email !== undefined && { email: patch.email ?? null }),
+            ...(patch.address !== undefined && { address: patch.address ?? null }),
+            ...(patch.birthday !== undefined && { birthday: patch.birthday ?? null }),
+            ...(patch.notes !== undefined && { notes: patch.notes ?? null }),
+            ...(patch.tags !== undefined && { tags: patch.tags ?? [] }),
+          };
+
           const { error } = await supabase
             .from('customers')
-            .update(patch)
+            .update(fields)
             .eq('id', id);
 
           if (error) throw error;
 
           set((s) => ({
-            customers: s.customers.map((c) => (c.id === id ? { ...c, ...patch } : c))
+            customers: s.customers.map((c) => (c.id === id ? { ...c, ...fields } : c))
           }));
         } catch (error: any) {
           set({ error: error.message });

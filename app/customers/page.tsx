@@ -21,14 +21,23 @@ export default function CustomersPage() {
     setEditing(null);
   }
   function openEdit(c: Customer) {
-    setForm({ name: c.name, phone: c.phone, email: "", address: "", birthday: "", notes: "", tags: [], totalPurchases: c.totalPurchases, visitCount: c.visitCount });
+    setForm({
+      name: c.name, phone: c.phone, email: c.email ?? "", address: c.address ?? "",
+      birthday: c.birthday ?? "", notes: c.notes ?? "", tags: c.tags ?? [],
+      totalPurchases: c.totalPurchases, visitCount: c.visitCount,
+    });
     setEditing(c);
     setAdding(false);
   }
   function save() {
     if (!form.name) return;
-    if (editing) updateCustomer(editing.id, { name: form.name, phone: form.phone });
-    else addCustomer({ name: form.name, phone: form.phone, totalPurchases: 0, visitCount: 0 });
+    const payload = {
+      name: form.name, phone: form.phone, email: form.email, address: form.address,
+      birthday: form.birthday, notes: form.notes,
+      tags: form.tags.map((t) => t.trim()).filter(Boolean),
+    };
+    if (editing) updateCustomer(editing.id, payload);
+    else addCustomer({ ...payload, totalPurchases: 0, visitCount: 0 });
     setAdding(false);
     setEditing(null);
   }
@@ -55,7 +64,12 @@ export default function CustomersPage() {
                   <span className="avatar h-10 w-10 bg-grad-olive">{initials(c.name)}</span>
                   <div className="min-w-0">
                     <div className="truncate font-bold text-ink">{c.name}</div>
-                    <div className="text-xs text-gray-600">{c.phone}</div>
+                    <div className="text-xs text-gray-600">{c.phone}{c.email ? ` · ${c.email}` : ""}</div>
+                    {c.tags && c.tags.length > 0 && (
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {c.tags.map((t) => <span key={t} className="pill-muted text-[10px]">{t}</span>)}
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div className="flex shrink-0 gap-1">
@@ -88,6 +102,11 @@ export default function CustomersPage() {
             <div className="space-y-2">
               <input className="input" placeholder="Nama" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
               <input className="input" placeholder="Telepon" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+              <input className="input" placeholder="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+              <input className="input" placeholder="Alamat" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
+              <input className="input" type="date" placeholder="Tanggal lahir" value={form.birthday} onChange={(e) => setForm({ ...form, birthday: e.target.value })} />
+              <input className="input" placeholder="Tags (pisah koma)" value={form.tags.join(", ")} onChange={(e) => setForm({ ...form, tags: e.target.value.split(",") })} />
+              <textarea className="input" rows={2} placeholder="Catatan" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
             </div>
             <button onClick={save} className="btn-violet mt-3 w-full py-3">Simpan</button>
           </div>

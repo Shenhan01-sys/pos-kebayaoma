@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { useData } from "@/store/data";
+import { useAuth } from "@/store/auth";
+import { useSettings } from "@/store/settings";
 import { formatRupiah } from "@/lib/dummy";
 import { Icon } from "@/components/icons";
 
@@ -9,6 +11,9 @@ type Reason = "Rusak/Hilang" | "Penyesuaian" | "Stok Opname" | "Lainnya";
 
 export default function InventoryPage() {
   const { products, movements, adjustStock } = useData();
+  const auth = useAuth();
+  const s = useSettings();
+  const cashierName = auth.staff?.name ?? s.cashierName;
   const [stockOpen, setStockOpen] = useState<{ productName: string; variantId: string; sku: string; current: number } | null>(null);
   const [delta, setDelta] = useState(0);
   const [reason, setReason] = useState<Reason>("Penyesuaian");
@@ -27,7 +32,7 @@ export default function InventoryPage() {
   function apply() {
     if (!stockOpen || delta === 0) return;
     const type = delta > 0 ? "restock" : "adjustment";
-    adjustStock(stockOpen.variantId, delta, type, "Ani", reason, note);
+    adjustStock(stockOpen.variantId, delta, type, cashierName, reason, note);
     setStockOpen(null);
   }
 

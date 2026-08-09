@@ -25,9 +25,9 @@ export default function ProductForm({
   const [fabric, setFabric] = useState(product?.fabric ?? "");
   const [care, setCare] = useState(product?.care ?? "");
   const [tags, setTags] = useState((product?.tags ?? []).join(", "));
-  const [season, setSeason] = useState("");
-  const [brand, setBrand] = useState("");
-  const [compareAt, setCompareAt] = useState("");
+  const [season, setSeason] = useState(product?.season ?? "");
+  const [brand, setBrand] = useState(product?.brand ?? "");
+  const [compareAt, setCompareAt] = useState(product?.compareAt ? String(product.compareAt) : "");
   const [active, setActive] = useState(product?.active ?? true);
   const [variants, setVariants] = useState<Variant[]>(
     product?.variants ?? [
@@ -58,6 +58,9 @@ export default function ProductForm({
       fabric,
       care,
       tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
+      season,
+      brand,
+      compareAt: compareAt ? Number(compareAt) : undefined,
       active,
       images: [`https://placehold.co/400x500/775533/ffffff?text=${encodeURIComponent(name)}`],
     };
@@ -85,8 +88,11 @@ export default function ProductForm({
             ))}
           </select>
         </Labeled>
-        <Labeled label="Brand / Season">
-          <input value={`${brand} ${season}`} onChange={(e) => { const [b, ...s] = e.target.value.split(" "); setBrand(b); setSeason(s.join(" ")); }} className="input" placeholder="Brand Season" />
+        <Labeled label="Brand">
+          <input value={brand} onChange={(e) => setBrand(e.target.value)} className="input" placeholder="mis. Batik Lestari" />
+        </Labeled>
+        <Labeled label="Season">
+          <input value={season} onChange={(e) => setSeason(e.target.value)} className="input" placeholder="mis. 2026" />
         </Labeled>
         <Labeled label="Bahan">
           <input value={fabric} onChange={(e) => setFabric(e.target.value)} className="input" />
@@ -98,7 +104,7 @@ export default function ProductForm({
           <input value={tags} onChange={(e) => setTags(e.target.value)} className="input" />
         </Labeled>
         <Labeled label="Harga Coret (compare-at)">
-          <input value={compareAt} onChange={(e) => setCompareAt(e.target.value)} className="input" placeholder="opsional" />
+          <input value={compareAt} onChange={(e) => setCompareAt(e.target.value)} className="input" placeholder="opsional" type="number" />
         </Labeled>
       </div>
       <Labeled label="Deskripsi">

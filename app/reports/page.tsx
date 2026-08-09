@@ -7,11 +7,15 @@ import { Icon, type IconName } from "@/components/icons";
 import EChart from "@/components/EChart";
 import type { EChartsOption } from "echarts";
 
+function csvCell(v: string | number): string {
+  const s = String(v);
+  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
 function toCSV(rows: (string | number)[][]): string {
-  return rows.map((r) => r.join(",")).join("\n");
+  return rows.map((r) => r.map(csvCell).join(",")).join("\r\n");
 }
 function download(name: string, csv: string) {
-  const blob = new Blob([csv], { type: "text/csv" });
+  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
   a.download = name;

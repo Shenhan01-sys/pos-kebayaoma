@@ -30,6 +30,9 @@ export interface Product {
   variants: Variant[];
   fabric: string;
   care: string;
+  season?: string;
+  brand?: string;
+  compareAt?: number;
 }
 
 export interface Customer {
@@ -38,6 +41,11 @@ export interface Customer {
   phone: string;
   totalPurchases: number;
   visitCount: number;
+  email?: string;
+  address?: string;
+  birthday?: string;
+  notes?: string;
+  tags?: string[];
 }
 
 export type PaymentMethod = "qris" | "cash" | "transfer";
