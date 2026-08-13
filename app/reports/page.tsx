@@ -4,8 +4,10 @@ import { useState } from "react";
 import { transactions as dummyTx, formatRupiah } from "@/lib/dummy";
 import { getAllTransactions } from "@/store/cart";
 import { Icon, type IconName } from "@/components/icons";
-import EChart from "@/components/EChart";
+import dynamic from "next/dynamic";
 import type { EChartsCoreOption } from "echarts/core";
+
+const EChart = dynamic(() => import("@/components/EChart"), { ssr: false });
 
 function csvCell(v: string | number): string {
   const s = String(v);

@@ -56,6 +56,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     useData.getState().subscribeRealtime();
   }, []);
 
+  const products = useData((s) => s.products);
+  const lowCount = products.reduce(
+    (sum, p) => sum + p.variants.filter((v) => v.stock <= 5).length,
+    0
+  );
+
   // Public pages (e.g. product profile from QR label) render without shell/login
   if (isPublic) {
     return (
@@ -87,6 +93,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           >
             <Icon name={l.icon} size={19} className={active ? "text-apricot" : "text-olive"} />
             <span>{l.label}</span>
+            {l.href === "/inventory" && lowCount > 0 && (
+              <span className="ml-auto flex h-5 min-w-[20px] items-center justify-center rounded-full bg-danger px-1.5 text-[10px] font-bold leading-none text-white">
+                {lowCount}
+              </span>
+            )}
           </Link>
         );
       })}

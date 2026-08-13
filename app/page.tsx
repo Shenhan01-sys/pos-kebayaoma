@@ -2,14 +2,16 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { transactions as dummyTx, formatRupiah, type Transaction } from "@/lib/dummy";
 import { getAllTransactions, subscribeTransactions } from "@/store/cart";
 import { useSettings } from "@/store/settings";
 import { useData } from "@/store/data";
 import { useAuth } from "@/store/auth";
 import { Icon, type IconName } from "@/components/icons";
-import EChart from "@/components/EChart";
 import type { EChartsCoreOption } from "echarts/core";
+
+const EChart = dynamic(() => import("@/components/EChart"), { ssr: false });
 
 const C = {
   violet: "#290024",
