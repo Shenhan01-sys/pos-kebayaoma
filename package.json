@@ -16,7 +16,7 @@
     "@supabase/supabase-js": "^2.112.1",
     "@types/jsbarcode": "^3.11.4",
     "dotenv": "^17.4.2",
-    "echarts": "^5.6.0",
+    "echarts": "^6.1.0",
     "html2canvas": "^1.4.1",
     "jsbarcode": "^3.12.3",
     "jspdf": "^4.2.1",
