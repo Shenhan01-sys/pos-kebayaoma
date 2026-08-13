@@ -5,6 +5,7 @@ import { formatRupiah, type Product, type Variant } from "@/lib/dummy";
 import { useCart } from "@/store/cart";
 import { useData } from "@/store/data";
 import CheckoutModal from "@/components/CheckoutModal";
+import BarcodeScanner from "@/components/BarcodeScanner";
 import { Icon } from "@/components/icons";
 
 const thumbStyle: Record<string, { grad: string; emoji: string }> = {
@@ -18,9 +19,22 @@ export default function PosPage() {
   const [query, setQuery] = useState("");
   const [picker, setPicker] = useState<Product | null>(null);
   const [checkout, setCheckout] = useState(false);
+  const [scannerOpen, setScannerOpen] = useState(false);
   const { lines, addVariant, inc, dec, remove, total, customerName, setCustomer } =
     useCart();
   const { products, categories, customers } = useData();
+
+  const handleScan = (code: string) => {
+    setScannerOpen(false);
+    for (const p of products) {
+      for (const v of p.variants) {
+        if (v.barcode === code || v.sku === code) {
+          addVariant(p, v);
+          return;
+        }
+      }
+    }
+  };
 
   const filtered = products
     .filter((p) => (cat === "all" ? true : p.categoryId === cat))
@@ -50,6 +64,14 @@ export default function PosPage() {
               className="input pl-10"
             />
           </div>
+          <button
+            onClick={() => setScannerOpen(true)}
+            className="btn-ghost shrink-0"
+            title="Scan barcode"
+            aria-label="Scan barcode"
+          >
+            <Icon name="qris" size={18} /> Scan
+          </button>
           <select
             value={customerName ?? ""}
             onChange={(e) => setCustomer(e.target.value || null)}
@@ -238,6 +260,7 @@ export default function PosPage() {
       )}
 
       {checkout && <CheckoutModal onClose={() => setCheckout(false)} />}
+      {scannerOpen && <BarcodeScanner onScan={handleScan} onClose={() => setScannerOpen(false)} />}
     </div>
   );
 }
