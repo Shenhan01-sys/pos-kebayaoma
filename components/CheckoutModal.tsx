@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import {
   formatRupiah,
@@ -13,12 +13,6 @@ import { useData } from "@/store/data";
 import { useAuth } from "@/store/auth";
 import Receipt from "@/components/Receipt";
 import { Icon } from "@/components/icons";
-
-function mockQrisString(amount: number, ref: string): string {
-  return `00020101021226ID.CO.KEBAYAOMA.WWW011893600912345678${ref}5204583253033605802ID5909KEBAYAOMA6011JAKARTASELAT6304${String(
-    amount
-  ).padStart(10, "0")}`;
-}
 
 const methodMeta: Record<PaymentMethod, { label: string; icon: "qris" | "cash" | "transfer" }> = {
   qris: { label: "QRIS", icon: "qris" },
@@ -35,15 +29,40 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
   const [method, setMethod] = useState<PaymentMethod>("qris");
   const [paid, setPaid] = useState<Transaction | null>(null);
   const [cashPaid, setCashPaid] = useState<string>(String(total()));
-  const [ref] = useState(
-    () => "QRX-" + Math.random().toString(36).slice(2, 8).toUpperCase()
-  );
+  const [qr, setQr] = useState<{ qrString: string; qrisRef: string; mock: boolean; expiry?: string } | null>(null);
+  const [qrLoading, setQrLoading] = useState(false);
 
   const rawSubtotal = lines.reduce((s, l) => s + l.unitPrice * l.quantity, 0);
   const disc = discount;
   const net = Math.max(0, rawSubtotal - disc);
   const taxAmt = Math.round((net * s.taxRate) / 100);
   const grand = net + taxAmt;
+
+  // Request dynamic QRIS whenever amount/method changes
+  useEffect(() => {
+    if (method !== "qris") return;
+    let cancelled = false;
+    setQrLoading(true);
+    fetch("/api/qris/charge", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ order_id: nextTxNumber(), gross_amount: grand }),
+    })
+      .then((r) => r.json())
+      .then((d) => {
+        if (cancelled) return;
+        setQr({
+          qrString: d.qrString,
+          qrisRef: d.qrisRef,
+          mock: !!d.mock,
+          expiry: d.expiry,
+        });
+      })
+      .finally(() => !cancelled && setQrLoading(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [method, grand]);
 
   function buildTx(paymentStatus: Transaction["paymentStatus"], amountPaid: number): Transaction {
     const now = new Date().toISOString();
@@ -62,7 +81,7 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
       amountPaid,
       change: Math.max(0, amountPaid - grand),
       createdAt: now,
-      qrisRef: method === "qris" ? ref : undefined,
+      qrisRef: method === "qris" ? qr?.qrisRef : undefined,
       items: lines.map((l) => ({
         productId: l.productId,
         variantId: l.variantId,
@@ -186,12 +205,23 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
 
           {method === "qris" && (
             <div className="flex flex-col items-center rounded-2xl bg-beige/60 p-4">
-              <div className="rounded-2xl bg-white p-3 shadow-soft">
-                <QRCodeSVG value={mockQrisString(grand, ref)} size={176} level="M" />
-              </div>
+              {qrLoading || !qr ? (
+                <div className="flex h-[176px] w-[176px] items-center justify-center rounded-2xl bg-white text-sm text-gray-500 shadow-soft">
+                  Membuat QR…
+                </div>
+              ) : (
+                <div className="rounded-2xl bg-white p-3 shadow-soft">
+                  <QRCodeSVG value={qr.qrString} size={176} level="M" />
+                </div>
+              )}
               <p className="mt-2 text-center text-xs text-gray-600">
-                Scan dengan e-wallet (dummy). Klik tombol untuk simulasi.
+                {qr?.mock
+                  ? "Mode simulasi (tanpa key Midtrans). Klik tombol untuk menyelesaikan."
+                  : "Scan dengan GoPay / ShopeePay / OVO / e-wallet QRIS."}
               </p>
+              {qr?.expiry && (
+                <p className="mt-1 text-[11px] text-olive">Berlaku s.d. {new Date(qr.expiry).toLocaleTimeString("id-ID")}</p>
+              )}
             </div>
           )}
 
@@ -220,7 +250,11 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
           )}
 
           <button onClick={finish} className="btn-primary mt-4 w-full py-3 text-base">
-            {method === "qris" ? "Simulasikan Pembayaran" : "Konfirmasi"}
+            {method === "qris"
+              ? qr?.mock
+                ? "Simulasikan Pembayaran"
+                : "Bayar via QRIS"
+              : "Konfirmasi"}
           </button>
         </div>
       </div>
