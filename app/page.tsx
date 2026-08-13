@@ -9,7 +9,7 @@ import { useData } from "@/store/data";
 import { useAuth } from "@/store/auth";
 import { Icon, type IconName } from "@/components/icons";
 import EChart from "@/components/EChart";
-import type { EChartsOption } from "echarts";
+import type { EChartsCoreOption } from "echarts/core";
 
 const C = {
   violet: "#290024",
@@ -74,7 +74,7 @@ export default function DashboardPage() {
   const methodLabel: Record<string, string> = { qris: "QRIS", cash: "Tunai", transfer: "Transfer" };
 
   // ---- ECharts options (solid palette) ----
-  const donutOption: EChartsOption = {
+  const donutOption: EChartsCoreOption = {
     tooltip: { trigger: "item", formatter: (p: any) => `${p.name}<br/>${formatRupiah(p.value)}` },
     legend: {
       bottom: 0,
@@ -102,7 +102,7 @@ export default function DashboardPage() {
   };
 
   const prodH = Math.max(150, topProducts.length * 40);
-  const prodOption: EChartsOption = {
+  const prodOption: EChartsCoreOption = {
     grid: { left: 4, right: 16, top: 8, bottom: 4, containLabel: true },
     tooltip: { trigger: "axis", axisPointer: { type: "shadow" }, formatter: (ps: any) => `${ps[0].name}<br/>${ps[0].value} pcs` },
     xAxis: {

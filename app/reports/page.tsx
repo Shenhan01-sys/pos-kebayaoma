@@ -5,7 +5,7 @@ import { transactions as dummyTx, formatRupiah } from "@/lib/dummy";
 import { getAllTransactions } from "@/store/cart";
 import { Icon, type IconName } from "@/components/icons";
 import EChart from "@/components/EChart";
-import type { EChartsOption } from "echarts";
+import type { EChartsCoreOption } from "echarts/core";
 
 function csvCell(v: string | number): string {
   const s = String(v);
@@ -73,7 +73,7 @@ export default function ReportsPage() {
   const days = Object.entries(byDay).sort();
 
   // ---- ECharts options (solid palette) ----
-  const donutOption: EChartsOption = {
+  const donutOption: EChartsCoreOption = {
     tooltip: { trigger: "item", formatter: (p: any) => `${p.name}<br/>${formatRupiah(p.value)}` },
     legend: {
       bottom: 0,
@@ -100,7 +100,7 @@ export default function ReportsPage() {
     ],
   };
 
-  const dailyOption: EChartsOption = {
+  const dailyOption: EChartsCoreOption = {
     grid: { left: 4, right: 8, top: 16, bottom: 24, containLabel: true },
     tooltip: { trigger: "axis", formatter: (ps: any) => `${ps[0].axisValue}<br/>${formatRupiah(ps[0].value)}` },
     xAxis: {
@@ -126,7 +126,7 @@ export default function ReportsPage() {
   };
 
   const prodH = Math.max(150, topProducts.length * 40);
-  const prodOption: EChartsOption = {
+  const prodOption: EChartsCoreOption = {
     grid: { left: 4, right: 16, top: 8, bottom: 4, containLabel: true },
     tooltip: { trigger: "axis", axisPointer: { type: "shadow" }, formatter: (ps: any) => `${ps[0].name}<br/>${formatRupiah(ps[0].value)}` },
     xAxis: {

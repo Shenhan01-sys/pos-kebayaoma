@@ -58,7 +58,10 @@ export const useAuth = create<AuthState>()((set) => ({
       if (event === "SIGNED_IN" && next) {
         const profile = await loadStaffProfile(next.user.id);
         set({ session: next, staff: profile });
-      } else if (event === "SIGNED_OUT" || event === "TOKEN_REFRESHED") {
+      } else if (event === "TOKEN_REFRESHED" && next) {
+        // Token diperbarui — jangan log out staff; sesi tetap valid.
+        set({ session: next });
+      } else if (event === "SIGNED_OUT") {
         set({ session: next, staff: null });
       }
     });
