@@ -29,9 +29,6 @@ export default function SettingsPage() {
         <Field label="Nama Kasir">
           <input value={s.cashierName} onChange={(e) => s.update({ cashierName: e.target.value })} className="input" />
         </Field>
-        <Field label="Pajak (%)">
-          <input type="number" value={s.taxRate} onChange={(e) => s.update({ taxRate: Number(e.target.value) || 0 })} className="input w-28" />
-        </Field>
         <Field label="Printer">
           <select
             value={s.printerType}

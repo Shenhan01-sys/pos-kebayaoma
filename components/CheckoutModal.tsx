@@ -35,8 +35,8 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
   const rawSubtotal = lines.reduce((s, l) => s + l.unitPrice * l.quantity, 0);
   const disc = discount;
   const net = Math.max(0, rawSubtotal - disc);
-  const taxAmt = Math.round((net * s.taxRate) / 100);
-  const grand = net + taxAmt;
+  const taxAmt = 0; // pajak dinonaktifkan: total checkout = total keranjang
+  const grand = net;
 
   // Request dynamic QRIS whenever amount/method changes
   useEffect(() => {
