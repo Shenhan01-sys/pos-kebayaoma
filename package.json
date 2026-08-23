@@ -9,10 +9,18 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "cap:init": "npx cap add android",
+    "cap:sync": "npm run build && npx cap sync",
+    "cap:open": "npx cap open android",
+    "cap:run": "npx cap run android"
   },
   "dependencies": {
+    "@capacitor/cli": "^8.5.0",
+    "@capacitor/core": "^8.5.0",
     "@headlessui/react": "^2.2.10",
+    "@powersync/react": "^2.0.0",
+    "@powersync/web": "^2.2.0",
     "@supabase/supabase-js": "^2.112.1",
     "@types/jsbarcode": "^3.11.4",
     "dotenv": "^17.4.2",

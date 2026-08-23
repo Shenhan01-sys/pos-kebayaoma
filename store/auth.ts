@@ -2,10 +2,17 @@
 
 import { create } from "zustand";
 import type { Session } from "@supabase/supabase-js";
-import { supabase } from "@/lib/supabase";
+import { supabase, isSupabaseReady } from "@/lib/supabase";
 import type { Staff } from "@/store/data";
 
 const staffEmail = (staffId: string) => `staff-${staffId}@kebayaoma.local`;
+
+const demoStaff: Staff = {
+  id: "demo-admin",
+  name: "Demo Kasir",
+  role: "admin",
+  active: true,
+};
 
 interface AuthState {
   initialized: boolean;
@@ -38,6 +45,11 @@ export const useAuth = create<AuthState>()((set) => ({
   staff: null,
 
   init: async () => {
+    if (!isSupabaseReady) {
+      set({ initialized: true, staff: demoStaff });
+      return;
+    }
+
     const { data } = await supabase.auth.getSession();
     let session = data.session;
 
@@ -68,6 +80,10 @@ export const useAuth = create<AuthState>()((set) => ({
   },
 
   login: async (staffId, pin) => {
+    if (!isSupabaseReady) {
+      set({ staff: demoStaff });
+      return null;
+    }
     const { error } = await supabase.auth.signInWithPassword({
       email: staffEmail(staffId),
       password: pin,
@@ -77,7 +93,9 @@ export const useAuth = create<AuthState>()((set) => ({
   },
 
   logout: async () => {
-    await supabase.auth.signOut();
+    if (isSupabaseReady) {
+      await supabase.auth.signOut();
+    }
     set({ session: null, staff: null });
   },
 }));

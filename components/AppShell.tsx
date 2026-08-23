@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { useSettings } from "@/store/settings";
 import { useData } from "@/store/data";
 import { useAuth } from "@/store/auth";
+import { isSupabaseReady } from "@/lib/supabase";
 import { Icon, type IconName } from "@/components/icons";
 import LoadingScreen from "@/components/LoadingScreen";
 import LoginScreen from "@/components/LoginScreen";
@@ -48,11 +49,16 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   // Load data from Supabase once on app start
   useEffect(() => {
+    if (!isSupabaseReady) {
+      useData.getState().loadFallback();
+      return;
+    }
     useData.getState().fetchProducts();
     useData.getState().fetchCategories();
     useData.getState().fetchCustomers();
     useData.getState().fetchStaff();
     useData.getState().fetchTransactions();
+    useData.getState().fetchShifts();
     useData.getState().subscribeRealtime();
   }, []);
 
@@ -73,7 +79,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   if (!auth.initialized) return <LoadingScreen />;
-  if (!auth.session) return <LoginScreen />;
+  if (!auth.session && !auth.staff) return <LoginScreen />;
 
   const nav = (
     <nav className="relative z-10 flex-1 space-y-1 overflow-y-auto pretty-scroll px-2 py-2">
@@ -180,7 +186,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <span className="font-bold text-ink">{s.storeName}</span>
         </header>
 
-        <main className="flex-1 overflow-auto p-3 sm:p-5">{children}</main>
+        <main className="flex-1 overflow-auto p-3 sm:p-5">
+          {!isSupabaseReady && (
+            <div className="mb-3 rounded-2xl bg-apricot/10 px-4 py-2 text-xs font-medium text-olive">
+              Mode Demo: data disimpan lokal di browser ini. Hubungkan Supabase untuk produksi.
+            </div>
+          )}
+          {children}
+        </main>
       </div>
     </div>
   );

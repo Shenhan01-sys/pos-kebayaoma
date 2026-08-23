@@ -1,35 +1,46 @@
-# Daftar Fitur FE — POS Kebaya Oma (Dummy / Tanpa Backend)
+# Daftar Fitur — POS Kebaya Oma
 
-Next.js 14 (App Router) + TypeScript + Tailwind + Zustand + qrcode.react.
-Semua data **dummy**; CRUD persist di **localStorage** (via Zustand persist) supaya
-tetap ada saat reload. Belum terhubung Supabase / payment gateway sungguhan.
+**Stack:** Next.js 16 (App Router) + React 19 + TypeScript + Tailwind CSS + Zustand + Supabase.
 
-Palette: Beige `#F2F5E2`, Vanilla Custard `#E3DEA4`, Golden Apricot `#D4954D`,
-Olive Wood `#775533`, Midnight Violet `#290024`.
+Aplikasi POS tablet untuk toko fashion/kebaya di Indonesia. Dua mode jalannya:
+
+1. **Supabase Mode** — data tersimpan di Postgres, Auth PIN staff, realtime sinkron antar-device.
+2. **Demo/Fallback Mode** — kalau env Supabase belum di-set, aplikasi otomatis berjalan dengan data dummy & localStorage (tanpa login).
+
+Palette: Beige `#F2F5E2`, Vanilla Custard `#E3DEA4`, Golden Apricot `#D4954D`, Olive Wood `#775533`, Midnight Violet `#290024`.
+
+---
 
 ## A. Shell & Tema
 - [x] Sidebar tablet: Dashboard, Kasir POS, Produk, Inventori, Pelanggan, Staff, Transaksi, Shift, Laporan, Pengaturan
-- [x] Palette kustom (violet sidebar, aksen apricot/olive)
+- [x] Palette kustom solid (violet sidebar, aksen apricot/olive)
 - [x] Nama toko dinamis dari Pengaturan
+- [x] Badge stok menipis di sidebar
 
 ## B. Dashboard (`/`)
+- [x] Hero greeting + info toko
 - [x] KPI: Penjualan, Transaksi, Stok Menipis, Buka Kasir
-- [x] Grafik pembayaran per metode (QRIS/Tunai/Transfer)
+- [x] Grafik donut pembayaran per metode (QRIS/Tunai/Transfer)
 - [x] Grafik Produk Terlaris
 - [x] Daftar Stok Menipis (live dari data store)
-- [x] Transaksi Terakhir (reflect batal/refund)
+- [x] Transaksi Terakhir (reflect batal/refund/pending)
 
 ## C. Kasir POS (`/pos`)
 - [x] Grid katalog + filter kategori + pencarian (nama/SKU/tag)
+- [x] Scan barcode kamera (`html5-qrcode`)
 - [x] Pemilih varian (ukuran/warna) dgn stok; disable bila habis
 - [x] Keranjang: qty, hapus (Zustand)
 - [x] Pilih pelanggan
 - [x] Checkout: QRIS / Tunai / Transfer
-- [x] Diskon + **Pajak (VAT 12% dari Pengaturan)**
-- [x] Tunai: uang diterima + kembalian otomatis
-- [x] QRIS: QR dummy + simulasi bayar
+- [x] Diskon + **Pajak (VAT % dari Pengaturan)**
+- [x] Tunai: uang diterima + kembalian otomatis + validasi uang kurang
+- [x] QRIS:
+  - [x] Generate QRIS dinamis via `/api/qris/charge` (Midtrans / GoPay / mock)
+  - [x] Mode simulasi bayar (tanpa API key)
+  - [x] Mode real: buat transaksi **pending**, tunggu webhook/realtime, auto-finalisasi saat lunas
 - [x] Struk + QR verifikasi digital + Print (browser)
 - [x] **Otomatis kurangi stok** via log pergerakan (sale)
+- [x] **Auto-update statistik pelanggan** saat transaksi lunas
 
 ## D. Manajemen Produk (`/products`) — CRUD lengkap
 - [x] List + filter kategori + badge Nonaktif
@@ -37,7 +48,7 @@ Olive Wood `#775533`, Midnight Violet `#290024`.
 - [x] **Editor Varian**: ukuran, warna, SKU, barcode, modal, harga, stok — add/remove
 - [x] **Hapus produk** (konfirmasi)
 - [x] Toggle aktif/nonaktif
-- [x] **Label QR** per produk -> profil publik
+- [x] **Label QR & Barcode** per produk/varian -> profil publik + cetak label
 
 ## E. Kategori (modal di Produk)
 - [x] Tambah / Edit / Hapus kategori (nama + slug)
@@ -56,26 +67,30 @@ Olive Wood `#775533`, Midnight Violet `#290024`.
 ## H. Staff & Peran (`/staff`) — CRUD
 - [x] Tambah / Edit / Hapus staff
 - [x] Role: Admin / Manager / Kasir
-- [x] PIN login, telepon, status aktif/nonaktif
+- [x] PIN login via Supabase Auth, telepon, status aktif/nonaktif
 
 ## I. Transaksi (`/transactions`)
 - [x] Tabel semua transaksi + pencarian
-- [x] **Batalkan / Refund** (update status, reflect ke Dashboard & Verify)
+- [x] **Batalkan / Refund** (update status, kembalikan stok, kurangi statistik pelanggan)
 - [x] Link ke Verifikasi
 
 ## J. Shift (`/shifts`)
-- [x] Info shift, kas diharapkan, tutup shift (dummy)
+- [x] Buka shift (modal awal)
+- [x] Hitung total transaksi, penjualan, QRIS, tunai secara real-time
+- [x] Tutup shift dengan input uang fisik + hitung selisih
+- [x] Riwayat shift
 
 ## K. Laporan (`/reports`)
 - [x] Filter tanggal (from–to)
-- [x] KPI: Total penjualan, transaksi, rata-rata, pajak
-- [x] Per metode pembayaran (bar)
-- [x] Diskon diberikan
-- [x] Penjualan per produk (qty + revenue, bar)
+- [x] KPI: Total penjualan, transaksi, rata-rata, pajak, diskon
+- [x] Donut per metode pembayaran
+- [x] Tren penjualan harian
+- [x] Penjualan per produk (qty + revenue, bar chart + tabel)
 - [x] **Export CSV** laporan penjualan
 
 ## L. Verifikasi Pembayaran (`/verify/[id]`)
-- [x] Cek status paid/pending, detail item, reflect batal/refund
+- [x] Cek status paid/pending/cancelled/refunded, detail item, total
+- [x] QR digital receipt
 
 ## M. Profil Produk Publik (`/product/[sku]`)
 - [x] Galeri, tag, bahan, perawatan, varian & harga, "Tambah ke Kasir"
@@ -87,13 +102,16 @@ Olive Wood `#775533`, Midnight Violet `#290024`.
 
 ## O. Struk / Receipt
 - [x] Format 80mm, info toko dinamis, item, diskon, **pajak**, total, bayar, kembali
+- [x] Ticket notch cutout
 - [x] QR digital receipt; print via `window.print()`
 
 ## P. Arsitektur
-- [x] Next.js 14 App Router + TS, Tailwind (palette kustom)
-- [x] Zustand: cart, data (products/categories/customers/staff/movements persist), settings persist
-- [x] qrcode.react untuk generate QR
-- [x] Build production sukses (13 routes)
+- [x] Next.js 16 App Router + TS, Tailwind (palette kustom)
+- [x] Zustand: cart, data (products/categories/customers/staff/movements/shifts persist), settings persist
+- [x] Supabase: Auth, Postgres, RLS, Realtime
+- [x] qrcode.react + jsbarcode untuk generate QR/barcode
+- [x] Build production sukses (16 routes)
+- [x] Fallback demo mode tanpa Supabase
 
 ## Q. PWA (installable + offline)
 - [x] `manifest.json` (standalone, landscape, icon SVG)
@@ -109,14 +127,21 @@ Olive Wood `#775533`, Midnight Violet `#290024`.
 - [x] Grid & tabel responsif (sm/md/lg/xl), overflow aman, kartu `truncate`
 - [x] Modal & struk `max-w-full` muat di semua viewport & orientasi
 
-## Belum diimplementasikan (butuh backend/native — lih. plan-opencode.md)
-- Integrasi Xendit/Midtrans sungguhan (webhook)
-- Supabase (DB, Auth, RLS, Realtime, Storage)
-- Offline sync (PowerSync/RxDB)
+## Belum diimplementasikan (lih. plan-opencode.md)
+- QRIS real end-to-end teruji di production (scaffold API + webhook sudah ada)
+- Offline sync robust (PowerSync/RxDB)
 - Print native ESC/POS via Capacitor / Bluetooth print service
-- Scan kamera (html5-qrcode) di dalam app
 - PO / Supplier, Loyalty points, Promosi terjadwal, Multi-store, Gift card, e-Faktur/Coretax
 
+## Setup
+1. Salin `.env.local.example` → `.env.local` dan isi Supabase + QRIS key.
+2. Jalankan migrasi SQL di `supabase/migrations/` di Supabase SQL Editor.
+3. Jalankan `node scripts/setup-auth-staff.js` untuk membuat staff & auth user.
+4. Jalankan `node scripts/seed-full.js` (atau `npx ts-node scripts/seed.ts`) untuk data awal.
+5. `npm run build` dan deploy ke Vercel.
+
 ## Referensi riset
-- `research_posfeatures.json` — hasil DeepResearch fitur POS production-ready (P0/P1/P2)
 - `plan-opencode.md` — draf arsitektur & roadmap
+- `POSkebaya-Vault/` — dokumentasi lengkap (Obsidian vault)
+- `research/` — hasil riset QRIS, PWA vs native, thermal print, Supabase
+- `QnA/` — catatan wawancara dengan pemilik bisnis

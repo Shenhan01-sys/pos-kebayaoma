@@ -22,7 +22,7 @@ export const useSettings = create<SettingsState>()(
       storeName: "Kebaya Oma",
       address: "Jl. Sudirman No. 123, Jakarta",
       phone: "021-1234-5678",
-      taxRate: 0,
+      taxRate: 12,
       printerType: "escpos-bluetooth",
       cashierName: "Ani",
       update: (patch) => set(patch),
