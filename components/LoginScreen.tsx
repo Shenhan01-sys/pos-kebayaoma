@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+import { supabase, isSupabaseReady } from "@/lib/supabase";
 import type { Role, Staff } from "@/store/data";
+import { useData } from "@/store/data";
 import { useAuth } from "@/store/auth";
 import { Icon } from "@/components/icons";
 
@@ -28,12 +29,23 @@ export default function LoginScreen() {
   const router = useRouter();
   const { login } = useAuth();
   const [staffList, setStaffList] = useState<Staff[]>([]);
+  const [username, setUsername] = useState("");
   const [selected, setSelected] = useState<Staff | null>(null);
   const [pin, setPin] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
+    if (!isSupabaseReady) {
+      const dataStaff = useData.getState().staff;
+      if (dataStaff.length > 0) {
+        setStaffList(dataStaff.filter((s) => s.active));
+        return;
+      }
+      useData.getState().loadFallback();
+      setStaffList(useData.getState().staff.filter((s) => s.active));
+      return;
+    }
     supabase
       .from("staff")
       .select("id, name, role, phone, active")
@@ -43,6 +55,27 @@ export default function LoginScreen() {
         if (!error && data) setStaffList(data as Staff[]);
       });
   }, []);
+
+  function handleNext() {
+    setError(null);
+    const input = username.trim().toLowerCase();
+    if (!input) {
+      setError("Masukkan username terlebih dahulu.");
+      return;
+    }
+    const match = staffList.find(
+      (s) =>
+        s.name.toLowerCase() === input ||
+        s.id.toLowerCase() === input ||
+        s.name.toLowerCase().includes(input)
+    );
+    if (!match) {
+      setError("Username tidak ditemukan atau tidak aktif.");
+      return;
+    }
+    setSelected(match);
+    setPin("");
+  }
 
   const submit = async (value: string) => {
     if (!selected || value.length < 4 || busy) return;
@@ -64,17 +97,12 @@ export default function LoginScreen() {
     else setPin((p) => (p.length >= 6 ? p : p + k));
   };
 
-  const pad = useMemo(() => {
-    if (!selected || !selected.name) return "";
-    return `${selected.name} · ${roleLabel[selected.role]}`;
-  }, [selected]);
-
   if (selected) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-grad-cream p-6">
         <div className="w-full max-w-[340px]">
           <button
-            onClick={() => { setSelected(null); setPin(""); setError(null); }}
+            onClick={() => { setSelected(null); setPin(""); setError(null); setUsername(""); }}
             className="mb-4 inline-flex items-center gap-1.5 text-sm font-semibold text-olive hover:text-ink"
           >
             <Icon name="arrow-left" size={16} /> Ganti kasir
@@ -141,28 +169,37 @@ export default function LoginScreen() {
           🪡
         </div>
         <h1 className="text-2xl font-extrabold tracking-tight text-ink">Kebaya Oma POS</h1>
-        <p className="mt-1 text-sm text-olive">Pilih kasir untuk memulai shift</p>
+        <p className="mt-1 text-sm text-olive">Masuk untuk memulai shift</p>
       </div>
 
-      <div className="grid w-full max-w-[420px] grid-cols-2 gap-3">
-        {staffList.map((s) => (
-          <button
-            key={s.id}
-            onClick={() => setSelected(s)}
-            className="card card-pad flex flex-col items-start gap-2 text-left transition hover:-translate-y-0.5 hover:shadow-soft-lg"
-          >
-            <span className="avatar h-11 w-11 bg-grad-violet">{initials(s.name)}</span>
-            <div className="min-w-0">
-              <div className="truncate text-sm font-extrabold text-ink">{s.name}</div>
-              <div className={`pill ${rolePill[s.role]}`}>{roleLabel[s.role]}</div>
-            </div>
-          </button>
-        ))}
-      </div>
+      <div className="w-full max-w-[340px]">
+        <label className="mb-1.5 block text-sm font-semibold text-olive">Username</label>
+        <input
+          type="text"
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") handleNext(); }}
+          placeholder="Masukkan nama / username"
+          className="input mb-2"
+          autoFocus
+        />
 
-      {staffList.length === 0 && (
-        <p className="text-sm text-gray-500">Belum ada staff aktif. Hubungi admin.</p>
-      )}
+        {error && (
+          <div className="mb-3 flex items-center gap-2 rounded-2xl bg-danger/10 px-3 py-2.5 text-sm font-semibold text-danger">
+            <Icon name="alert" size={16} />
+            {error}
+          </div>
+        )}
+
+        <button
+          onClick={handleNext}
+          disabled={!username.trim()}
+          className="btn-violet w-full py-3.5 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          Lanjut
+          <Icon name="arrow-left" size={18} className="ml-2 rotate-180" />
+        </button>
+      </div>
     </div>
   );
 }
