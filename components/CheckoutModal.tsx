@@ -430,8 +430,7 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
                 return (
                   <div key={l.key} className="rounded-2xl bg-beige/60 p-2.5">
                     <div className="mb-1.5 flex items-center justify-between gap-2">
-                      <span className="truncate text-sm font-semibold text-ink">{l.name}</span>
-                      <span className="shrink-0 text-xs text-gray-600">Modal: {formatRupiah(l.costPrice)}</span>
+                      <span className="truncate text-sm font-semibold text-ink">{l.name} <span className="text-xs text-gray-600">· {l.seriesName}</span></span>
                     </div>
                     <div className="flex items-center gap-2">
                       <div className="relative flex-1">
@@ -457,7 +456,7 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
                     </div>
                     {atCost && l.costPrice > 0 && (
                       <div className="mt-1.5 flex items-center gap-1.5 text-xs text-danger">
-                        <Icon name="alert" size={12} /> Harga tidak boleh di bawah modal ({formatRupiah(l.costPrice)})
+                        <Icon name="alert" size={12} /> Harga tidak boleh di bawah modal
                       </div>
                     )}
                   </div>

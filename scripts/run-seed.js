@@ -29,19 +29,19 @@ const products = [
     id: 'p1', sku: 'KBY-2024-001', name: 'Kebaya Modern Pink',
     description: 'Kebaya modern cut dengan brokat halus',
     categoryId: 'cat-kebaya', images: [], tags: ['modern'], active: true,
-    fabric: 'Brokat', care: 'Dry clean',
+    fabric: 'Brokat', care: 'Dry clean', stock: 8,
     variants: [
-      { id: 'v1', sku: 'KBY-2024-001-S-PINK', size: 'S', color: 'Pink', colorCode: '#ec4899', stock: 5, sellingPrice: 450000, costPrice: 280000, barcode: '8995501S' },
-      { id: 'v2', sku: 'KBY-2024-001-M-PINK', size: 'M', color: 'Pink', colorCode: '#ec4899', stock: 3, sellingPrice: 450000, costPrice: 280000, barcode: '8995501M' }
+      { id: 'v1', sku: 'KBY-2024-001-S-PINK', name: 'Series 1', size: 'S', color: 'Pink', colorCode: '#ec4899', sellingPrice: 450000, costPrice: 280000, barcode: '8995501S' },
+      { id: 'v2', sku: 'KBY-2024-001-M-PINK', name: 'Series 1', size: 'M', color: 'Pink', colorCode: '#ec4899', sellingPrice: 450000, costPrice: 280000, barcode: '8995501M' }
     ]
   },
   {
     id: 'p2', sku: 'KBY-2024-002', name: 'Kebaya Encim Biru',
     description: 'Kebaya encim khas',
     categoryId: 'cat-kebaya', images: [], tags: ['encim'], active: true,
-    fabric: 'Sutra', care: 'Hand wash',
+    fabric: 'Sutra', care: 'Hand wash', stock: 8,
     variants: [
-      { id: 'v4', sku: 'KBY-2024-002-M-BLUE', size: 'M', color: 'Blue', colorCode: '#3b82f6', stock: 8, sellingPrice: 520000, costPrice: 310000, barcode: '8995502M' }
+      { id: 'v4', sku: 'KBY-2024-002-M-BLUE', name: 'Series 1', size: 'M', color: 'Blue', colorCode: '#3b82f6', sellingPrice: 520000, costPrice: 310000, barcode: '8995502M' }
     ]
   }
 ]
@@ -66,7 +66,7 @@ async function seed() {
       id: p.id, store_id: STORE_ID, sku: p.sku, name: p.name,
       description: p.description, category_id: p.categoryId,
       images: p.images, tags: p.tags, active: p.active,
-      fabric: p.fabric, care: p.care
+      fabric: p.fabric, care: p.care, stock: p.stock
     })), { onConflict: 'id' })
 
   if (prodError) console.error('Products error:', prodError.message)
@@ -75,8 +75,8 @@ async function seed() {
   // Insert variants
   console.log('Inserting variants...')
   const variants = products.flatMap(p => p.variants.map(v => ({
-    id: v.id, product_id: p.id, sku: v.sku, size: v.size,
-    color: v.color, color_code: v.colorCode, stock: v.stock,
+    id: v.id, product_id: p.id, sku: v.sku, name: v.name, size: v.size,
+    color: v.color, color_code: v.colorCode,
     selling_price: v.sellingPrice, cost_price: v.costPrice, barcode: v.barcode
   })))
 

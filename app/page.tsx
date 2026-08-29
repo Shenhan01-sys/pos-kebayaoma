@@ -68,9 +68,8 @@ export default function DashboardPage() {
     .slice(0, 5);
 
   const lowStock = products
-    .flatMap((p) => p.variants)
-    .filter((v) => v.stock <= 5)
-    .map((v) => ({ ...v, product: products.find((p) => p.variants.includes(v)) }));
+    .filter((p) => p.stock <= 5)
+    .map((p) => ({ ...p, product: p }));
 
   const methodColor: Record<string, string> = { qris: C.apricot, cash: C.olive, transfer: C.violet };
   const methodLabel: Record<string, string> = { qris: "QRIS", cash: "Tunai", transfer: "Transfer" };
@@ -132,7 +131,7 @@ export default function DashboardPage() {
   const cards = [
     { key: "sales", label: "Penjualan Hari Ini", value: formatRupiah(sales), href: "/transactions", sub: "Total nilai transaksi lunas" },
     { key: "count", label: "Transaksi", value: String(count), href: "/transactions", sub: "Pesanan berstatus lunas" },
-    { key: "low", label: "Stok Menipis", value: String(lowStock.length), href: "/products", sub: "Varian ≤ 5 unit" },
+    { key: "low", label: "Stok Menipis", value: String(lowStock.length), href: "/products", sub: "Produk ≤ 5 unit" },
     { key: "open", label: "Buka Kasir", value: "Mulai", href: "/pos", sub: "Lanjut ke layar POS" },
   ];
 
@@ -225,12 +224,12 @@ export default function DashboardPage() {
               <p className="text-sm text-gray-600">Stok aman. 🎉</p>
             ) : (
               <ul className="space-y-1.5">
-                {lowStock.slice(0, 6).map((v) => (
-                  <li key={v.id} className="flex items-center justify-between rounded-2xl bg-beige/60 px-3 py-2 text-sm">
+                {lowStock.slice(0, 6).map((p) => (
+                  <li key={p.id} className="flex items-center justify-between rounded-2xl bg-beige/60 px-3 py-2 text-sm">
                     <span className="min-w-0 truncate text-ink">
-                      {v.product?.name} <span className="text-gray-600">· {v.size}/{v.color}</span>
+                      {p.product.name} <span className="text-gray-600">· {p.sku}</span>
                     </span>
-                    <span className={v.stock === 0 ? "pill-danger" : "pill-warning"}>{v.stock}</span>
+                    <span className={p.stock === 0 ? "pill-danger" : "pill-warning"}>{p.stock}</span>
                   </li>
                 ))}
               </ul>

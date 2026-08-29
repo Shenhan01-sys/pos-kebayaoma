@@ -58,7 +58,7 @@ export type MovementType =
 
 export interface Movement {
   id: string;
-  variantId: string;
+  productId: string;
   sku: string;
   productName: string;
   type: MovementType;
@@ -116,7 +116,7 @@ interface DataState {
 
   // stock
   adjustStock: (
-    variantId: string,
+    productId: string,
     quantity: number,
     type: MovementType,
     staff: string,
@@ -199,6 +199,7 @@ export const useData = create<DataState>()(
                 images: safeJson(p.images, []),
                 tags: safeJson(p.tags, []),
                 active: Boolean(p.active),
+                stock: p.stock ?? 0,
                 fabric: p.fabric,
                 care: p.care,
                 season: p.season ?? undefined,
@@ -207,10 +208,10 @@ export const useData = create<DataState>()(
                 variants: vRows.map((v: any) => ({
                   id: v.id,
                   sku: v.sku,
+                  name: v.name,
                   size: v.size,
                   color: v.color,
                   colorCode: v.color_code,
-                  stock: v.stock,
                   sellingPrice: v.selling_price,
                   costPrice: v.cost_price,
                   barcode: v.barcode,
@@ -251,6 +252,7 @@ export const useData = create<DataState>()(
             images: p.images || [],
             tags: p.tags || [],
             active: p.active,
+            stock: p.stock ?? 0,
             fabric: p.fabric,
             care: p.care,
             season: p.season ?? undefined,
@@ -259,10 +261,10 @@ export const useData = create<DataState>()(
             variants: p.variants.map((v: any) => ({
               id: v.id,
               sku: v.sku,
+              name: v.name,
               size: v.size,
               color: v.color,
               colorCode: v.color_code,
-              stock: v.stock,
               sellingPrice: v.selling_price,
               costPrice: v.cost_price,
               barcode: v.barcode
@@ -491,16 +493,16 @@ export const useData = create<DataState>()(
         if (psDb) {
           const id = generateLocalId();
           await psDb.execute(
-            `INSERT INTO products (id, store_id, sku, name, description, category_id, images, tags, active, fabric, care, season, brand, compare_at, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
-            [id, STORE_ID, p.sku, p.name, p.description ?? null, p.categoryId ?? null, JSON.stringify(p.images ?? []), JSON.stringify(p.tags ?? []), p.active ? 1 : 0, p.fabric ?? null, p.care ?? null, p.season ?? null, p.brand ?? null, p.compareAt ?? null]
+            `INSERT INTO products (id, store_id, sku, name, description, category_id, images, tags, active, stock, fabric, care, season, brand, compare_at, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
+            [id, STORE_ID, p.sku, p.name, p.description ?? null, p.categoryId ?? null, JSON.stringify(p.images ?? []), JSON.stringify(p.tags ?? []), p.active ? 1 : 0, p.stock ?? 0, p.fabric ?? null, p.care ?? null, p.season ?? null, p.brand ?? null, p.compareAt ?? null]
           );
           for (const v of p.variants) {
             const vid = v.id || generateLocalId();
             await psDb.execute(
-              `INSERT INTO variants (id, product_id, sku, size, color, color_code, stock, selling_price, cost_price, barcode)
+              `INSERT INTO variants (id, product_id, sku, name, size, color, color_code, selling_price, cost_price, barcode)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-              [vid, id, v.sku, v.size, v.color, v.colorCode ?? null, v.stock, v.sellingPrice, v.costPrice, v.barcode ?? null]
+              [vid, id, v.sku, v.name ?? null, v.size, v.color, v.colorCode ?? null, v.sellingPrice, v.costPrice, v.barcode ?? null]
             );
           }
           await get().fetchProducts();
@@ -527,6 +529,7 @@ export const useData = create<DataState>()(
               images: p.images,
               tags: p.tags,
               active: p.active,
+              stock: p.stock ?? 0,
               fabric: p.fabric,
               care: p.care,
               season: p.season ?? null,
@@ -542,10 +545,10 @@ export const useData = create<DataState>()(
           // Insert variants
           const variants = p.variants.map(v => ({
             sku: v.sku,
+            name: v.name,
             size: v.size,
             color: v.color,
             color_code: v.colorCode,
-            stock: v.stock,
             selling_price: v.sellingPrice,
             cost_price: v.costPrice,
             barcode: v.barcode ?? null,
@@ -591,6 +594,7 @@ export const useData = create<DataState>()(
             ...(rest.images !== undefined && { images: rest.images }),
             ...(rest.tags !== undefined && { tags: rest.tags }),
             ...(rest.active !== undefined && { active: rest.active }),
+            ...(rest.stock !== undefined && { stock: rest.stock }),
             ...(rest.fabric !== undefined && { fabric: rest.fabric }),
             ...(rest.care !== undefined && { care: rest.care }),
             ...(rest.season !== undefined && { season: rest.season ?? null }),
@@ -616,10 +620,10 @@ export const useData = create<DataState>()(
                   .from('variants')
                   .insert([{
                     sku: v.sku,
+                    name: v.name,
                     size: v.size,
                     color: v.color,
                     color_code: v.colorCode,
-                    stock: v.stock,
                     selling_price: v.sellingPrice,
                     cost_price: v.costPrice,
                     barcode: v.barcode ?? null,
@@ -631,10 +635,10 @@ export const useData = create<DataState>()(
                   .from('variants')
                   .update({
                     sku: v.sku,
+                    name: v.name,
                     size: v.size,
                     color: v.color,
                     color_code: v.colorCode,
-                    stock: v.stock,
                     selling_price: v.sellingPrice,
                     cost_price: v.costPrice,
                     barcode: v.barcode,
@@ -826,11 +830,15 @@ export const useData = create<DataState>()(
       },
 
       applySaleSideEffects: async (tx: Transaction) => {
-        // Kurangi stok per item
+        // Kurangi stok per produk (gabungkan series dengan productId sama)
+        const byProduct = new Map<string, number>();
         for (const item of tx.items) {
+          byProduct.set(item.productId, (byProduct.get(item.productId) ?? 0) + item.quantity);
+        }
+        for (const [productId, qty] of byProduct) {
           await get().adjustStock(
-            item.variantId,
-            -item.quantity,
+            productId,
+            -qty,
             "sale",
             tx.cashier,
             "Penjualan",
@@ -843,39 +851,29 @@ export const useData = create<DataState>()(
         }
       },
 
-      adjustStock: async (variantId, quantity, type, staff, reason, note) => {
-        const product = get().products.find((p) =>
-          p.variants.some((v) => v.id === variantId)
-        );
-        const variant = product?.variants.find((v) => v.id === variantId);
-        if (!product || !variant) return;
+      adjustStock: async (productId, quantity, type, staff, reason, note) => {
+        const product = get().products.find((p) => p.id === productId);
+        if (!product) return;
 
-        const newStock = Math.max(0, variant.stock + quantity);
+        const newStock = Math.max(0, (product.stock ?? 0) + quantity);
 
         const psDb = getPowerSyncDb();
         if (psDb) {
-          await psDb.execute(`UPDATE variants SET stock = ? WHERE id = ?`, [newStock, variantId]);
+          await psDb.execute(`UPDATE products SET stock = ? WHERE id = ?`, [newStock, productId]);
           await psDb.execute(
             `INSERT INTO stock_movements (id, store_id, variant_id, sku, product_name, type, quantity, reason, note, staff, created_at)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
-            [generateLocalId(), STORE_ID, variantId, variant.sku, product.name, type, quantity, reason ?? null, note ?? null, staff]
+            [generateLocalId(), STORE_ID, productId, product.sku, product.name, type, quantity, reason ?? null, note ?? null, staff]
           );
           set((s) => ({
             products: s.products.map((p) =>
-              p.id === product.id
-                ? {
-                    ...p,
-                    variants: p.variants.map((x) =>
-                      x.id === variantId ? { ...x, stock: newStock } : x
-                    ),
-                  }
-                : p
+              p.id === productId ? { ...p, stock: newStock } : p
             ),
             movements: [
               {
                 id: `mv-${Date.now()}`,
-                variantId,
-                sku: variant.sku,
+                productId,
+                sku: product.sku,
                 productName: product.name,
                 type,
                 quantity,
@@ -893,20 +891,13 @@ export const useData = create<DataState>()(
         if (!isSupabaseReady) {
           set((s) => ({
             products: s.products.map((p) =>
-              p.id === product.id
-                ? {
-                    ...p,
-                    variants: p.variants.map((x) =>
-                      x.id === variantId ? { ...x, stock: newStock } : x
-                    ),
-                  }
-                : p
+              p.id === productId ? { ...p, stock: newStock } : p
             ),
             movements: [
               {
                 id: `mv-${Date.now()}`,
-                variantId,
-                sku: variant.sku,
+                productId,
+                sku: product.sku,
                 productName: product.name,
                 type,
                 quantity,
@@ -923,9 +914,9 @@ export const useData = create<DataState>()(
 
         try {
           const { error: updateError } = await supabase
-            .from('variants')
+            .from('products')
             .update({ stock: newStock })
-            .eq('id', variantId);
+            .eq('id', productId);
 
           if (updateError) throw updateError;
 
@@ -933,8 +924,8 @@ export const useData = create<DataState>()(
           await supabase
             .from('stock_movements')
             .insert([{
-              variant_id: variantId,
-              sku: variant.sku,
+              variant_id: productId,
+              sku: product.sku,
               product_name: product.name,
               type,
               quantity,
@@ -947,20 +938,13 @@ export const useData = create<DataState>()(
           // Update local state
           set((s) => ({
             products: s.products.map((p) =>
-              p.id === product.id
-                ? {
-                    ...p,
-                    variants: p.variants.map((x) =>
-                      x.id === variantId ? { ...x, stock: newStock } : x
-                    )
-                  }
-                : p
+              p.id === productId ? { ...p, stock: newStock } : p
             ),
             movements: [
               {
                 id: `mv-${Date.now()}`,
-                variantId,
-                sku: variant.sku,
+                productId,
+                sku: product.sku,
                 productName: product.name,
                 type,
                 quantity,
@@ -1660,10 +1644,14 @@ export const useData = create<DataState>()(
               prev.status === "paid" &&
               (status === "cancelled" || status === "refunded")
             ) {
+              const retByProduct = new Map<string, number>();
               for (const item of prev.items) {
+                retByProduct.set(item.productId, (retByProduct.get(item.productId) ?? 0) + item.quantity);
+              }
+              for (const [pid, qty] of retByProduct) {
                 await get().adjustStock(
-                  item.variantId,
-                  item.quantity,
+                  pid,
+                  qty,
                   "return",
                   prev.cashier,
                   status === "refunded" ? "Refund" : "Pembatalan",
@@ -1692,10 +1680,14 @@ export const useData = create<DataState>()(
               prev.status === "paid" &&
               (status === "cancelled" || status === "refunded")
             ) {
+              const retByProduct = new Map<string, number>();
               for (const item of prev.items) {
+                retByProduct.set(item.productId, (retByProduct.get(item.productId) ?? 0) + item.quantity);
+              }
+              for (const [pid, qty] of retByProduct) {
                 await get().adjustStock(
-                  item.variantId,
-                  item.quantity,
+                  pid,
+                  qty,
                   "return",
                   prev.cashier,
                   status === "refunded" ? "Refund" : "Pembatalan",
@@ -1736,10 +1728,14 @@ export const useData = create<DataState>()(
               prev.status === "paid" &&
               (status === "cancelled" || status === "refunded")
             ) {
+              const retByProduct = new Map<string, number>();
               for (const item of prev.items) {
+                retByProduct.set(item.productId, (retByProduct.get(item.productId) ?? 0) + item.quantity);
+              }
+              for (const [pid, qty] of retByProduct) {
                 await get().adjustStock(
-                  item.variantId,
-                  item.quantity,
+                  pid,
+                  qty,
                   "return",
                   prev.cashier,
                   status === "refunded" ? "Refund" : "Pembatalan",
@@ -1843,16 +1839,17 @@ export const useData = create<DataState>()(
           active: true,
           fabric: "",
           care: "",
+          stock: 0,
           variants: [{
-            id: "vc-" + Date.now().toString(36),
-            sku: item.sku,
-            size: "One Size",
-            color: "Custom",
-            colorCode: "#cccccc",
-            stock: 0,
-            sellingPrice: item.unitPrice,
-            costPrice: 0,
-          }],
+              id: "vc-" + Date.now().toString(36),
+              sku: item.sku,
+              name: "Series 1",
+              size: "One Size",
+              color: "Custom",
+              colorCode: "#cccccc",
+              sellingPrice: item.unitPrice,
+              costPrice: 0,
+            }],
         });
       },
 
@@ -1862,16 +1859,13 @@ export const useData = create<DataState>()(
           .channel('pos-db-changes')
           .on(
             'postgres_changes',
-            { event: 'UPDATE', schema: 'public', table: 'variants' },
+            { event: 'UPDATE', schema: 'public', table: 'products' },
             (payload) => {
-              const v = payload.new as { id: string; stock: number };
+              const p = payload.new as { id: string; stock: number };
               set((s) => ({
-                products: s.products.map((p) => ({
-                  ...p,
-                  variants: p.variants.map((x) =>
-                    x.id === v.id ? { ...x, stock: v.stock } : x
-                  ),
-                })),
+                products: s.products.map((prod) =>
+                  prod.id === p.id ? { ...prod, stock: p.stock } : prod
+                ),
               }));
             }
           )

@@ -39,13 +39,14 @@ export default function ProductProfilePage({ params }: { params: { sku: string }
         active: p.active,
         fabric: p.fabric,
         care: p.care,
+        stock: p.stock,
         variants: (p.variants ?? []).map((v: any) => ({
           id: v.id,
           sku: v.sku,
+          name: v.name,
           size: v.size,
           color: v.color,
           colorCode: v.color_code,
-          stock: v.stock,
           sellingPrice: v.selling_price,
           costPrice: v.cost_price,
           barcode: v.barcode,
@@ -132,7 +133,7 @@ export default function ProductProfilePage({ params }: { params: { sku: string }
               <div key={v.id} className="flex items-center justify-between rounded-2xl border border-black/5 bg-beige/50 p-2.5 text-sm">
                 <span className="text-ink">
                   {v.size} · {v.color}
-                  {v.stock === 0 && <span className="pill-danger ml-2">Habis</span>}
+                  {product.stock === 0 && <span className="pill-danger ml-2">Habis</span>}
                 </span>
                 <span className="font-semibold tnum text-olive">{formatRupiah(v.sellingPrice)}</span>
               </div>

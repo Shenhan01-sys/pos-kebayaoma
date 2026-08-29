@@ -29,15 +29,16 @@ export default function ProductForm({
   const [brand, setBrand] = useState(product?.brand ?? "");
   const [compareAt, setCompareAt] = useState(product?.compareAt ? String(product.compareAt) : "");
   const [active, setActive] = useState(product?.active ?? true);
+  const [stock, setStock] = useState(product?.stock ?? 0);
   const [variants, setVariants] = useState<Variant[]>(
     product?.variants ?? [
       {
         id: newVid(),
         sku: "",
+        name: "",
         size: "S",
         color: "",
         colorCode: "#775533",
-        stock: 0,
         costPrice: 0,
         sellingPrice: 0,
         barcode: "",
@@ -62,6 +63,7 @@ export default function ProductForm({
       brand,
       compareAt: compareAt ? Number(compareAt) : undefined,
       active,
+      stock,
       images: [`https://placehold.co/400x500/775533/ffffff?text=${encodeURIComponent(name)}`],
     };
     if (product) {
@@ -106,6 +108,9 @@ export default function ProductForm({
         <Labeled label="Harga Coret (compare-at)">
           <input value={compareAt} onChange={(e) => setCompareAt(e.target.value)} className="input" placeholder="opsional" type="number" />
         </Labeled>
+        <Labeled label="Stok">
+          <input value={stock} onChange={(e) => setStock(Number(e.target.value))} className="input" type="number" />
+        </Labeled>
       </div>
       <Labeled label="Deskripsi">
         <textarea value={description} onChange={(e) => setDescription(e.target.value)} className="input" rows={2} />
@@ -118,7 +123,7 @@ export default function ProductForm({
             onClick={() =>
               setVariants((vs) => [
                 ...vs,
-                { id: newVid(), sku: "", size: "", color: "", colorCode: "#775533", stock: 0, costPrice: 0, sellingPrice: 0, barcode: "" },
+                { id: newVid(), sku: "", name: "", size: "", color: "", colorCode: "#775533", costPrice: 0, sellingPrice: 0, barcode: "" },
               ])
             }
             className="btn-soft px-3 py-1.5 text-xs"
@@ -129,13 +134,13 @@ export default function ProductForm({
         <div className="space-y-2">
           {variants.map((v, i) => (
             <div key={v.id} className="grid grid-cols-2 gap-2 rounded-2xl bg-beige/60 p-3 text-xs sm:grid-cols-4">
+              <input className="input" placeholder="Nama Seri" value={v.name} onChange={(e) => setVar(i, { name: e.target.value })} />
               <input className="input" placeholder="Size" value={v.size} onChange={(e) => setVar(i, { size: e.target.value })} />
               <input className="input" placeholder="Warna" value={v.color} onChange={(e) => setVar(i, { color: e.target.value })} />
               <input className="input" placeholder="SKU" value={v.sku} onChange={(e) => setVar(i, { sku: e.target.value })} />
               <input className="input" placeholder="Barcode" value={v.barcode ?? ""} onChange={(e) => setVar(i, { barcode: e.target.value })} />
               <input className="input" type="number" placeholder="Modal" value={v.costPrice} onChange={(e) => setVar(i, { costPrice: Number(e.target.value) })} />
               <input className="input" type="number" placeholder="Harga" value={v.sellingPrice} onChange={(e) => setVar(i, { sellingPrice: Number(e.target.value) })} />
-              <input className="input" type="number" placeholder="Stok" value={v.stock} onChange={(e) => setVar(i, { stock: Number(e.target.value) })} />
               <button onClick={() => setVariants((vs) => vs.filter((_, idx) => idx !== i))} className="btn-danger px-2 py-1.5 text-xs">
                 Hapus
               </button>

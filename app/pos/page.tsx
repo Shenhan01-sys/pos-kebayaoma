@@ -27,6 +27,21 @@ export default function PosPage() {
   const [customOpen, setCustomOpen] = useState(false);
   const [customName, setCustomName] = useState("");
   const [customPrice, setCustomPrice] = useState("");
+  const [customSeriesId, setCustomSeriesId] = useState("");
+
+  const allSeries = products.flatMap((p) =>
+    p.variants.map((v) => ({
+      productId: p.id,
+      productName: p.name,
+      variantId: v.id,
+      seriesName: v.name,
+      size: v.size,
+      color: v.color,
+      costPrice: v.costPrice,
+      sellingPrice: v.sellingPrice,
+      sku: v.sku,
+    }))
+  );
 
   const handleScan = (code: string) => {
     setScannerOpen(false);
@@ -178,7 +193,7 @@ export default function PosPage() {
                 </button>
               </div>
               <div className="text-xs text-gray-600">
-                {l.size} / {l.color}
+                {l.seriesName} · {l.size} / {l.color}
               </div>
               <div className="mt-1.5 flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
@@ -253,20 +268,20 @@ export default function PosPage() {
                 >
                   <div>
                     <div className="text-sm font-semibold text-ink">
-                      {v.size} · {v.color}
+                      {v.name} · {v.size} / {v.color}
                     </div>
-                    <div className="text-xs text-gray-600">Stok: {v.stock}</div>
+                    <div className="text-xs text-gray-600">Stok produk: {picker.stock}</div>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-bold text-olive tnum">
                       {formatRupiah(v.sellingPrice)}
                     </span>
                     <button
-                      disabled={v.stock === 0}
+                      disabled={picker.stock === 0}
                       onClick={() => addVariant(picker, v)}
                       className="btn-primary px-3 py-1.5 text-sm"
                     >
-                      {v.stock === 0 ? "Habis" : "+ Keranjang"}
+                      {picker.stock === 0 ? "Habis" : "+ Keranjang"}
                     </button>
                   </div>
                 </div>
@@ -283,6 +298,23 @@ export default function PosPage() {
         <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4">
           <div className="w-full max-w-[380px] rounded-t-4xl bg-white p-5 shadow-soft-xl sm:rounded-3xl">
             <h3 className="mb-3 text-lg font-bold text-ink">Tambah Item Custom</h3>
+            <label className="mb-1 block text-sm text-olive">Series (dari catalog)</label>
+            <select
+              value={customSeriesId}
+              onChange={(e) => {
+                setCustomSeriesId(e.target.value);
+                const s = allSeries.find((x) => x.variantId === e.target.value);
+                if (s) setCustomPrice(String(s.sellingPrice));
+              }}
+              className="input mb-3"
+            >
+              <option value="">— Pilih series (opsional) —</option>
+              {allSeries.map((s) => (
+                <option key={s.variantId} value={s.variantId}>
+                  {s.productName} · {s.seriesName} ({s.size}/{s.color})
+                </option>
+              ))}
+            </select>
             <label className="mb-1 block text-sm text-olive">Nama Item</label>
             <input
               value={customName}
@@ -305,7 +337,8 @@ export default function PosPage() {
                   const name = customName.trim();
                   const price = Number(customPrice) || 0;
                   if (!name || price <= 0) return;
-                  addCustomItem(name, price, 1);
+                  const series = allSeries.find((x) => x.variantId === customSeriesId);
+                  addCustomItem(name, price, 1, series);
                   setCustomOpen(false);
                 }}
                 disabled={!customName.trim() || (Number(customPrice) || 0) <= 0}

@@ -14,18 +14,18 @@ export default function InventoryPage() {
   const auth = useAuth();
   const s = useSettings();
   const cashierName = auth.staff?.name ?? s.cashierName;
-  const [stockOpen, setStockOpen] = useState<{ productName: string; variantId: string; sku: string; current: number } | null>(null);
+  const [stockOpen, setStockOpen] = useState<{ productId: string; productName: string; sku: string; current: number } | null>(null);
   const [mode, setMode] = useState<"in" | "out">("in");
   const [qty, setQty] = useState(1);
   const [reason, setReason] = useState<Reason>("Penyesuaian");
   const [note, setNote] = useState("");
   const [tab, setTab] = useState<"stock" | "log">("stock");
 
-  const allVariants = products.flatMap((p) => p.variants.map((v) => ({ product: p, v })));
-  const low = allVariants.filter((x) => x.v.stock <= 5);
+  const active = products.filter((p) => p.active);
+  const low = active.filter((p) => p.stock <= 5);
 
-  function openStock(productName: string, variantId: string, sku: string, current: number) {
-    setStockOpen({ productName, variantId, sku, current });
+  function openStock(productId: string, productName: string, sku: string, current: number) {
+    setStockOpen({ productId, productName, sku, current });
     setMode("in");
     setQty(1);
     setReason("Penyesuaian");
@@ -35,7 +35,7 @@ export default function InventoryPage() {
     if (!stockOpen || qty <= 0) return;
     const delta = mode === "in" ? qty : -qty;
     const type = mode === "in" ? "restock" : "adjustment";
-    adjustStock(stockOpen.variantId, delta, type, cashierName, reason, note);
+    adjustStock(stockOpen.productId, delta, type, cashierName, reason, note);
     setStockOpen(null);
   }
   const newStock = stockOpen ? Math.max(0, stockOpen.current + (mode === "in" ? qty : -qty)) : 0;
@@ -53,7 +53,7 @@ export default function InventoryPage() {
       {tab === "stock" && (
         <>
           <div className="mb-3 flex items-center gap-2 rounded-2xl bg-warning/10 px-3 py-2.5 text-sm font-medium text-warning">
-            <Icon name="alert" size={16} /> {low.length} varian stok menipis (≤5)
+            <Icon name="alert" size={16} /> {low.length} produk stok menipis (≤5)
           </div>
           <div className="card overflow-auto">
             <table className="w-full text-sm">
@@ -61,24 +61,22 @@ export default function InventoryPage() {
                 <tr>
                   <th className="p-3 font-semibold">Produk</th>
                   <th className="p-3 font-semibold">SKU</th>
-                  <th className="p-3 font-semibold">Ukuran/Warna</th>
-                  <th className="p-3 text-right font-semibold">Modal</th>
-                  <th className="p-3 text-right font-semibold">Harga</th>
+                  <th className="p-3 text-right font-semibold">Harga Jual</th>
+                  <th className="p-3 text-center font-semibold">Series</th>
                   <th className="p-3 text-right font-semibold">Stok</th>
                   <th className="p-3 font-semibold">Aksi</th>
                 </tr>
               </thead>
               <tbody>
-                {allVariants.map(({ product, v }) => (
-                  <tr key={v.id} className="border-t border-black/5 hover:bg-beige/40">
-                    <td className="p-3 font-medium text-ink">{product.name}</td>
-                    <td className="p-3 text-xs text-gray-600">{v.sku}</td>
-                    <td className="p-3">{v.size} / {v.color}</td>
-                    <td className="p-3 text-right tnum">{formatRupiah(v.costPrice)}</td>
-                    <td className="p-3 text-right tnum">{formatRupiah(v.sellingPrice)}</td>
-                    <td className={`p-3 text-right font-bold tnum ${v.stock === 0 ? "text-danger" : v.stock <= 5 ? "text-warning" : ""}`}>{v.stock}</td>
+                {active.map((p) => (
+                  <tr key={p.id} className="border-t border-black/5 hover:bg-beige/40">
+                    <td className="p-3 font-medium text-ink">{p.name}</td>
+                    <td className="p-3 text-xs text-gray-600">{p.sku}</td>
+                    <td className="p-3 text-right tnum">{formatRupiah(p.variants[0]?.sellingPrice ?? 0)}</td>
+                    <td className="p-3 text-center text-xs text-gray-600">{p.variants.length}</td>
+                    <td className={`p-3 text-right font-bold tnum ${p.stock === 0 ? "text-danger" : p.stock <= 5 ? "text-warning" : ""}`}>{p.stock}</td>
                     <td className="p-3">
-                      <button onClick={() => openStock(product.name, v.id, v.sku, v.stock)} className="btn-primary px-2.5 py-1 text-xs">
+                      <button onClick={() => openStock(p.id, p.name, p.sku, p.stock)} className="btn-primary px-2.5 py-1 text-xs">
                         Restock / Adjust
                       </button>
                     </td>

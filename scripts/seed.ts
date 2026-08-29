@@ -43,7 +43,8 @@ async function seed() {
         tags: p.tags,
         active: p.active,
         fabric: p.fabric,
-        care: p.care
+        care: p.care,
+        stock: p.stock
       })),
       { onConflict: 'id' }
     )
@@ -56,10 +57,10 @@ async function seed() {
     id: v.id,
     product_id: p.id,
     sku: v.sku,
+    name: v.name,
     size: v.size,
     color: v.color,
     color_code: v.colorCode,
-    stock: v.stock,
     selling_price: v.sellingPrice,
     cost_price: v.costPrice,
     barcode: v.barcode

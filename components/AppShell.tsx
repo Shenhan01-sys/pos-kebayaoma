@@ -78,10 +78,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   }, []);
 
   const products = useData((s) => s.products);
-  const lowCount = products.reduce(
-    (sum, p) => sum + p.variants.filter((v) => v.stock <= 5).length,
-    0
-  );
+  const lowCount = products.filter((p) => p.stock <= 5).length;
 
   // Public pages (e.g. product profile from QR label) render without shell/login
   if (isPublic) {

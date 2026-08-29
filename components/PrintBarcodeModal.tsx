@@ -212,17 +212,17 @@ export default function PrintBarcodeModal({
                <button
                  onClick={() => {
                    const all: Record<string, number> = {};
-                   allVariants.forEach(({ variant }) => {
-                     if (variant.stock > 0) all[variant.id] = 1;
-                   });
+                    allVariants.forEach(({ product, variant }) => {
+                      if (product.stock > 0) all[variant.id] = 1;
+                    });
                    setSelectedVariants(all);
                  }}
                  className="p-4 bg-[#775533]/10 text-[#775533] rounded-xl hover:bg-[#775533]/20 transition text-center"
                >
                  <div className="font-bold text-sm">Select All In Stock</div>
-                 <div className="text-xs mt-1">
-                   {allVariants.filter(({ variant }) => variant.stock > 0).length} variants
-                 </div>
+                  <div className="text-xs mt-1">
+                    {allVariants.filter(({ product }) => product.stock > 0).length} variants
+                  </div>
                </button>
                <button
                  onClick={() => {
@@ -255,9 +255,9 @@ export default function PrintBarcodeModal({
                      <div className="font-medium text-sm">
                        {product.name} - Size: {variant.size} - {variant.color}
                      </div>
-                     <div className="text-xs text-gray-600">
-                       Barcode: {variant.barcode || "N/A"} | Stock: {variant.stock}
-                     </div>
+                      <div className="text-xs text-gray-600">
+                        Barcode: {variant.barcode || "N/A"} | Stock: {product.stock}
+                      </div>
                    </div>
                   {selectedVariants[variant.id] && (
                     <input

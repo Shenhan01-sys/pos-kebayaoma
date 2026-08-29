@@ -56,6 +56,9 @@ export default function ProductsPage() {
                   {!p.active && <span className="pill-muted">Nonaktif</span>}
                 </div>
                 <div className="text-xs text-gray-600">{p.sku} · {catName(p.categoryId)} · {p.fabric}</div>
+                <div className={p.stock === 0 ? "mt-0.5 text-xs font-bold text-danger" : p.stock <= 5 ? "mt-0.5 text-xs text-warning" : "mt-0.5 text-xs text-gray-600"}>
+                  Stok: {p.stock}
+                </div>
               </div>
               <div className="flex shrink-0 gap-1">
                 <button onClick={() => setQr(p.sku)} className="btn-ghost px-2.5 py-1 text-xs">Label QR</button>
@@ -68,9 +71,6 @@ export default function ProductsPage() {
                 <div key={v.id} className="rounded-2xl border border-black/5 bg-beige/50 p-2.5 text-sm">
                   <div className="font-medium text-ink">{v.size} · {v.color}</div>
                   <div className="text-gray-600 tnum">{formatRupiah(v.sellingPrice)}</div>
-                  <div className={v.stock === 0 ? "font-bold text-danger" : v.stock <= 5 ? "text-warning" : "text-gray-600"}>
-                    Stok: {v.stock}
-                  </div>
                 </div>
               ))}
             </div>

@@ -9,10 +9,10 @@ export interface Category {
 export interface Variant {
   id: string;
   sku: string;
+  name: string;
   size: string;
   color: string;
   colorCode: string;
-  stock: number;
   sellingPrice: number;
   costPrice: number;
   barcode?: string;
@@ -27,6 +27,7 @@ export interface Product {
   images: string[];
   tags: string[];
   active: boolean;
+  stock: number;
   variants: Variant[];
   fabric: string;
   care: string;
@@ -125,16 +126,17 @@ export const products: Product[] = [
     images: [img("Kebaya Pink"), img("Detail")],
     tags: ["modern", "pink", "pesta"],
     active: true,
+    stock: 8,
     fabric: "Brokat & satin",
     care: "Cuci kering disarankan. Setrika suhu rendah.",
     variants: [
       {
         id: "v1",
         sku: "KBY-2024-001-S-PINK",
+        name: "Series 1",
         size: "S",
         color: "Pink",
         colorCode: "#ec4899",
-        stock: 5,
         sellingPrice: 450000,
         costPrice: 280000,
         barcode: "8995501S",
@@ -142,10 +144,10 @@ export const products: Product[] = [
       {
         id: "v2",
         sku: "KBY-2024-001-M-PINK",
+        name: "Series 2",
         size: "M",
         color: "Pink",
         colorCode: "#ec4899",
-        stock: 3,
         sellingPrice: 450000,
         costPrice: 280000,
         barcode: "8995501M",
@@ -153,10 +155,10 @@ export const products: Product[] = [
       {
         id: "v3",
         sku: "KBY-2024-001-L-PINK",
+        name: "Series 3",
         size: "L",
         color: "Pink",
         colorCode: "#ec4899",
-        stock: 0,
         sellingPrice: 450000,
         costPrice: 280000,
         barcode: "8995501L",
@@ -172,16 +174,17 @@ export const products: Product[] = [
     images: [img("Kebaya Biru")],
     tags: ["encim", "biru", "traditional"],
     active: true,
+    stock: 12,
     fabric: "Sutra & katun",
     care: "Cuci tangan dengan deterjen lembut.",
     variants: [
       {
         id: "v4",
         sku: "KBY-2024-002-M-BLUE",
+        name: "Series 1",
         size: "M",
         color: "Blue",
         colorCode: "#3b82f6",
-        stock: 8,
         sellingPrice: 520000,
         costPrice: 310000,
         barcode: "8995502M",
@@ -189,10 +192,10 @@ export const products: Product[] = [
       {
         id: "v5",
         sku: "KBY-2024-002-L-BLUE",
+        name: "Series 2",
         size: "L",
         color: "Blue",
         colorCode: "#3b82f6",
-        stock: 4,
         sellingPrice: 520000,
         costPrice: 310000,
         barcode: "8995502L",
@@ -208,16 +211,17 @@ export const products: Product[] = [
     images: [img("Batik Parang")],
     tags: ["batik-tulis", "parang"],
     active: true,
+    stock: 12,
     fabric: "Katun primisima",
     care: "Cuci terpisah, hindari sinar matahari langsung.",
     variants: [
       {
         id: "v6",
         sku: "BTK-2024-010-ONE",
+        name: "Series 1",
         size: "One Size",
         color: "Coklat",
         colorCode: "#92400e",
-        stock: 12,
         sellingPrice: 850000,
         costPrice: 500000,
         barcode: "8995510O",
@@ -233,16 +237,17 @@ export const products: Product[] = [
     images: [img("Selendang")],
     tags: ["selendang", "sutra"],
     active: true,
+    stock: 20,
     fabric: "Sutra",
     care: "Cuci kering.",
     variants: [
       {
         id: "v7",
         sku: "ACC-2024-021-ONE",
+        name: "Series 1",
         size: "One Size",
         color: "Gold",
         colorCode: "#d4af37",
-        stock: 20,
         sellingPrice: 150000,
         costPrice: 70000,
         barcode: "8995521O",
@@ -258,16 +263,17 @@ export const products: Product[] = [
     images: [img("Kebaya Cream")],
     tags: ["kutubaru", "cream", "daily"],
     active: true,
+    stock: 13,
     fabric: "Katun jacquard",
     care: "Cuci mesin dengan mode lembut.",
     variants: [
       {
         id: "v8",
         sku: "KBY-2024-003-S-CREAM",
+        name: "Series 1",
         size: "S",
         color: "Cream",
         colorCode: "#fef3c7",
-        stock: 6,
         sellingPrice: 390000,
         costPrice: 240000,
         barcode: "8995503S",
@@ -275,10 +281,10 @@ export const products: Product[] = [
       {
         id: "v9",
         sku: "KBY-2024-003-M-CREAM",
+        name: "Series 2",
         size: "M",
         color: "Cream",
         colorCode: "#fef3c7",
-        stock: 7,
         sellingPrice: 390000,
         costPrice: 240000,
         barcode: "8995503M",
@@ -294,16 +300,17 @@ export const products: Product[] = [
     images: [img("Kebaya Sogan")],
     tags: ["sogan", "coklat", "adat"],
     active: true,
+    stock: 7,
     fabric: "Katun soga",
     care: "Cuci tangan dengan deterjen lembut.",
     variants: [
       {
         id: "v10",
         sku: "KBY-2024-006-M-SOGAN",
+        name: "Series 1",
         size: "M",
         color: "Sogan",
         colorCode: "#92400e",
-        stock: 7,
         sellingPrice: 480000,
         costPrice: 290000,
         barcode: "8995506M",
@@ -319,16 +326,17 @@ export const products: Product[] = [
     images: [img("Selop Brokat")],
     tags: ["selop", "brokat"],
     active: true,
+    stock: 15,
     fabric: "Brokat",
     care: "Lap dengan kain lembap.",
     variants: [
       {
         id: "v11",
         sku: "ACC-2024-022-ONE",
+        name: "Series 1",
         size: "One Size",
         color: "Gold",
         colorCode: "#d4af37",
-        stock: 15,
         sellingPrice: 120000,
         costPrice: 60000,
         barcode: "8995522O",
