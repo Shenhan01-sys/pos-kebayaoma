@@ -82,6 +82,7 @@ export interface Transaction {
   items: TransactionItem[];
   createdAt: string;
   qrisRef?: string;
+  photoProof?: string;
 }
 
 export interface Shift {

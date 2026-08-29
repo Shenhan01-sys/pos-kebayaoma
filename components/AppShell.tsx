@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useSettings } from "@/store/settings";
 import { useData } from "@/store/data";
@@ -24,6 +24,13 @@ const links: { href: string; label: string; icon: IconName }[] = [
   { href: "/settings", label: "Pengaturan", icon: "settings" },
 ];
 
+const CASHIER_ALLOWED = ["/", "/pos", "/transactions"];
+
+function canAccess(href: string, role?: string) {
+  if (!role || role === "manager" || role === "admin") return true;
+  return CASHIER_ALLOWED.includes(href);
+}
+
 const PUBLIC_PREFIXES = ["/product/"];
 
 const initials = (name: string) =>
@@ -36,11 +43,19 @@ const initials = (name: string) =>
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const s = useSettings();
   const auth = useAuth();
   const [open, setOpen] = useState(false);
 
   const isPublic = PUBLIC_PREFIXES.some((p) => pathname.startsWith(p));
+
+  // RBAC: redirect cashiers away from restricted pages
+  useEffect(() => {
+    if (auth.staff?.role === "cashier" && !isPublic && !canAccess(pathname, auth.staff.role)) {
+      router.replace("/pos");
+    }
+  }, [auth.staff?.role, pathname, isPublic, router]);
 
   // Init auth (session + staff profile)
   useEffect(() => {
@@ -83,7 +98,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   const nav = (
     <nav className="relative z-10 flex-1 space-y-1 overflow-y-auto pretty-scroll px-2 py-2">
-      {links.map((l) => {
+      {links.filter((l) => canAccess(l.href, auth.staff?.role)).map((l) => {
         const active =
           l.href === "/" ? pathname === "/" : pathname.startsWith(l.href);
         return (

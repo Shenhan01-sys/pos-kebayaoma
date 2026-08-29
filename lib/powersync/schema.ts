@@ -84,6 +84,7 @@ const transactions = new Table({
   amount_paid: column.real,
   change: column.real,
   qris_ref: column.text,
+  photo_proof: column.text,
   created_at: column.text,
 });
 

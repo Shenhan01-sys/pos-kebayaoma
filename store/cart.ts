@@ -16,8 +16,10 @@ export interface CartLine {
   size: string;
   color: string;
   unitPrice: number;
+  costPrice: number;
   quantity: number;
   discount: number;
+  custom?: boolean;
 }
 
 interface CartState {
@@ -25,6 +27,8 @@ interface CartState {
   customerName: string | null;
   discount: number;
   addVariant: (product: Product, variant: Variant, qty?: number) => void;
+  addCustomItem: (name: string, price: number, qty?: number) => void;
+  setUnitPrice: (key: string, price: number) => void;
   inc: (key: string) => void;
   dec: (key: string) => void;
   setQty: (key: string, qty: number) => void;
@@ -61,11 +65,37 @@ export const useCart = create<CartState>((set, get) => ({
         size: variant.size,
         color: variant.color,
         unitPrice: variant.sellingPrice,
+        costPrice: variant.costPrice,
         quantity: qty,
         discount: 0,
       };
       return { lines: [...state.lines, line] };
     }),
+  addCustomItem: (name, price, qty = 1) =>
+    set((state) => {
+      const key = "custom-" + Date.now();
+      const line: CartLine = {
+        key,
+        productId: "custom",
+        variantId: key,
+        name,
+        sku: "CUSTOM",
+        size: "Custom",
+        color: "—",
+        unitPrice: price,
+        costPrice: 0,
+        quantity: qty,
+        discount: 0,
+        custom: true,
+      };
+      return { lines: [...state.lines, line] };
+    }),
+  setUnitPrice: (key, price) =>
+    set((s) => ({
+      lines: s.lines.map((l) =>
+        l.variantId === key ? { ...l, unitPrice: Math.max(0, price) } : l
+      ),
+    })),
   inc: (key) =>
     set((s) => ({
       lines: s.lines.map((l) =>

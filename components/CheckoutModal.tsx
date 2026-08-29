@@ -21,11 +21,11 @@ const methodMeta: Record<PaymentMethod, { label: string; icon: "qris" | "cash" |
 };
 
 export default function CheckoutModal({ onClose }: { onClose: () => void }) {
-  const { lines, discount, setDiscount, customerName, clear } = useCart();
+  const { lines, discount, setDiscount, setUnitPrice, customerName, clear } = useCart();
   const s = useSettings();
   const auth = useAuth();
   const cashierName = auth.staff?.name ?? s.cashierName;
-  const { setTransactionStatus } = useData();
+  const { setTransactionStatus, autoRecordCustomItems } = useData();
 
   const [method, setMethod] = useState<PaymentMethod>("qris");
   const [paid, setPaid] = useState<Transaction | null>(null);
@@ -51,6 +51,16 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
   const [qr, setQr] = useState<{ qrString: string; qrisRef: string; mock: boolean; expiry?: string } | null>(null);
   const [qrLoading, setQrLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [photo, setPhoto] = useState<string | null>(null);
+  const [negoOpen, setNegoOpen] = useState(false);
+
+  function handlePhoto(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setPhoto(reader.result as string);
+    reader.readAsDataURL(file);
+  }
 
   // Request dynamic QRIS whenever amount/method changes
   useEffect(() => {
@@ -93,6 +103,7 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
     const unsub = useData.subscribe((state) => {
       const tx = state.transactions.find((t) => t.id === pendingId);
       if (tx?.status === "paid") {
+        autoRecordCustomItems(tx.items);
         setPaid(tx);
         setPendingId(null);
       }
@@ -110,10 +121,10 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
         if (cancelled) return;
         const data = await res.json();
         if (data.status === "paid") {
-          // Refresh transaksi dari store
           await useData.getState().fetchTransactions();
           const tx = useData.getState().transactions.find((t) => t.id === pendingId);
           if (tx?.status === "paid") {
+            await autoRecordCustomItems(tx.items);
             setPaid(tx);
             setPendingId(null);
           }
@@ -152,6 +163,7 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
       change: Math.max(0, amountPaid - grand),
       createdAt: now,
       qrisRef: method === "qris" ? qr?.qrisRef : undefined,
+      photoProof: photo ?? undefined,
       items: lines.map((l) => ({
         productId: l.productId,
         variantId: l.variantId,
@@ -170,6 +182,11 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
   async function finish() {
     setError(null);
 
+    if (!photo) {
+      setError("Foto bukti pembayaran wajib diunggah.");
+      return;
+    }
+
     if (method === "cash") {
       const amt = Number(cashPaid) || 0;
       if (amt < grand) {
@@ -178,14 +195,20 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
       }
       const tx = buildTx("paid", "paid", amt);
       const saved = await addTransaction(tx);
-      if (saved) setPaid(saved);
+      if (saved) {
+        await autoRecordCustomItems(saved.items);
+        setPaid(saved);
+      }
       return;
     }
 
     if (method === "transfer") {
       const tx = buildTx("paid", "paid", grand);
       const saved = await addTransaction(tx);
-      if (saved) setPaid(saved);
+      if (saved) {
+        await autoRecordCustomItems(saved.items);
+        setPaid(saved);
+      }
       return;
     }
 
@@ -193,7 +216,10 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
     if (qr?.mock) {
       const tx = buildTx("paid", "paid", grand);
       const saved = await addTransaction(tx);
-      if (saved) setPaid(saved);
+      if (saved) {
+        await autoRecordCustomItems(saved.items);
+        setPaid(saved);
+      }
       return;
     }
 
@@ -346,6 +372,59 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
             </div>
           </div>
 
+          {/* Price negotiation */}
+          <button
+            onClick={() => setNegoOpen((v) => !v)}
+            className="mb-3 flex w-full items-center gap-2 rounded-2xl bg-violet/5 px-3 py-2.5 text-sm font-semibold text-violet transition hover:bg-violet/10"
+          >
+            <Icon name="tag" size={16} /> Nego Harga per Item
+            <Icon name={negoOpen ? "minus" : "plus"} size={14} className="ml-auto" />
+          </button>
+          {negoOpen && (
+            <div className="mb-3 space-y-2">
+              {lines.map((l) => {
+                const profit = l.unitPrice - l.costPrice;
+                const margin = l.costPrice > 0 ? Math.round((profit / l.costPrice) * 100) : 100;
+                const atCost = l.costPrice > 0 && l.unitPrice <= l.costPrice;
+                return (
+                  <div key={l.key} className="rounded-2xl bg-beige/60 p-2.5">
+                    <div className="mb-1.5 flex items-center justify-between gap-2">
+                      <span className="truncate text-sm font-semibold text-ink">{l.name}</span>
+                      <span className="shrink-0 text-xs text-gray-600">Modal: {formatRupiah(l.costPrice)}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="relative flex-1">
+                        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-600">Rp</span>
+                        <input
+                          type="number"
+                          min={l.costPrice}
+                          value={l.unitPrice}
+                          onChange={(e) => {
+                            const val = Number(e.target.value) || 0;
+                            if (l.costPrice > 0 && val < l.costPrice) {
+                              setUnitPrice(l.key, l.costPrice);
+                            } else {
+                              setUnitPrice(l.key, val);
+                            }
+                          }}
+                          className="input pl-9 text-right text-sm font-semibold tnum"
+                        />
+                      </div>
+                      <span className={`text-xs font-bold ${atCost ? "text-danger" : margin < 20 ? "text-warning" : "text-success"}`}>
+                        {atCost ? "⚠ Margin 0%" : `Margin ${margin}%`}
+                      </span>
+                    </div>
+                    {atCost && l.costPrice > 0 && (
+                      <div className="mt-1.5 flex items-center gap-1.5 text-xs text-danger">
+                        <Icon name="alert" size={12} /> Harga tidak boleh di bawah modal ({formatRupiah(l.costPrice)})
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
           {/* Method segmented control */}
           <div className="seg mb-4 w-full">
             {(["qris", "cash", "transfer"] as PaymentMethod[]).map((m) => (
@@ -416,6 +495,32 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
               {error}
             </div>
           )}
+
+          {/* Photo proof */}
+          <div className="mt-3 rounded-2xl bg-beige/60 p-3">
+            <label className="mb-2 flex items-center gap-1.5 text-sm font-medium text-olive">
+              <Icon name="camera" size={16} /> Foto Bukti Pembayaran
+              <span className="text-danger">*</span>
+            </label>
+            {photo ? (
+              <div className="relative">
+                <img src={photo} alt="Bukti" className="max-h-40 w-full rounded-2xl object-cover" />
+                <button
+                  onClick={() => setPhoto(null)}
+                  className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/50 text-white"
+                  aria-label="Hapus foto"
+                >
+                  <Icon name="close" size={16} />
+                </button>
+              </div>
+            ) : (
+              <label className="flex cursor-pointer flex-col items-center gap-2 rounded-2xl border-2 border-dashed border-black/15 p-5 text-center text-sm text-gray-500 transition hover:border-apricot hover:text-apricot">
+                <Icon name="camera" size={28} className="text-olive" />
+                <span>Ketuk untuk ambil / upload foto</span>
+                <input type="file" accept="image/*" capture="environment" onChange={handlePhoto} className="hidden" />
+              </label>
+            )}
+          </div>
 
           <button onClick={finish} className="btn-primary mt-4 w-full py-3 text-base">
             {method === "qris"

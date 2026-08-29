@@ -20,9 +20,13 @@ export default function PosPage() {
   const [picker, setPicker] = useState<Product | null>(null);
   const [checkout, setCheckout] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
-  const { lines, addVariant, inc, dec, remove, total, customerName, setCustomer } =
+  const { lines, addVariant, addCustomItem, inc, dec, remove, total, customerName, setCustomer } =
     useCart();
-  const { products, categories, customers } = useData();
+  const { products, categories, customers, addProduct } = useData();
+
+  const [customOpen, setCustomOpen] = useState(false);
+  const [customName, setCustomName] = useState("");
+  const [customPrice, setCustomPrice] = useState("");
 
   const handleScan = (code: string) => {
     setScannerOpen(false);
@@ -71,6 +75,13 @@ export default function PosPage() {
             aria-label="Scan barcode"
           >
             <Icon name="qris" size={18} /> Scan
+          </button>
+          <button
+            onClick={() => { setCustomOpen(true); setCustomName(""); setCustomPrice(""); }}
+            className="btn-ghost shrink-0"
+            title="Tambah item custom"
+          >
+            <Icon name="plus" size={18} /> Custom
           </button>
           <select
             value={customerName ?? ""}
@@ -261,6 +272,45 @@ export default function PosPage() {
 
       {checkout && <CheckoutModal onClose={() => setCheckout(false)} />}
       {scannerOpen && <BarcodeScanner onScan={handleScan} onClose={() => setScannerOpen(false)} />}
+
+      {customOpen && (
+        <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4">
+          <div className="w-full max-w-[380px] rounded-t-4xl bg-white p-5 shadow-soft-xl sm:rounded-3xl">
+            <h3 className="mb-3 text-lg font-bold text-ink">Tambah Item Custom</h3>
+            <label className="mb-1 block text-sm text-olive">Nama Item</label>
+            <input
+              value={customName}
+              onChange={(e) => setCustomName(e.target.value)}
+              placeholder="cth: Jahit Kebaya"
+              className="input mb-3"
+            />
+            <label className="mb-1 block text-sm text-olive">Harga (Rp)</label>
+            <input
+              type="number"
+              value={customPrice}
+              onChange={(e) => setCustomPrice(e.target.value)}
+              placeholder="0"
+              className="input mb-4 text-right text-lg font-semibold tnum"
+            />
+            <div className="flex gap-2">
+              <button onClick={() => setCustomOpen(false)} className="btn-ghost flex-1">Batal</button>
+              <button
+                onClick={() => {
+                  const name = customName.trim();
+                  const price = Number(customPrice) || 0;
+                  if (!name || price <= 0) return;
+                  addCustomItem(name, price, 1);
+                  setCustomOpen(false);
+                }}
+                disabled={!customName.trim() || (Number(customPrice) || 0) <= 0}
+                className="btn-violet flex-1 disabled:opacity-40"
+              >
+                Tambah ke Keranjang
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

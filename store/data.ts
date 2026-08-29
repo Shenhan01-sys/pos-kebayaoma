@@ -134,6 +134,9 @@ interface DataState {
   updateStaff: (id: string, patch: { name?: string; pin?: string; role?: Role; phone?: string; active?: boolean }) => Promise<void>;
   deleteStaff: (id: string) => Promise<void>;
 
+  // custom items
+  autoRecordCustomItems: (items: TransactionItem[]) => Promise<void>;
+
   // realtime
   subscribeRealtime: () => void;
 
@@ -1200,6 +1203,7 @@ export const useData = create<DataState>()(
                 amountPaid: t.amount_paid,
                 change: t.change,
                 qrisRef: t.qris_ref ?? undefined,
+                photoProof: t.photo_proof ?? undefined,
                 createdAt: t.created_at,
                 items: iRows.map((i: any) => ({
                   productId: i.product_id,
@@ -1255,6 +1259,7 @@ export const useData = create<DataState>()(
             amountPaid: t.amount_paid,
             change: t.change,
             qrisRef: t.qris_ref ?? undefined,
+            photoProof: (t as any).photo_proof ?? undefined,
             createdAt: t.created_at,
             items: (t.transaction_items ?? []).map((i: any) => ({
               productId: i.product_id,
@@ -1521,11 +1526,11 @@ export const useData = create<DataState>()(
           const psDb = getPowerSyncDb();
           if (psDb) {
             const id = generateLocalId();
-            await psDb.execute(
-              `INSERT INTO transactions (id, store_id, number, cashier, customer_id, customer_name, status, payment_method, payment_status, subtotal, tax, discount, total, amount_paid, change, qris_ref, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
-              [id, STORE_ID, tx.number, tx.cashier, customer?.id ?? null, tx.customerName ?? null, tx.status, tx.paymentMethod, tx.paymentStatus, tx.subtotal, tx.tax, tx.discount, tx.total, tx.amountPaid, tx.change, tx.qrisRef ?? null]
-            );
+             await psDb.execute(
+               `INSERT INTO transactions (id, store_id, number, cashier, customer_id, customer_name, status, payment_method, payment_status, subtotal, tax, discount, total, amount_paid, change, qris_ref, photo_proof, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+               [id, STORE_ID, tx.number, tx.cashier, customer?.id ?? null, tx.customerName ?? null, tx.status, tx.paymentMethod, tx.paymentStatus, tx.subtotal, tx.tax, tx.discount, tx.total, tx.amountPaid, tx.change, tx.qrisRef ?? null, (tx as any).photoProof ?? null]
+             );
             for (const i of tx.items) {
               await psDb.execute(
                 `INSERT INTO transaction_items (id, transaction_id, product_id, variant_id, name, sku, size, color, quantity, unit_price, discount, total)
@@ -1535,8 +1540,6 @@ export const useData = create<DataState>()(
             }
             const saved: Transaction = { ...tx, id, customerId: customer?.id, createdAt: new Date().toISOString() };
             set((s) => ({ transactions: [saved, ...s.transactions] }));
-            // Di PowerSync mode, DB trigger Supabase menangani side effects setelah sync.
-            // Kalau offline, stok tetap di-update lokal via adjustStock di sini jika perlu.
             return saved;
           }
 
@@ -1574,6 +1577,7 @@ export const useData = create<DataState>()(
               amount_paid: tx.amountPaid,
               change: tx.change,
               qris_ref: tx.qrisRef ?? null,
+              photo_proof: (tx as any).photoProof ?? null,
             }])
             .select()
             .single();
@@ -1614,6 +1618,7 @@ export const useData = create<DataState>()(
             amountPaid: header.amount_paid,
             change: header.change,
             qrisRef: header.qris_ref ?? undefined,
+            photoProof: (header as any).photo_proof ?? undefined,
             createdAt: header.created_at,
             items: tx.items,
           };
@@ -1820,6 +1825,37 @@ export const useData = create<DataState>()(
           await get().fetchStaff();
         } catch (error: any) {
           set({ error: error.message });
+        }
+      },
+
+      autoRecordCustomItems: async (items) => {
+        const customs = items.filter((i) => i.productId === "custom");
+        for (const item of customs) {
+          const existing = get().products.find(
+            (p) => p.name.toLowerCase() === item.name.toLowerCase()
+          );
+          if (existing) continue;
+          await get().addProduct({
+            sku: "CUST-" + Date.now().toString(36).toUpperCase(),
+            name: item.name,
+            description: "Item custom (auto-recorded dari transaksi)",
+            categoryId: get().categories[0]?.id ?? "",
+            images: [],
+            tags: ["custom"],
+            active: true,
+            fabric: "",
+            care: "",
+            variants: [{
+              id: "vc-" + Date.now().toString(36),
+              sku: item.sku,
+              size: "One Size",
+              color: "Custom",
+              colorCode: "#cccccc",
+              stock: 0,
+              sellingPrice: item.unitPrice,
+              costPrice: 0,
+            }],
+          });
         }
       },
 
