@@ -76,13 +76,6 @@ export default function PosPage() {
           >
             <Icon name="qris" size={18} /> Scan
           </button>
-          <button
-            onClick={() => { setCustomOpen(true); setCustomName(""); setCustomPrice(""); }}
-            className="btn-ghost shrink-0"
-            title="Tambah item custom"
-          >
-            <Icon name="plus" size={18} /> Custom
-          </button>
           <select
             value={customerName ?? ""}
             onChange={(e) => setCustomer(e.target.value || null)}
@@ -170,7 +163,12 @@ export default function PosPage() {
           {lines.map((l) => (
             <div key={l.key} className="rounded-2xl bg-beige/60 p-2.5">
               <div className="flex items-start justify-between gap-2">
-                <span className="text-sm font-semibold leading-tight text-ink">{l.name}</span>
+                <div className="min-w-0">
+                  <span className="text-sm font-semibold leading-tight text-ink">{l.name}</span>
+                  {l.custom && (
+                    <span className="ml-1.5 rounded-full bg-violet/15 px-1.5 py-0.5 text-[10px] font-bold text-violet">CUSTOM</span>
+                  )}
+                </div>
                 <button
                   onClick={() => remove(l.key)}
                   className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-black/5 text-gray-600 transition hover:bg-danger/15 hover:text-danger"
@@ -207,6 +205,14 @@ export default function PosPage() {
             </div>
           ))}
         </div>
+
+        <button
+          onClick={() => { setCustomOpen(true); setCustomName(""); setCustomPrice(""); }}
+          className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-2xl border-2 border-dashed border-black/15 py-2.5 text-sm font-semibold text-olive transition hover:border-violet hover:text-violet"
+        >
+          <Icon name="plus" size={16} /> Tambah Item Lain
+        </button>
+
         <div className="mt-3 border-t border-black/5 pt-3">
           <div className="flex items-baseline justify-between">
             <span className="text-sm font-medium text-gray-600">Total</span>

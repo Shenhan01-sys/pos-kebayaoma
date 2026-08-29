@@ -135,7 +135,7 @@ interface DataState {
   deleteStaff: (id: string) => Promise<void>;
 
   // custom items
-  autoRecordCustomItems: (items: TransactionItem[]) => Promise<void>;
+  recordCustomItem: (item: TransactionItem) => Promise<void>;
 
   // realtime
   subscribeRealtime: () => void;
@@ -1828,35 +1828,32 @@ export const useData = create<DataState>()(
         }
       },
 
-      autoRecordCustomItems: async (items) => {
-        const customs = items.filter((i) => i.productId === "custom");
-        for (const item of customs) {
-          const existing = get().products.find(
-            (p) => p.name.toLowerCase() === item.name.toLowerCase()
-          );
-          if (existing) continue;
-          await get().addProduct({
-            sku: "CUST-" + Date.now().toString(36).toUpperCase(),
-            name: item.name,
-            description: "Item custom (auto-recorded dari transaksi)",
-            categoryId: get().categories[0]?.id ?? "",
-            images: [],
-            tags: ["custom"],
-            active: true,
-            fabric: "",
-            care: "",
-            variants: [{
-              id: "vc-" + Date.now().toString(36),
-              sku: item.sku,
-              size: "One Size",
-              color: "Custom",
-              colorCode: "#cccccc",
-              stock: 0,
-              sellingPrice: item.unitPrice,
-              costPrice: 0,
-            }],
-          });
-        }
+      recordCustomItem: async (item) => {
+        const existing = get().products.find(
+          (p) => p.name.toLowerCase() === item.name.toLowerCase()
+        );
+        if (existing) return;
+        await get().addProduct({
+          sku: "CUST-" + Date.now().toString(36).toUpperCase(),
+          name: item.name,
+          description: "Item custom (auto-recorded dari transaksi)",
+          categoryId: get().categories[0]?.id ?? "",
+          images: [],
+          tags: ["custom"],
+          active: true,
+          fabric: "",
+          care: "",
+          variants: [{
+            id: "vc-" + Date.now().toString(36),
+            sku: item.sku,
+            size: "One Size",
+            color: "Custom",
+            colorCode: "#cccccc",
+            stock: 0,
+            sellingPrice: item.unitPrice,
+            costPrice: 0,
+          }],
+        });
       },
 
       subscribeRealtime: () => {

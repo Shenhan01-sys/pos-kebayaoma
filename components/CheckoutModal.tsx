@@ -6,6 +6,7 @@ import {
   formatRupiah,
   type PaymentMethod,
   type Transaction,
+  type TransactionItem,
 } from "@/lib/dummy";
 import { useCart, addTransaction, nextTxNumber } from "@/store/cart";
 import { useSettings } from "@/store/settings";
@@ -25,12 +26,13 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
   const s = useSettings();
   const auth = useAuth();
   const cashierName = auth.staff?.name ?? s.cashierName;
-  const { setTransactionStatus, autoRecordCustomItems } = useData();
+  const { setTransactionStatus, recordCustomItem } = useData();
 
   const [method, setMethod] = useState<PaymentMethod>("qris");
   const [paid, setPaid] = useState<Transaction | null>(null);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [txNumber] = useState(() => nextTxNumber());
+  const [customPrompt, setCustomPrompt] = useState<TransactionItem[]>([]);
 
   const rawSubtotal = useMemo(
     () => lines.reduce((sum, l) => sum + l.unitPrice * l.quantity, 0),
@@ -103,7 +105,7 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
     const unsub = useData.subscribe((state) => {
       const tx = state.transactions.find((t) => t.id === pendingId);
       if (tx?.status === "paid") {
-        autoRecordCustomItems(tx.items);
+        setCustomPrompt(tx.items.filter((i) => i.productId === "custom"));
         setPaid(tx);
         setPendingId(null);
       }
@@ -124,7 +126,7 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
           await useData.getState().fetchTransactions();
           const tx = useData.getState().transactions.find((t) => t.id === pendingId);
           if (tx?.status === "paid") {
-            await autoRecordCustomItems(tx.items);
+            setCustomPrompt(tx.items.filter((i) => i.productId === "custom"));
             setPaid(tx);
             setPendingId(null);
           }
@@ -196,7 +198,7 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
       const tx = buildTx("paid", "paid", amt);
       const saved = await addTransaction(tx);
       if (saved) {
-        await autoRecordCustomItems(saved.items);
+        setCustomPrompt(saved.items.filter((i) => i.productId === "custom"));
         setPaid(saved);
       }
       return;
@@ -206,7 +208,7 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
       const tx = buildTx("paid", "paid", grand);
       const saved = await addTransaction(tx);
       if (saved) {
-        await autoRecordCustomItems(saved.items);
+        setCustomPrompt(saved.items.filter((i) => i.productId === "custom"));
         setPaid(saved);
       }
       return;
@@ -217,7 +219,7 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
       const tx = buildTx("paid", "paid", grand);
       const saved = await addTransaction(tx);
       if (saved) {
-        await autoRecordCustomItems(saved.items);
+        setCustomPrompt(saved.items.filter((i) => i.productId === "custom"));
         setPaid(saved);
       }
       return;
@@ -248,6 +250,45 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
             <div className="text-sm text-gray-600 tnum">{formatRupiah(grand)}</div>
           </div>
           <Receipt tx={paid} />
+
+          {customPrompt.length > 0 && (
+            <div className="mt-4 rounded-2xl bg-apricot/10 p-3">
+              <div className="mb-2 flex items-center gap-2 text-sm font-bold text-olive">
+                <Icon name="alert" size={16} /> Simpan item custom ke catalog?
+              </div>
+              <p className="mb-3 text-xs text-gray-600">
+                Item berikut tidak ada di catalog. Transaksi sudah tersimpan. Mau simpan untuk pakai lagi?
+              </p>
+              <div className="space-y-2">
+                {customPrompt.map((item, idx) => (
+                  <div key={idx} className="flex items-center justify-between rounded-2xl bg-white p-2.5 shadow-soft">
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-semibold text-ink">{item.name}</div>
+                      <div className="text-xs text-gray-600 tnum">{formatRupiah(item.unitPrice)} · qty {item.quantity}</div>
+                    </div>
+                    <div className="flex shrink-0 gap-1.5">
+                      <button
+                        onClick={async () => {
+                          await recordCustomItem(item);
+                          setCustomPrompt((prev) => prev.filter((_, i) => i !== idx));
+                        }}
+                        className="btn-violet px-3 py-1.5 text-xs"
+                      >
+                        Simpan
+                      </button>
+                      <button
+                        onClick={() => setCustomPrompt((prev) => prev.filter((_, i) => i !== idx))}
+                        className="btn-ghost px-3 py-1.5 text-xs"
+                      >
+                        Lewati
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="mt-4 flex gap-2">
             <button onClick={() => window.print()} className="btn-violet flex-1">
               <Icon name="printer" size={16} /> Print Nota
