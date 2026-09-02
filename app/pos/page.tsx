@@ -268,7 +268,7 @@ export default function PosPage() {
                 >
                   <div>
                     <div className="text-sm font-semibold text-ink">
-                      {v.name} · {v.size} / {v.color}
+                      {v.name}
                     </div>
                     <div className="text-xs text-gray-600">Stok produk: {picker.stock}</div>
                   </div>
