@@ -25,10 +25,10 @@ export interface VariantRow {
   id: string;
   product_id: string;
   sku: string;
+  name: string;
   size: string;
   color: string;
   color_code: string | null;
-  stock: number;
   selling_price: number;
   cost_price: number;
   barcode: string | null;
@@ -44,8 +44,12 @@ export interface ProductRow {
   images: string[] | null;
   tags: string[] | null;
   active: boolean;
+  stock: number;
   fabric: string | null;
   care: string | null;
+  season: string | null;
+  brand: string | null;
+  compare_at: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -59,7 +63,7 @@ export interface CustomerRow {
   visit_count: number;
 }
 
-export type PaymentMethod = "qris" | "cash" | "transfer";
+export type PaymentMethod = "qris" | "cash" | "transfer" | "shopee";
 export type TransactionStatus = "pending" | "paid" | "cancelled" | "refunded";
 export type PaymentStatus = "pending" | "paid" | "failed" | "expired";
 
@@ -74,6 +78,7 @@ export interface TransactionItemRow {
   color: string;
   quantity: number;
   unit_price: number;
+  cost_price: number;
   discount: number;
   total: number;
 }

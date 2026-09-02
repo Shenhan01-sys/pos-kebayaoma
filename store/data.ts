@@ -1198,6 +1198,7 @@ export const useData = create<DataState>()(
                   color: i.color,
                   quantity: i.quantity,
                   unitPrice: i.unit_price,
+                  costPrice: i.cost_price ?? 0,
                   discount: i.discount,
                   total: i.total,
                 })),
@@ -1254,6 +1255,7 @@ export const useData = create<DataState>()(
               color: i.color,
               quantity: i.quantity,
               unitPrice: i.unit_price,
+              costPrice: i.cost_price ?? 0,
               discount: i.discount,
               total: i.total,
             })),
@@ -1516,12 +1518,12 @@ export const useData = create<DataState>()(
                [id, STORE_ID, tx.number, tx.cashier, customer?.id ?? null, tx.customerName ?? null, tx.status, tx.paymentMethod, tx.paymentStatus, tx.subtotal, tx.tax, tx.discount, tx.total, tx.amountPaid, tx.change, tx.qrisRef ?? null, (tx as any).photoProof ?? null]
              );
             for (const i of tx.items) {
-              await psDb.execute(
-                `INSERT INTO transaction_items (id, transaction_id, product_id, variant_id, name, sku, size, color, quantity, unit_price, discount, total)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                [generateLocalId(), id, i.productId, i.variantId, i.name, i.sku, i.size, i.color, i.quantity, i.unitPrice, i.discount, i.total]
-              );
-            }
+               await psDb.execute(
+                 `INSERT INTO transaction_items (id, transaction_id, product_id, variant_id, name, sku, size, color, quantity, unit_price, cost_price, discount, total)
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                 [generateLocalId(), id, i.productId, i.variantId, i.name, i.sku, i.size, i.color, i.quantity, i.unitPrice, i.costPrice ?? 0, i.discount, i.total]
+               );
+             }
             const saved: Transaction = { ...tx, id, customerId: customer?.id, createdAt: new Date().toISOString() };
             set((s) => ({ transactions: [saved, ...s.transactions] }));
             return saved;
@@ -1580,6 +1582,7 @@ export const useData = create<DataState>()(
               color: i.color,
               quantity: i.quantity,
               unit_price: i.unitPrice,
+              cost_price: i.costPrice ?? 0,
               discount: i.discount,
               total: i.total,
             })));

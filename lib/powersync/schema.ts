@@ -100,6 +100,7 @@ const transaction_items = new Table({
   color: column.text,
   quantity: column.integer,
   unit_price: column.real,
+  cost_price: column.real,
   discount: column.real,
   total: column.real,
 });

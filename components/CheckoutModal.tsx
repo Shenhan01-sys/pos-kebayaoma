@@ -15,10 +15,11 @@ import { useAuth } from "@/store/auth";
 import Receipt from "@/components/Receipt";
 import { Icon } from "@/components/icons";
 
-const methodMeta: Record<PaymentMethod, { label: string; icon: "qris" | "cash" | "transfer" }> = {
+const methodMeta: Record<PaymentMethod, { label: string; icon: "qris" | "cash" | "transfer" | "shopee" }> = {
   qris: { label: "QRIS", icon: "qris" },
   cash: { label: "Tunai", icon: "cash" },
   transfer: { label: "Transfer", icon: "transfer" },
+  shopee: { label: "Shopee", icon: "transfer" },
 };
 
 export default function CheckoutModal({ onClose }: { onClose: () => void }) {
@@ -175,6 +176,7 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
         color: l.color,
         quantity: l.quantity,
         unitPrice: l.unitPrice,
+        costPrice: l.costPrice,
         discount: l.discount,
         total: l.unitPrice * l.quantity - l.discount,
       })),
