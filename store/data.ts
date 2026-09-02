@@ -5,6 +5,13 @@ import { persist } from "zustand/middleware";
 import { supabase, isSupabaseReady } from "@/lib/supabase";
 import { getPowerSyncDb, initPowerSync, isPowerSyncReady } from "@/lib/powersync/client";
 import {
+  enqueueTransaction,
+  getPendingTransactions,
+  dequeueTransaction,
+  onOnline,
+  type QueuedTransaction,
+} from "@/lib/offline-queue";
+import {
   products as dummyProducts,
   categories as dummyCategories,
   customers as dummyCustomers,
@@ -91,6 +98,7 @@ interface DataState {
   // transactions
   saveTransaction: (tx: Omit<Transaction, "id" | "items"> & { items: TransactionItem[] }) => Promise<Transaction | null>;
   setTransactionStatus: (id: string, status: Transaction["status"]) => Promise<void>;
+  flushOfflineQueue: () => Promise<void>;
 
   // internal side effects
   updateCustomerStats: (customerId: string, deltaPurchase: number, deltaVisit: number) => Promise<void>;
@@ -1509,6 +1517,28 @@ export const useData = create<DataState>()(
             ? get().customers.find((c) => c.name === tx.customerName)
             : undefined;
 
+          // OFFLINE PATH — simpan ke local state + IndexedDB queue, flush saat online
+          if (typeof navigator !== "undefined" && !navigator.onLine) {
+            const localId = generateLocalId();
+            const saved: Transaction = {
+              ...tx,
+              id: localId,
+              customerId: customer?.id,
+              createdAt: new Date().toISOString(),
+            };
+            set((s) => ({ transactions: [saved, ...s.transactions] }));
+            if (saved.status === "paid") {
+              await get().applySaleSideEffects(saved);
+            }
+            await enqueueTransaction({
+              localId,
+              tx: { ...tx, items: tx.items },
+              enqueuedAt: new Date().toISOString(),
+            } as QueuedTransaction);
+            console.info("[offline-queue] Transaction queued:", localId);
+            return saved;
+          }
+
           const psDb = getPowerSyncDb();
           if (psDb) {
             const id = generateLocalId();
@@ -1752,6 +1782,32 @@ export const useData = create<DataState>()(
           }
         } catch (error: any) {
           set({ error: error.message });
+        }
+      },
+
+      flushOfflineQueue: async () => {
+        if (typeof navigator !== "undefined" && !navigator.onLine) return;
+        const pending = await getPendingTransactions();
+        if (pending.length === 0) return;
+        console.info(`[offline-queue] Flushing ${pending.length} pending transactions…`);
+        let flushed = 0;
+        for (const q of pending) {
+          try {
+            const saved = await get().saveTransaction(q.tx);
+            if (saved) {
+              set((s) => ({
+                transactions: s.transactions.filter((t) => t.id !== q.localId),
+              }));
+              await dequeueTransaction(q.localId);
+              flushed++;
+            }
+          } catch (err) {
+            console.error(`[offline-queue] Flush failed for ${q.localId}:`, err);
+          }
+        }
+        if (flushed > 0) {
+          console.info(`[offline-queue] Flushed ${flushed}/${pending.length}. Refreshing state…`);
+          await get().fetchTransactions();
         }
       },
 
