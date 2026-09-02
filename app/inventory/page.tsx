@@ -4,7 +4,6 @@ import { useState } from "react";
 import { useData } from "@/store/data";
 import { useAuth } from "@/store/auth";
 import { useSettings } from "@/store/settings";
-import { formatRupiah } from "@/lib/dummy";
 import { Icon } from "@/components/icons";
 
 type Reason = "Rusak/Hilang" | "Penyesuaian" | "Stok Opname" | "Lainnya";
@@ -60,8 +59,6 @@ export default function InventoryPage() {
               <thead className="bg-beige/70 text-left text-olive">
                 <tr>
                   <th className="p-3 font-semibold">Produk</th>
-                  <th className="p-3 font-semibold">SKU</th>
-                  <th className="p-3 text-right font-semibold">Harga Jual</th>
                   <th className="p-3 text-center font-semibold">Series</th>
                   <th className="p-3 text-right font-semibold">Stok</th>
                   <th className="p-3 font-semibold">Aksi</th>
@@ -71,8 +68,6 @@ export default function InventoryPage() {
                 {active.map((p) => (
                   <tr key={p.id} className="border-t border-black/5 hover:bg-beige/40">
                     <td className="p-3 font-medium text-ink">{p.name}</td>
-                    <td className="p-3 text-xs text-gray-600">{p.sku}</td>
-                    <td className="p-3 text-right tnum">{formatRupiah(p.variants[0]?.sellingPrice ?? 0)}</td>
                     <td className="p-3 text-center text-xs text-gray-600">{p.variants.length}</td>
                     <td className={`p-3 text-right font-bold tnum ${p.stock === 0 ? "text-danger" : p.stock <= 5 ? "text-warning" : ""}`}>{p.stock}</td>
                     <td className="p-3">
