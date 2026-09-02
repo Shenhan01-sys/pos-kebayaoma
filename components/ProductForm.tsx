@@ -133,17 +133,28 @@ export default function ProductForm({
         </div>
         <div className="space-y-2">
           {variants.map((v, i) => (
-            <div key={v.id} className="grid grid-cols-2 gap-2 rounded-2xl bg-beige/60 p-3 text-xs sm:grid-cols-4">
-              <input className="input" placeholder="Nama Seri" value={v.name} onChange={(e) => setVar(i, { name: e.target.value })} />
-              <input className="input" placeholder="Size" value={v.size} onChange={(e) => setVar(i, { size: e.target.value })} />
-              <input className="input" placeholder="Warna" value={v.color} onChange={(e) => setVar(i, { color: e.target.value })} />
-              <input className="input" placeholder="SKU" value={v.sku} onChange={(e) => setVar(i, { sku: e.target.value })} />
-              <input className="input" placeholder="Barcode" value={v.barcode ?? ""} onChange={(e) => setVar(i, { barcode: e.target.value })} />
-              <input className="input" type="number" placeholder="Modal" value={v.costPrice} onChange={(e) => setVar(i, { costPrice: Number(e.target.value) })} />
-              <input className="input" type="number" placeholder="Harga" value={v.sellingPrice} onChange={(e) => setVar(i, { sellingPrice: Number(e.target.value) })} />
-              <button onClick={() => setVariants((vs) => vs.filter((_, idx) => idx !== i))} className="btn-danger px-2 py-1.5 text-xs">
-                Hapus
-              </button>
+            <div key={v.id} className="rounded-2xl bg-beige/60 p-3 text-xs">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <VarInput label="Nama Seri" value={v.name} onChange={(val) => setVar(i, { name: val })} />
+                <VarInput label="Size" value={v.size} onChange={(val) => setVar(i, { size: val })} />
+                <VarInput label="Warna" value={v.color} onChange={(val) => setVar(i, { color: val })} />
+                <VarInput label="SKU" value={v.sku} onChange={(val) => setVar(i, { sku: val })} />
+                <VarInput label="Barcode" value={v.barcode ?? ""} onChange={(val) => setVar(i, { barcode: val })} />
+                <VarInput label="Modal (Rp)" type="number" value={String(v.costPrice)} onChange={(val) => setVar(i, { costPrice: Number(val) })} />
+                <VarInput label="Harga Jual (Rp)" type="number" value={String(v.sellingPrice)} onChange={(val) => setVar(i, { sellingPrice: Number(val) })} />
+                <div className="flex items-end">
+                  <button onClick={() => setVariants((vs) => vs.filter((_, idx) => idx !== i))} className="btn-danger w-full px-2 py-1.5">
+                    Hapus
+                  </button>
+                </div>
+              </div>
+              {v.costPrice > 0 && v.sellingPrice > 0 && (
+                <div className="mt-1.5 flex items-center gap-2 text-[10px] text-gray-600">
+                  <span>Margin: <b className="text-olive">Rp {(v.sellingPrice - v.costPrice).toLocaleString("id-ID")}</b></span>
+                  <span>·</span>
+                  <span>{v.sellingPrice > 0 ? Math.round(((v.sellingPrice - v.costPrice) / v.sellingPrice) * 100) : 0}% margin</span>
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -166,6 +177,30 @@ function Labeled({ label, children }: { label: string; children: React.ReactNode
     <label className="block">
       <div className="mb-0.5 text-xs text-olive">{label}</div>
       {children}
+    </label>
+  );
+}
+
+function VarInput({
+  label,
+  value,
+  onChange,
+  type = "text",
+}: {
+  label: string;
+  value: string;
+  onChange: (val: string) => void;
+  type?: string;
+}) {
+  return (
+    <label className="block">
+      <div className="mb-0.5 text-[10px] font-medium text-olive">{label}</div>
+      <input
+        className="input"
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
     </label>
   );
 }
