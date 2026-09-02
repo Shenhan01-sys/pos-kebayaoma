@@ -124,12 +124,12 @@ export default function PosPage() {
           ))}
         </div>
 
-        <div className="grid flex-1 grid-cols-2 content-start gap-2 overflow-auto pretty-scroll sm:gap-3 md:grid-cols-3 xl:grid-cols-4">
+        <div className="flex flex-1 flex-wrap content-start gap-2 overflow-auto pretty-scroll sm:gap-3">
           {filtered.map((p) => (
             <button
               key={p.id}
               onClick={() => setPicker(p)}
-              className="group overflow-hidden rounded-3xl bg-white/90 text-left shadow-soft ring-1 ring-black/5 backdrop-blur-sm transition hover:-translate-y-0.5 hover:shadow-soft-lg"
+              className="group w-[calc(50%-0.25rem)] shrink-0 overflow-hidden rounded-3xl bg-white/90 text-left shadow-soft ring-1 ring-black/5 backdrop-blur-sm transition hover:-translate-y-0.5 hover:shadow-soft-lg sm:w-[calc(33.333%-0.5rem)] xl:w-[calc(25%-0.563rem)]"
             >
               <div
                 className={`relative flex h-28 items-center justify-center overflow-hidden rounded-t-3xl text-white ${
