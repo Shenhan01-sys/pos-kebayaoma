@@ -74,7 +74,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     useData.getState().fetchStaff();
     useData.getState().fetchTransactions();
     useData.getState().fetchShifts();
-    useData.getState().subscribeRealtime();
+    const unsubRealtime = useData.getState().subscribeRealtime();
+    return () => { if (typeof unsubRealtime === "function") unsubRealtime(); };
   }, []);
 
   const products = useData((s) => s.products);

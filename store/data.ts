@@ -146,7 +146,7 @@ interface DataState {
   recordCustomItem: (item: TransactionItem) => Promise<void>;
 
   // realtime
-  subscribeRealtime: () => void;
+  subscribeRealtime: () => (() => void);
 
   // fallback
   loadFallback: () => void;
@@ -1914,7 +1914,7 @@ export const useData = create<DataState>()(
 
       subscribeRealtime: () => {
         if (!isSupabaseReady) return () => {};
-        supabase
+        const channel = supabase
           .channel('pos-db-changes')
           .on(
             'postgres_changes',
@@ -1932,8 +1932,6 @@ export const useData = create<DataState>()(
             'postgres_changes',
             { event: 'INSERT', schema: 'public', table: 'transactions' },
             async () => {
-              // DB trigger menangani side effects (stok & customer stats).
-              // Frontend cukup refresh data.
               await get().fetchTransactions();
             }
           )
@@ -1941,11 +1939,11 @@ export const useData = create<DataState>()(
             'postgres_changes',
             { event: 'UPDATE', schema: 'public', table: 'transactions' },
             async () => {
-              // DB trigger menangani side effects.
               await get().fetchTransactions();
             }
           )
           .subscribe();
+        return () => { supabase.removeChannel(channel); };
       },
     }),
     { name: "kebaya-oma-data" }
