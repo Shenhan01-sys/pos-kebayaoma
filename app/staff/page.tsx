@@ -13,6 +13,7 @@ export default function StaffPage() {
   const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState(false);
   const [form, setForm] = useState({ name: "", pin: "", role: "cashier" as Role, phone: "", active: true });
+  const [pinError, setPinError] = useState<string | null>(null);
 
   function openAdd() {
     setForm({ name: "", pin: "", role: "cashier", phone: "", active: true });
@@ -27,9 +28,13 @@ export default function StaffPage() {
   async function save() {
     if (!form.name) return;
     if (editing) {
+      if (form.pin && (form.pin.length < 4 || form.pin.length > 6)) {
+        setPinError("PIN harus 4-6 digit");
+        return;
+      }
+      setPinError(null);
       if (!form.pin) {
         const { pin, ...rest } = form;
-        void pin;
         setBusy(true);
         await updateStaff(editing.id, rest);
       } else {
@@ -37,7 +42,11 @@ export default function StaffPage() {
         await updateStaff(editing.id, form);
       }
     } else {
-      if (!form.pin) return;
+      if (!form.pin || form.pin.length < 4 || form.pin.length > 6) {
+        setPinError("PIN harus 4-6 digit");
+        return;
+      }
+      setPinError(null);
       setBusy(true);
       await addStaff(form);
     }
@@ -116,7 +125,8 @@ export default function StaffPage() {
             </div>
             <div className="space-y-2">
               <input className="input" placeholder="Nama" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-              <input className="input" type="password" inputMode="numeric" maxLength={6} placeholder={editing ? "PIN baru (4-6 digit, kosongkan jika tetap)" : "PIN (4-6 digit)"} value={form.pin} onChange={(e) => setForm({ ...form, pin: e.target.value.replace(/\D/g, "") })} />
+              <input className="input" type="password" inputMode="numeric" maxLength={6} placeholder={editing ? "PIN baru (4-6 digit, kosongkan jika tetap)" : "PIN (4-6 digit)"} value={form.pin} onChange={(e) => { setForm({ ...form, pin: e.target.value.replace(/\D/g, "") }); setPinError(null); }} />
+              {pinError && <div className="text-xs font-semibold text-danger">{pinError}</div>}
               <select className="input" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as Role })}>
                 <option value="admin">Admin</option>
                 <option value="manager">Manager</option>

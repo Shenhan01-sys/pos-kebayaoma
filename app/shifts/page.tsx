@@ -157,8 +157,8 @@ export default function ShiftsPage() {
 
       {/* Open shift modal */}
       {openModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-sm rounded-3xl bg-white p-5 shadow-soft-xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm" onClick={() => setOpenModal(false)}>
+          <div className="w-full max-w-sm rounded-3xl bg-white p-5 shadow-soft-xl" onClick={(e) => e.stopPropagation()}>
             <h2 className="text-lg font-extrabold text-ink">Buka Shift</h2>
             <p className="text-sm text-gray-600">Masukkan modal awal kasir untuk shift ini.</p>
             <input
@@ -171,8 +171,8 @@ export default function ShiftsPage() {
               <button onClick={() => setOpenModal(false)} className="btn-ghost flex-1">
                 Batal
               </button>
-              <button onClick={handleOpen} className="btn-primary flex-1">
-                Buka Shift
+              <button onClick={handleOpen} disabled={busy} className="btn-primary flex-1 disabled:opacity-50">
+                {busy ? "Membuka…" : "Buka Shift"}
               </button>
             </div>
           </div>

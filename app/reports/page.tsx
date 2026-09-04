@@ -19,9 +19,11 @@ function toCSV(rows: (string | number)[][]): string {
 function download(name: string, csv: string) {
   const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
   const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
+  const url = URL.createObjectURL(blob);
+  a.href = url;
   a.download = name;
   a.click();
+  URL.revokeObjectURL(url);
 }
 
 const C = {
@@ -32,8 +34,8 @@ const C = {
   success: "#2f9e57",
   ink: "#3a1430",
 };
-const methodColor: Record<string, string> = { qris: C.apricot, cash: C.olive, transfer: C.violet };
-const methodLabel: Record<string, string> = { qris: "QRIS", cash: "Tunai", transfer: "Transfer" };
+const methodColor: Record<string, string> = { qris: C.apricot, cash: C.olive, transfer: C.violet, shopee: C.success };
+const methodLabel: Record<string, string> = { qris: "QRIS", cash: "Tunai", transfer: "Transfer", shopee: "Shopee" };
 
 export default function ReportsPage() {
   const [from, setFrom] = useState("");
@@ -42,7 +44,7 @@ export default function ReportsPage() {
   const all = getAllTransactions(dummyTx).filter((t) => t.status === "paid");
   const inRange = all.filter((t) => {
     const d = new Date(t.createdAt);
-    if (from && d < new Date(from)) return false;
+    if (from && d < new Date(from + "T00:00:00")) return false;
     if (to && d > new Date(to + "T23:59:59")) return false;
     return true;
   });

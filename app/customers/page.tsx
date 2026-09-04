@@ -75,7 +75,7 @@ export default function CustomersPage() {
                 <div className="flex shrink-0 gap-1">
                   <button onClick={() => setHistory(c)} className="btn-ghost px-2.5 py-1 text-xs">Riwayat</button>
                   <button onClick={() => openEdit(c)} className="btn-primary px-2.5 py-1 text-xs">Edit</button>
-                  <button onClick={() => deleteCustomer(c.id)} className="btn-danger px-2.5 py-1 text-xs">Hapus</button>
+                  <button onClick={() => { if (confirm(`Hapus pelanggan "${c.name}"? Riwayat transaksi tetap tersimpan.`)) deleteCustomer(c.id); }} className="btn-danger px-2.5 py-1 text-xs">Hapus</button>
                 </div>
               </div>
               <div className="mt-3 flex items-center justify-between rounded-2xl bg-beige/60 px-3 py-2 text-sm">
@@ -105,7 +105,30 @@ export default function CustomersPage() {
               <input className="input" placeholder="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
               <input className="input" placeholder="Alamat" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
               <input className="input" type="date" placeholder="Tanggal lahir" value={form.birthday} onChange={(e) => setForm({ ...form, birthday: e.target.value })} />
-              <input className="input" placeholder="Tags (pisah koma)" value={form.tags.join(", ")} onChange={(e) => setForm({ ...form, tags: e.target.value.split(",") })} />
+              <div>
+                <div className="flex flex-wrap gap-1.5">
+                  {form.tags.map((t, idx) => (
+                    <span key={idx} className="pill-muted flex items-center gap-1 text-xs">
+                      {t}
+                      <button onClick={() => setForm({ ...form, tags: form.tags.filter((_, i) => i !== idx) })} className="text-gray-500 hover:text-danger">✕</button>
+                    </span>
+                  ))}
+                </div>
+                <input
+                  className="input mt-1"
+                  placeholder="Tambah tag (Enter untuk simpan)"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      const val = (e.target as HTMLInputElement).value.trim();
+                      if (val && !form.tags.includes(val)) {
+                        setForm({ ...form, tags: [...form.tags, val] });
+                      }
+                      (e.target as HTMLInputElement).value = "";
+                    }
+                  }}
+                />
+              </div>
               <textarea className="input" rows={2} placeholder="Catatan" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
             </div>
             <button onClick={save} className="btn-violet mt-3 w-full py-3">Simpan</button>
