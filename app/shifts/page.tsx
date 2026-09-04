@@ -11,11 +11,13 @@ export default function ShiftsPage() {
   const s = useSettings();
   const auth = useAuth();
   const staffName = auth.staff?.name ?? s.cashierName;
-  const { shifts, transactions, openShift, closeShift, currentShift, loading } = useData();
+  const { shifts, transactions, openShift, closeShift, currentShift, loading, error } = useData();
   const [openModal, setOpenModal] = useState(false);
   const [startingCash, setStartingCash] = useState("500000");
   const [endingCash, setEndingCash] = useState("");
   const [closing, setClosing] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
 
   const active = currentShift();
 
@@ -32,17 +34,31 @@ export default function ShiftsPage() {
   })();
 
   async function handleOpen() {
-    await openShift(Number(startingCash) || 0, staffName);
-    setOpenModal(false);
-    setStartingCash("500000");
+    setBusy(true);
+    setLocalError(null);
+    try {
+      await openShift(Number(startingCash) || 0, staffName);
+      setOpenModal(false);
+      setStartingCash("500000");
+    } catch (err: any) {
+      setLocalError(err?.message || "Gagal membuka shift");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function handleClose() {
     if (!active) return;
     setClosing(true);
-    await closeShift(active.id, Number(endingCash) || 0);
-    setClosing(false);
-    setEndingCash("");
+    setLocalError(null);
+    try {
+      await closeShift(active.id, Number(endingCash) || 0);
+      setEndingCash("");
+    } catch (err: any) {
+      setLocalError(err?.message || "Gagal menutup shift");
+    } finally {
+      setClosing(false);
+    }
   }
 
   return (
@@ -57,6 +73,12 @@ export default function ShiftsPage() {
       </div>
 
       {loading && <p className="text-sm text-gray-600">Memuat shift…</p>}
+
+      {(localError || error) && (
+        <div className="mb-3 rounded-2xl bg-danger/10 px-4 py-2.5 text-sm font-semibold text-danger">
+          {localError || error}
+        </div>
+      )}
 
       {/* Active shift card */}
       {active && activeStats && (

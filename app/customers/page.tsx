@@ -43,7 +43,7 @@ export default function CustomersPage() {
   }
 
   const initials = (n: string) =>
-    n.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase();
+    n.split(" ").filter(Boolean).map((w) => w[0] ?? "").slice(0, 2).join("").toUpperCase();
 
   return (
     <div>

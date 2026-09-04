@@ -21,7 +21,7 @@ const rolePill: Record<Role, string> = {
 };
 
 const initials = (n: string) =>
-  n.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase();
+  n.split(" ").filter(Boolean).map((w) => w[0] ?? "").slice(0, 2).join("").toUpperCase();
 
 const PAD: (string | "back")[] = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "", "0", "back"];
 
