@@ -80,7 +80,7 @@ export default function CustomersPage() {
               </div>
               <div className="mt-3 flex items-center justify-between rounded-2xl bg-beige/60 px-3 py-2 text-sm">
                 <span className="text-gray-600">Total belanja</span>
-                <b className="tnum text-olive">{formatRupiah(c.totalPurchases + txs.reduce((s, t) => s + t.total, 0))}</b>
+                <b className="tnum text-olive">{formatRupiah(txs.reduce((s, t) => s + t.total, 0))}</b>
               </div>
               <div className="mt-1 text-right text-xs text-gray-600">
                 {txs.length} transaksi
