@@ -126,7 +126,7 @@ export const products: Product[] = [
     images: [],
     tags: [],
     active: true,
-    stock: 0,
+    stock: 10,
     fabric: "",
     care: "",
     variants: [
@@ -185,7 +185,7 @@ export const products: Product[] = [
     images: [],
     tags: [],
     active: true,
-    stock: 0,
+    stock: 10,
     fabric: "",
     care: "",
     variants: [
@@ -211,7 +211,7 @@ export const products: Product[] = [
     images: [],
     tags: [],
     active: true,
-    stock: 0,
+    stock: 10,
     fabric: "",
     care: "",
     variants: [
@@ -237,7 +237,7 @@ export const products: Product[] = [
     images: [],
     tags: [],
     active: true,
-    stock: 0,
+    stock: 10,
     fabric: "",
     care: "",
     variants: [
@@ -362,7 +362,7 @@ export const products: Product[] = [
     images: [],
     tags: [],
     active: true,
-    stock: 0,
+    stock: 10,
     fabric: "",
     care: "",
     variants: [
@@ -388,7 +388,7 @@ export const products: Product[] = [
     images: [],
     tags: [],
     active: true,
-    stock: 0,
+    stock: 10,
     fabric: "",
     care: "",
     variants: [
@@ -414,7 +414,7 @@ export const products: Product[] = [
     images: [],
     tags: [],
     active: true,
-    stock: 0,
+    stock: 10,
     fabric: "",
     care: "",
     variants: [
@@ -440,7 +440,7 @@ export const products: Product[] = [
     images: [],
     tags: [],
     active: true,
-    stock: 0,
+    stock: 10,
     fabric: "",
     care: "",
     variants: [
@@ -532,7 +532,7 @@ export const products: Product[] = [
     images: [],
     tags: [],
     active: true,
-    stock: 0,
+    stock: 10,
     fabric: "",
     care: "",
     variants: [
@@ -569,7 +569,7 @@ export const products: Product[] = [
     images: [],
     tags: [],
     active: true,
-    stock: 0,
+    stock: 10,
     fabric: "",
     care: "",
     variants: [
@@ -606,7 +606,7 @@ export const products: Product[] = [
     images: [],
     tags: [],
     active: true,
-    stock: 0,
+    stock: 10,
     fabric: "",
     care: "",
     variants: [
@@ -632,7 +632,7 @@ export const products: Product[] = [
     images: [],
     tags: [],
     active: true,
-    stock: 0,
+    stock: 10,
     fabric: "",
     care: "",
     variants: [
@@ -658,7 +658,7 @@ export const products: Product[] = [
     images: [],
     tags: [],
     active: true,
-    stock: 0,
+    stock: 10,
     fabric: "",
     care: "",
     variants: [
@@ -684,7 +684,7 @@ export const products: Product[] = [
     images: [],
     tags: [],
     active: true,
-    stock: 0,
+    stock: 10,
     fabric: "",
     care: "",
     variants: [
@@ -732,7 +732,7 @@ export const products: Product[] = [
     images: [],
     tags: [],
     active: true,
-    stock: 0,
+    stock: 10,
     fabric: "",
     care: "",
     variants: [
@@ -758,7 +758,7 @@ export const products: Product[] = [
     images: [],
     tags: [],
     active: true,
-    stock: 0,
+    stock: 10,
     fabric: "",
     care: "",
     variants: [
@@ -784,7 +784,7 @@ export const products: Product[] = [
     images: [],
     tags: [],
     active: true,
-    stock: 0,
+    stock: 10,
     fabric: "",
     care: "",
     variants: [
@@ -810,7 +810,7 @@ export const products: Product[] = [
     images: [],
     tags: [],
     active: true,
-    stock: 0,
+    stock: 10,
     fabric: "",
     care: "",
     variants: [
@@ -979,7 +979,7 @@ export const products: Product[] = [
     images: [],
     tags: [],
     active: true,
-    stock: 0,
+    stock: 10,
     fabric: "",
     care: "",
     variants: [
@@ -1005,7 +1005,7 @@ export const products: Product[] = [
     images: [],
     tags: [],
     active: true,
-    stock: 0,
+    stock: 10,
     fabric: "",
     care: "",
     variants: [
@@ -1031,7 +1031,7 @@ export const products: Product[] = [
     images: [],
     tags: [],
     active: true,
-    stock: 0,
+    stock: 10,
     fabric: "",
     care: "",
     variants: [
@@ -1310,7 +1310,7 @@ export const products: Product[] = [
     images: [],
     tags: [],
     active: true,
-    stock: 0,
+    stock: 10,
     fabric: "",
     care: "",
     variants: [
@@ -1336,7 +1336,7 @@ export const products: Product[] = [
     images: [],
     tags: [],
     active: true,
-    stock: 0,
+    stock: 10,
     fabric: "",
     care: "",
     variants: [
@@ -1362,7 +1362,7 @@ export const products: Product[] = [
     images: [],
     tags: [],
     active: true,
-    stock: 0,
+    stock: 10,
     fabric: "",
     care: "",
     variants: [
@@ -1388,7 +1388,7 @@ export const products: Product[] = [
     images: [],
     tags: [],
     active: true,
-    stock: 0,
+    stock: 10,
     fabric: "",
     care: "",
     variants: [
@@ -1414,7 +1414,7 @@ export const products: Product[] = [
     images: [],
     tags: [],
     active: true,
-    stock: 0,
+    stock: 10,
     fabric: "",
     care: "",
     variants: [
@@ -1462,7 +1462,7 @@ export const products: Product[] = [
     images: [],
     tags: [],
     active: true,
-    stock: 0,
+    stock: 10,
     fabric: "",
     care: "",
     variants: [
@@ -1488,7 +1488,7 @@ export const products: Product[] = [
     images: [],
     tags: [],
     active: true,
-    stock: 0,
+    stock: 10,
     fabric: "",
     care: "",
     variants: [
@@ -1514,7 +1514,7 @@ export const products: Product[] = [
     images: [],
     tags: [],
     active: true,
-    stock: 0,
+    stock: 10,
     fabric: "",
     care: "",
     variants: [
@@ -1551,7 +1551,7 @@ export const products: Product[] = [
     images: [],
     tags: [],
     active: true,
-    stock: 0,
+    stock: 10,
     fabric: "",
     care: "",
     variants: [
@@ -1577,7 +1577,7 @@ export const products: Product[] = [
     images: [],
     tags: [],
     active: true,
-    stock: 0,
+    stock: 10,
     fabric: "",
     care: "",
     variants: [
@@ -1625,7 +1625,7 @@ export const products: Product[] = [
     images: [],
     tags: [],
     active: true,
-    stock: 0,
+    stock: 10,
     fabric: "",
     care: "",
     variants: [
@@ -1651,7 +1651,7 @@ export const products: Product[] = [
     images: [],
     tags: [],
     active: true,
-    stock: 0,
+    stock: 10,
     fabric: "",
     care: "",
     variants: [
@@ -1677,7 +1677,7 @@ export const products: Product[] = [
     images: [],
     tags: [],
     active: true,
-    stock: 0,
+    stock: 10,
     fabric: "",
     care: "",
     variants: [
@@ -1703,7 +1703,7 @@ export const products: Product[] = [
     images: [],
     tags: [],
     active: true,
-    stock: 0,
+    stock: 10,
     fabric: "",
     care: "",
     variants: [
@@ -1762,7 +1762,7 @@ export const products: Product[] = [
     images: [],
     tags: [],
     active: true,
-    stock: 0,
+    stock: 10,
     fabric: "",
     care: "",
     variants: [
@@ -1788,7 +1788,7 @@ export const products: Product[] = [
     images: [],
     tags: [],
     active: true,
-    stock: 0,
+    stock: 10,
     fabric: "",
     care: "",
     variants: [
@@ -1814,7 +1814,7 @@ export const products: Product[] = [
     images: [],
     tags: [],
     active: true,
-    stock: 0,
+    stock: 10,
     fabric: "",
     care: "",
     variants: [
@@ -1840,7 +1840,7 @@ export const products: Product[] = [
     images: [],
     tags: [],
     active: true,
-    stock: 0,
+    stock: 10,
     fabric: "",
     care: "",
     variants: [
@@ -1888,7 +1888,7 @@ export const products: Product[] = [
     images: [],
     tags: [],
     active: true,
-    stock: 0,
+    stock: 10,
     fabric: "",
     care: "",
     variants: [
@@ -1936,7 +1936,7 @@ export const products: Product[] = [
     images: [],
     tags: [],
     active: true,
-    stock: 0,
+    stock: 10,
     fabric: "",
     care: "",
     variants: [
@@ -1962,7 +1962,7 @@ export const products: Product[] = [
     images: [],
     tags: [],
     active: true,
-    stock: 0,
+    stock: 10,
     fabric: "",
     care: "",
     variants: [
@@ -1988,7 +1988,7 @@ export const products: Product[] = [
     images: [],
     tags: [],
     active: true,
-    stock: 0,
+    stock: 10,
     fabric: "",
     care: "",
     variants: [
@@ -2058,7 +2058,7 @@ export const products: Product[] = [
     images: [],
     tags: [],
     active: true,
-    stock: 0,
+    stock: 10,
     fabric: "",
     care: "",
     variants: [
@@ -2117,7 +2117,7 @@ export const products: Product[] = [
     images: [],
     tags: [],
     active: true,
-    stock: 0,
+    stock: 10,
     fabric: "",
     care: "",
     variants: [
@@ -2143,7 +2143,7 @@ export const products: Product[] = [
     images: [],
     tags: [],
     active: true,
-    stock: 0,
+    stock: 10,
     fabric: "",
     care: "",
     variants: [
@@ -2169,7 +2169,7 @@ export const products: Product[] = [
     images: [],
     tags: [],
     active: true,
-    stock: 0,
+    stock: 10,
     fabric: "",
     care: "",
     variants: [
