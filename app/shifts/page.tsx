@@ -13,7 +13,7 @@ export default function ShiftsPage() {
   const staffName = auth.staff?.name ?? s.cashierName;
   const { shifts, transactions, openShift, closeShift, currentShift, loading, error } = useData();
   const [openModal, setOpenModal] = useState(false);
-  const [startingCash, setStartingCash] = useState("500000");
+  const [startingCash, setStartingCash] = useState("");
   const [endingCash, setEndingCash] = useState("");
   const [closing, setClosing] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -29,8 +29,10 @@ export default function ShiftsPage() {
     const totalSales = txs.reduce((sum, t) => sum + t.total, 0);
     const totalQris = txs.filter((t) => t.paymentMethod === "qris").reduce((sum, t) => sum + t.total, 0);
     const totalCash = txs.filter((t) => t.paymentMethod === "cash").reduce((sum, t) => sum + t.total, 0);
+    const totalTransfer = txs.filter((t) => t.paymentMethod === "transfer").reduce((sum, t) => sum + t.total, 0);
+    const totalShopee = txs.filter((t) => t.paymentMethod === "shopee").reduce((sum, t) => sum + t.total, 0);
     const expected = active.startingCash + totalCash;
-    return { totalTransactions, totalSales, totalQris, totalCash, expected };
+    return { totalTransactions, totalSales, totalQris, totalCash, totalTransfer, totalShopee, expected };
   })();
 
   async function handleOpen() {
@@ -39,12 +41,18 @@ export default function ShiftsPage() {
     try {
       await openShift(Number(startingCash) || 0, staffName);
       setOpenModal(false);
-      setStartingCash("500000");
+      setStartingCash("");
     } catch (err: any) {
       setLocalError(err?.message || "Gagal membuka shift");
     } finally {
       setBusy(false);
     }
+  }
+
+  function openNewShift() {
+    const lastShift = shifts.find((s) => s.status !== "open");
+    setStartingCash(lastShift ? String(lastShift.startingCash) : "");
+    setOpenModal(true);
   }
 
   async function handleClose() {
@@ -66,13 +74,19 @@ export default function ShiftsPage() {
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-extrabold tracking-tight text-ink">Shift Kasir</h1>
         {!active && (
-          <button onClick={() => setOpenModal(true)} className="btn-primary">
+          <button onClick={openNewShift} className="btn-primary">
             <Icon name="shifts" size={16} /> Buka Shift
           </button>
         )}
       </div>
 
       {loading && <p className="text-sm text-gray-600">Memuat shift…</p>}
+
+      {!loading && !active && shifts.length === 0 && (
+        <div className="card card-pad py-12 text-center">
+          <p className="text-gray-600">Belum ada shift. Klik &ldquo;Buka Shift&rdquo; untuk memulai.</p>
+        </div>
+      )}
 
       {(localError || error) && (
         <div className="mb-3 rounded-2xl bg-danger/10 px-4 py-2.5 text-sm font-semibold text-danger">
@@ -100,6 +114,8 @@ export default function ShiftsPage() {
             <Stat label="Total Penjualan" value={formatRupiah(activeStats.totalSales)} accent />
             <Stat label="QRIS" value={formatRupiah(activeStats.totalQris)} />
             <Stat label="Tunai" value={formatRupiah(activeStats.totalCash)} />
+            {activeStats.totalTransfer > 0 && <Stat label="Transfer" value={formatRupiah(activeStats.totalTransfer)} />}
+            {activeStats.totalShopee > 0 && <Stat label="Shopee" value={formatRupiah(activeStats.totalShopee)} />}
             <Stat label="Kas Diharapkan" value={formatRupiah(activeStats.expected)} />
             <div className="col-span-2">
               <div className="rounded-2xl bg-beige/60 p-3">
@@ -141,7 +157,7 @@ export default function ShiftsPage() {
                 <div key={sh.id} className="rounded-2xl bg-beige/60 p-3 text-sm">
                   <div className="flex items-center justify-between">
                     <span className="font-semibold text-ink">{sh.staff_name}</span>
-                    <span className="pill-muted">{sh.status === "closed" ? "Tutup" : sh.status}</span>
+                    <span className="pill-muted">{sh.status === "closed" ? "Tutup" : sh.status === "reconciled" ? "Direkonsiliasi" : sh.status}</span>
                   </div>
                   <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
                     <StatSm label="Mulai" value={new Date(sh.opened_at).toLocaleString("id-ID")} />

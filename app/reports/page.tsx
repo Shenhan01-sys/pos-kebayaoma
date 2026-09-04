@@ -192,12 +192,24 @@ export default function ReportsPage() {
         <div className="seg mb-5 w-full max-w-md">
           <div className="flex items-center gap-2 px-1">
             <Icon name="shifts" size={16} className="text-gray-600" />
-            <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="input w-auto border-0 bg-transparent px-1" />
+            <label className="flex items-center gap-1 text-sm text-gray-600">
+              Dari
+              <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="input w-auto border-0 bg-transparent px-1" aria-label="Tanggal mulai" />
+            </label>
             <span className="text-sm text-gray-600">s.d</span>
-            <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="input w-auto border-0 bg-transparent px-1" />
+            <label className="flex items-center gap-1 text-sm text-gray-600">
+              Sampai
+              <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="input w-auto border-0 bg-transparent px-1" aria-label="Tanggal akhir" />
+            </label>
           </div>
         </div>
 
+        {inRange.length === 0 ? (
+          <div className="card card-pad py-12 text-center">
+            <p className="text-gray-600">Tidak ada transaksi pada rentang tanggal ini.</p>
+          </div>
+        ) : (
+        <>
         {/* KPI cards */}
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           {kpis.map((k) => (
@@ -269,6 +281,8 @@ export default function ReportsPage() {
             </>
           )}
         </div>
+        </>
+        )}
       </div>
     </div>
   );

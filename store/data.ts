@@ -25,18 +25,22 @@ import {
   type TransactionItem,
   type Shift,
 } from "@/lib/dummy";
+import {
+  mapVariantRow,
+  mapProductRow,
+  mapCategoryRow,
+  mapCustomerRow,
+  mapStaffRow,
+  mapTransactionItemRow,
+  mapTransactionRow,
+  mapShiftRow,
+} from "@/lib/store-mappers";
 
 const generateLocalId = () => "local-" + Math.random().toString(36).slice(2, 10);
 const STORE_ID = process.env.NEXT_PUBLIC_STORE_ID ?? "demo-store";
 
-function safeJson<T>(value: unknown, fallback: T): T {
-  if (value == null) return fallback;
-  if (typeof value === "string") {
-    try { return JSON.parse(value) as T; } catch { return fallback; }
-  }
-  if (Array.isArray(value)) return value as unknown as T;
-  return fallback;
-}
+// Re-export safeJson for backward compat (used inline in some mappers)
+export { safeJson } from "@/lib/safe-json";
 
 // Inisialisasi PowerSync saat module load (lazy, non-blocking)
 if (typeof window !== "undefined") {
@@ -198,33 +202,7 @@ export const useData = create<DataState>()(
                 `SELECT * FROM variants WHERE product_id = ?`,
                 [p.id]
               ) as Record<string, any>[];
-              products.push({
-                id: p.id,
-                sku: p.sku,
-                name: p.name,
-                description: p.description,
-                categoryId: p.category_id,
-                images: safeJson(p.images, []),
-                tags: safeJson(p.tags, []),
-                active: Boolean(p.active),
-                stock: p.stock ?? 0,
-                fabric: p.fabric,
-                care: p.care,
-                season: p.season ?? undefined,
-                brand: p.brand ?? undefined,
-                compareAt: p.compare_at ?? undefined,
-                variants: vRows.map((v: any) => ({
-                  id: v.id,
-                  sku: v.sku,
-                  name: v.name,
-                  size: v.size,
-                  color: v.color,
-                  colorCode: v.color_code,
-                  sellingPrice: v.selling_price,
-                  costPrice: v.cost_price,
-                  barcode: v.barcode,
-                })),
-              });
+              products.push(mapProductRow(p, vRows.map(mapVariantRow)));
             }
             set({ products, loading: false });
             return;
@@ -250,34 +228,9 @@ export const useData = create<DataState>()(
 
           if (error) throw error;
 
-          // Transform Supabase data to match dummy.ts types
-          const products = data.map(p => ({
-            id: p.id,
-            sku: p.sku,
-            name: p.name,
-            description: p.description,
-            categoryId: p.category_id,
-            images: p.images || [],
-            tags: p.tags || [],
-            active: p.active,
-            stock: p.stock ?? 0,
-            fabric: p.fabric,
-            care: p.care,
-            season: p.season ?? undefined,
-            brand: p.brand ?? undefined,
-            compareAt: p.compare_at ?? undefined,
-            variants: p.variants.map((v: any) => ({
-              id: v.id,
-              sku: v.sku,
-              name: v.name,
-              size: v.size,
-              color: v.color,
-              colorCode: v.color_code,
-              sellingPrice: v.selling_price,
-              costPrice: v.cost_price,
-              barcode: v.barcode
-            }))
-          }));
+          const products = data.map((p: any) =>
+            mapProductRow(p, (p.variants ?? []).map(mapVariantRow))
+          );
 
           set({ products, loading: false });
         } catch (error: any) {
@@ -295,12 +248,7 @@ export const useData = create<DataState>()(
               `SELECT * FROM categories WHERE store_id = ? ORDER BY name`,
               [STORE_ID]
             ) as Record<string, any>[];
-            const categories = rows.map((c: any) => ({
-              id: c.id,
-              name: c.name,
-              slug: c.slug,
-            }));
-            set({ categories, loading: false });
+            set({ categories: rows.map(mapCategoryRow), loading: false });
             return;
           } catch (err: any) {
             console.error("[powersync] fetchCategories error:", err);
@@ -320,13 +268,7 @@ export const useData = create<DataState>()(
 
           if (error) throw error;
 
-          const categories = data.map(c => ({
-            id: c.id,
-            name: c.name,
-            slug: c.slug
-          }));
-
-          set({ categories, loading: false });
+          set({ categories: data.map(mapCategoryRow), loading: false });
         } catch (error: any) {
           set({ error: error.message, loading: false });
         }
@@ -342,19 +284,7 @@ export const useData = create<DataState>()(
               `SELECT * FROM customers WHERE store_id = ? ORDER BY name`,
               [STORE_ID]
             ) as Record<string, any>[];
-            const customers = rows.map((c: any) => ({
-              id: c.id,
-              name: c.name,
-              phone: c.phone,
-              totalPurchases: c.total_purchases ?? 0,
-              visitCount: c.visit_count ?? 0,
-              email: c.email ?? undefined,
-              address: c.address ?? undefined,
-              birthday: c.birthday ?? undefined,
-              notes: c.notes ?? undefined,
-              tags: safeJson(c.tags, []),
-            }));
-            set({ customers, loading: false });
+            set({ customers: rows.map(mapCustomerRow), loading: false });
             return;
           } catch (err: any) {
             console.error("[powersync] fetchCustomers error:", err);
@@ -374,20 +304,7 @@ export const useData = create<DataState>()(
 
           if (error) throw error;
 
-          const customers = data.map(c => ({
-            id: c.id,
-            name: c.name,
-            phone: c.phone,
-            totalPurchases: c.total_purchases,
-            visitCount: c.visit_count,
-            email: c.email ?? undefined,
-            address: c.address ?? undefined,
-            birthday: c.birthday ?? undefined,
-            notes: c.notes ?? undefined,
-            tags: c.tags ?? []
-          }));
-
-          set({ customers, loading: false });
+          set({ customers: data.map(mapCustomerRow), loading: false });
         } catch (error: any) {
           set({ error: error.message, loading: false });
         }
@@ -1122,14 +1039,7 @@ export const useData = create<DataState>()(
               `SELECT * FROM staff WHERE store_id = ? ORDER BY name`,
               [STORE_ID]
             ) as Record<string, any>[];
-            const staff = rows.map((st: any) => ({
-              id: st.id,
-              name: st.name,
-              role: st.role,
-              phone: st.phone,
-              active: Boolean(st.active),
-            }));
-            set({ staff, loading: false });
+            set({ staff: rows.map(mapStaffRow), loading: false });
             return;
           } catch (err: any) {
             console.error("[powersync] fetchStaff error:", err);
@@ -1149,15 +1059,7 @@ export const useData = create<DataState>()(
 
           if (error) throw error;
 
-          const staff = data.map((st) => ({
-            id: st.id,
-            name: st.name,
-            role: st.role,
-            phone: st.phone,
-            active: st.active,
-          }));
-
-          set({ staff });
+          set({ staff: data.map(mapStaffRow) });
         } catch (error: any) {
           set({ error: error.message });
         }
@@ -1173,44 +1075,13 @@ export const useData = create<DataState>()(
               `SELECT * FROM transactions WHERE store_id = ? ORDER BY created_at DESC LIMIT 500`,
               [STORE_ID]
             ) as Record<string, any>[];
-            const transactions = [];
+            const transactions: Transaction[] = [];
             for (const t of rows) {
               const iRows = await psDb.getAll(
                 `SELECT * FROM transaction_items WHERE transaction_id = ?`,
                 [t.id]
               ) as Record<string, any>[];
-              transactions.push({
-                id: t.id,
-                number: t.number,
-                cashier: t.cashier,
-                customerId: t.customer_id ?? undefined,
-                customerName: t.customer_name ?? undefined,
-                status: t.status,
-                paymentMethod: t.payment_method,
-                paymentStatus: t.payment_status,
-                subtotal: t.subtotal,
-                tax: t.tax,
-                discount: t.discount,
-                total: t.total,
-                amountPaid: t.amount_paid,
-                change: t.change,
-                qrisRef: t.qris_ref ?? undefined,
-                photoProof: t.photo_proof ?? undefined,
-                createdAt: t.created_at,
-                items: iRows.map((i: any) => ({
-                  productId: i.product_id,
-                  variantId: i.variant_id,
-                  name: i.name,
-                  sku: i.sku,
-                  size: i.size,
-                  color: i.color,
-                  quantity: i.quantity,
-                  unitPrice: i.unit_price,
-                  costPrice: i.cost_price ?? 0,
-                  discount: i.discount,
-                  total: i.total,
-                })),
-              });
+              transactions.push(mapTransactionRow(t, iRows.map(mapTransactionItemRow)));
             }
             set({ transactions, loading: false });
             return;
@@ -1236,38 +1107,9 @@ export const useData = create<DataState>()(
 
           if (error) throw error;
 
-          const transactions = data.map((t) => ({
-            id: t.id,
-            number: t.number,
-            cashier: t.cashier,
-            customerId: t.customer_id ?? undefined,
-            customerName: t.customer_name ?? undefined,
-            status: t.status,
-            paymentMethod: t.payment_method,
-            paymentStatus: t.payment_status,
-            subtotal: t.subtotal,
-            tax: t.tax,
-            discount: t.discount,
-            total: t.total,
-            amountPaid: t.amount_paid,
-            change: t.change,
-            qrisRef: t.qris_ref ?? undefined,
-            photoProof: (t as any).photo_proof ?? undefined,
-            createdAt: t.created_at,
-            items: (t.transaction_items ?? []).map((i: any) => ({
-              productId: i.product_id,
-              variantId: i.variant_id,
-              name: i.name,
-              sku: i.sku,
-              size: i.size,
-              color: i.color,
-              quantity: i.quantity,
-              unitPrice: i.unit_price,
-              costPrice: i.cost_price ?? 0,
-              discount: i.discount,
-              total: i.total,
-            })),
-          }));
+          const transactions = data.map((t: any) =>
+            mapTransactionRow(t, (t.transaction_items ?? []).map(mapTransactionItemRow))
+          );
 
           set({ transactions });
         } catch (error: any) {
@@ -1285,20 +1127,7 @@ export const useData = create<DataState>()(
               `SELECT * FROM shifts WHERE store_id = ? ORDER BY opened_at DESC LIMIT 100`,
               [STORE_ID]
             ) as Record<string, any>[];
-            const shifts = rows.map((s: any) => ({
-              id: s.id,
-              staff_name: s.staff_name,
-              opened_at: s.opened_at,
-              closed_at: s.closed_at ?? undefined,
-              startingCash: s.starting_cash,
-              endingCash: s.ending_cash ?? undefined,
-              totalTransactions: s.total_transactions,
-              totalSales: s.total_sales,
-              totalQris: s.total_qris,
-              totalCash: s.total_cash,
-              status: s.status,
-            }));
-            set({ shifts, loading: false });
+            set({ shifts: rows.map(mapShiftRow), loading: false });
             return;
           } catch (err: any) {
             console.error("[powersync] fetchShifts error:", err);
@@ -1319,21 +1148,7 @@ export const useData = create<DataState>()(
 
           if (error) throw error;
 
-          const shifts = data.map((s) => ({
-            id: s.id,
-            staff_name: s.staff_name,
-            opened_at: s.opened_at,
-            closed_at: s.closed_at ?? undefined,
-            startingCash: s.starting_cash,
-            endingCash: s.ending_cash ?? undefined,
-            totalTransactions: s.total_transactions,
-            totalSales: s.total_sales,
-            totalQris: s.total_qris,
-            totalCash: s.total_cash,
-            status: s.status,
-          }));
-
-          set({ shifts });
+          set({ shifts: data.map(mapShiftRow) });
         } catch (error: any) {
           set({ error: error.message });
         }
