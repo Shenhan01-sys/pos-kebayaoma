@@ -61,6 +61,123 @@ export default function PrintBarcodeModal({
     }));
   };
 
+  // Direct print via browser — supports thermal printer (Bluetooth/USB/WiFi)
+  const handleDirectPrint = () => {
+    const labelWidth = labelSize === "60x30" ? 60 : labelSize === "50x25" ? 50 : 40;
+    const labelHeight = labelSize === "60x30" ? 30 : labelSize === "50x25" ? 25 : 20;
+
+    // Collect labels
+    const labels: { name: string; color?: string; size: string; price: number; barcode: string; }[] = [];
+    allVariants.forEach(({ product, variant }) => {
+      const count = selectedVariants[variant.id] || 0;
+      if (count === 0) return;
+      for (let c = 0; c < count; c++) {
+        labels.push({
+          name: product.name,
+          color: variant.color,
+          size: variant.size,
+          price: variant.sellingPrice,
+          barcode: variant.barcode || variant.sku,
+        });
+      }
+    });
+
+    if (labels.length === 0) return;
+
+    // Generate barcode SVGs
+    const labelHTML = labels.map((label) => {
+      const canvas = document.createElement("canvas");
+      JsBarcode(canvas, label.barcode, {
+        format: "CODE128",
+        width: 2,
+        height: 50,
+        displayValue: true,
+        fontSize: 10,
+        margin: 0,
+      });
+      const barcodeImg = canvas.toDataURL("image/png");
+
+      return `
+        <div class="label" style="width:${labelWidth}mm;height:${labelHeight}mm;">
+          <div class="label-barcode">
+            <img src="${barcodeImg}" style="max-width:100%;max-height:${labelHeight * 0.6}mm;" />
+          </div>
+          <div class="label-info">
+            <div class="label-name">${label.name}</div>
+            ${label.color ? `<div class="label-color">${label.color}</div>` : ""}
+            <div class="label-size">Size: ${label.size}</div>
+            <div class="label-price">Rp ${label.price.toLocaleString("id-ID")}</div>
+          </div>
+        </div>`;
+    }).join("");
+
+    const printWindow = window.open("", "_blank", "width=400,height=600");
+    if (!printWindow) {
+      alert("Popup diblokir browser. Izinkan popup untuk print barcode.");
+      return;
+    }
+
+    printWindow.document.write(`<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Print Barcode Labels</title>
+<style>
+  @page {
+    size: ${labelWidth}mm ${labelHeight}mm;
+    margin: 0;
+  }
+  body {
+    margin: 0;
+    padding: 0;
+    font-family: "Helvetica", "Arial", sans-serif;
+  }
+  .label {
+    display: flex;
+    align-items: center;
+    box-sizing: border-box;
+    padding: 1mm;
+    page-break-after: always;
+    overflow: hidden;
+  }
+  .label-barcode {
+    flex: 0 0 65%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .label-info {
+    flex: 1;
+    padding-left: 1mm;
+    font-size: 7pt;
+    line-height: 1.3;
+    color: #3a1430;
+  }
+  .label-name {
+    font-weight: bold;
+    font-size: 8pt;
+    margin-bottom: 0.5mm;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .label-color { color: #666; font-size: 6pt; }
+  .label-size { color: #666; font-size: 6pt; }
+  .label-price { font-weight: bold; color: #775533; margin-top: 0.5mm; }
+</style>
+</head>
+<body>
+${labelHTML}
+</body>
+</html>`);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+      printWindow.print();
+      printWindow.close();
+    }, 500);
+  };
+
   // Print handler - generate PDF with multi-label grid on A4
   const handlePrint = () => {
     const labelWidth = labelSize === "60x30" ? 60 : labelSize === "50x25" ? 50 : 40;
@@ -352,24 +469,36 @@ export default function PrintBarcodeModal({
           </div>
 
           {/* Footer */}
-          <div className="sticky bottom-0 bg-white border-t border-gray-200 p-6 flex items-center justify-between">
+          <div className="sticky bottom-0 bg-white border-t border-gray-200 p-6 flex items-center justify-between gap-2">
             <button
               onClick={onClose}
               className="px-6 py-3 text-gray-700 hover:bg-gray-200 rounded-xl font-medium transition"
             >
               Cancel
             </button>
-            <button
-              onClick={handlePrint}
-              disabled={totalLabels === 0}
-              className="px-8 py-3 bg-[#775533] text-white rounded-xl hover:bg-[#775533]/90 font-bold transition flex items-center gap-2 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <svg
-                className="w-5 h-5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
+            <div className="flex gap-2">
+              <button
+                onClick={handleDirectPrint}
+                disabled={totalLabels === 0}
+                title="Print langsung ke printer thermal (Bluetooth/USB/WiFi) via browser print dialog"
+                className="px-6 py-3 bg-white border-2 border-[#775533] text-[#775533] rounded-xl hover:bg-[#775533]/5 font-bold transition flex items-center gap-2 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
               >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L4 16m0 0l2-2m-2 2h16M6 6l2-2m0 0L6 2m2 2H4m16 0v4M4 6v4m16 4v4M4 14v4" />
+                </svg>
+                Direct Print
+              </button>
+              <button
+                onClick={handlePrint}
+                disabled={totalLabels === 0}
+                className="px-8 py-3 bg-[#775533] text-white rounded-xl hover:bg-[#775533]/90 font-bold transition flex items-center gap-2 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -379,6 +508,7 @@ export default function PrintBarcodeModal({
               </svg>
               Print {totalLabels} Labels
             </button>
+            </div>
           </div>
         </DialogPanel>
       </div>
