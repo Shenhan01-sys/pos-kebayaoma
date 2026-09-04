@@ -10,7 +10,7 @@ const admin = createClient(url, serviceRoleKey, {
 
 const staffEmail = (staffId: string) => `staff-${staffId}@kebayaoma.local`;
 
-const ROLE_RE = /^(admin|manager|cashier)$/;
+const ROLE_RE = /^(manager|staff)$/;
 const PIN_RE = /^\d{4,6}$/;
 
 async function requireAdmin(req: NextRequest): Promise<{ ok: true; userId: string } | { ok: false; res: NextResponse }> {
@@ -26,8 +26,8 @@ async function requireAdmin(req: NextRequest): Promise<{ ok: true; userId: strin
     .eq("user_id", data.user.id)
     .maybeSingle();
 
-  if (!staff || !staff.active || staff.role !== "admin") {
-    return { ok: false, res: NextResponse.json({ error: "Hanya admin yang bisa mengelola staff" }, { status: 403 }) };
+  if (!staff || !staff.active || staff.role !== "manager") {
+    return { ok: false, res: NextResponse.json({ error: "Hanya manager yang bisa mengelola staff" }, { status: 403 }) };
   }
 
   return { ok: true, userId: data.user.id };

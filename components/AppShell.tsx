@@ -24,11 +24,11 @@ const links: { href: string; label: string; icon: IconName }[] = [
   { href: "/settings", label: "Pengaturan", icon: "settings" },
 ];
 
-const CASHIER_ALLOWED = ["/", "/pos", "/transactions"];
+const STAFF_ALLOWED = ["/", "/pos", "/transactions"];
 
 function canAccess(href: string, role?: string) {
-  if (!role || role === "manager" || role === "admin") return true;
-  return CASHIER_ALLOWED.includes(href);
+  if (!role || role === "manager") return true;
+  return STAFF_ALLOWED.includes(href);
 }
 
 const PUBLIC_PREFIXES = ["/product/"];
@@ -53,7 +53,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   // RBAC: redirect cashiers away from restricted pages
   useEffect(() => {
-    if (auth.staff?.role === "cashier" && !isPublic && !canAccess(pathname, auth.staff.role)) {
+    if (auth.staff?.role === "staff" && !isPublic && !canAccess(pathname, auth.staff.role)) {
       router.replace("/pos");
     }
   }, [auth.staff?.role, pathname, isPublic, router]);

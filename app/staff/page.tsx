@@ -8,16 +8,16 @@ import { Icon } from "@/components/icons";
 export default function StaffPage() {
   const { staff, addStaff, updateStaff, deleteStaff } = useData();
   const auth = useAuth();
-  const isAdmin = auth.staff?.role === "admin";
+  const isManager = auth.staff?.role === "manager";
   const [editing, setEditing] = useState<Staff | null>(null);
   const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [form, setForm] = useState({ name: "", pin: "", role: "cashier" as Role, phone: "", active: true });
+  const [form, setForm] = useState({ name: "", pin: "", role: "staff" as Role, phone: "", active: true });
   const [pinError, setPinError] = useState<string | null>(null);
   const [modalError, setModalError] = useState<string | null>(null);
 
   function openAdd() {
-    setForm({ name: "", pin: "", role: "cashier", phone: "", active: true });
+    setForm({ name: "", pin: "", role: "staff", phone: "", active: true });
     setAdding(true);
     setEditing(null);
     setPinError(null);
@@ -31,7 +31,7 @@ export default function StaffPage() {
     setModalError(null);
   }
 
-  const adminCount = staff.filter((s) => s.role === "admin" && s.active).length;
+  const managerCount = staff.filter((s) => s.role === "manager" && s.active).length;
 
   async function save() {
     if (!form.name) return;
@@ -44,8 +44,8 @@ export default function StaffPage() {
       }
       setPinError(null);
 
-      if (editing.role === "admin" && editing.active && (form.role !== "admin" || !form.active) && adminCount <= 1) {
-        setModalError("Tidak ada admin lain yang aktif. Tidak bisa menonaktifkan/menurunkan admin terakhir.");
+      if (editing.role === "manager" && editing.active && (form.role !== "manager" || !form.active) && managerCount <= 1) {
+        setModalError("Tidak ada manager lain yang aktif. Tidak bisa menonaktifkan/menurunkan manager terakhir.");
         return;
       }
 
@@ -87,8 +87,8 @@ export default function StaffPage() {
       alert("Tidak bisa menghapus akun sendiri.");
       return;
     }
-    if (s.role === "admin" && adminCount <= 1) {
-      alert("Tidak bisa menghapus admin terakhir. Tambahkan admin lain dulu.");
+    if (s.role === "manager" && managerCount <= 1) {
+      alert("Tidak bisa menghapus manager terakhir. Tambahkan manager lain dulu.");
       return;
     }
     if (!confirm(`Hapus ${s.name}? Akun login staff ini juga akan dihapus.`)) return;
@@ -118,11 +118,10 @@ export default function StaffPage() {
     return () => window.removeEventListener("keydown", onKey);
   }, [adding, editing]);
 
-  const roleLabel: Record<Role, string> = { admin: "Admin", manager: "Manager", cashier: "Kasir" };
+  const roleLabel: Record<Role, string> = { manager: "Manager", staff: "Staff" };
   const rolePill: Record<Role, string> = {
-    admin: "pill-violet",
-    manager: "pill-apricot",
-    cashier: "pill-muted",
+    manager: "pill-violet",
+    staff: "pill-muted",
   };
   const initials = (n: string) =>
     n.split(" ").filter(Boolean).map((w) => w[0] ?? "").slice(0, 2).join("").toUpperCase();
@@ -131,16 +130,16 @@ export default function StaffPage() {
     <div>
       <div className="mb-4 flex items-center justify-between">
         <h1 className="text-2xl font-extrabold tracking-tight text-ink">Staff & Peran</h1>
-        {isAdmin && (
+        {isManager && (
           <button onClick={openAdd} className="btn-primary">
             <Icon name="plus" size={16} /> Staff
           </button>
         )}
       </div>
 
-      {!isAdmin && (
+      {!isManager && (
         <div className="mb-4 rounded-2xl bg-apricot/15 px-4 py-3 text-sm text-ink">
-          Hanya admin yang bisa menambah, mengubah, atau menghapus staff.
+          Hanya manager yang bisa menambah, mengubah, atau menghapus staff.
         </div>
       )}
 
@@ -165,7 +164,7 @@ export default function StaffPage() {
               </div>
               <div className="flex shrink-0 items-center gap-1">
                 <span className={`pill ${rolePill[s.role]}`}>{roleLabel[s.role]}</span>
-                {isAdmin && (
+                {isManager && (
                   <>
                     <button onClick={() => openEdit(s)} className="btn-primary px-2.5 py-1 text-xs">Edit</button>
                     <button onClick={() => remove(s)} disabled={busy} className="btn-danger px-2.5 py-1 text-xs">Hapus</button>
@@ -204,9 +203,8 @@ export default function StaffPage() {
               <label className="block">
                 <span className="mb-1 block text-xs font-medium text-gray-600">Peran</span>
                 <select className="input" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as Role })}>
-                  <option value="admin">Admin</option>
                   <option value="manager">Manager</option>
-                  <option value="cashier">Kasir</option>
+                  <option value="staff">Staff</option>
                 </select>
               </label>
               <label className="block">

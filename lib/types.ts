@@ -2,7 +2,7 @@
 // These intentionally match the shapes already used in lib/dummy.ts so the
 // Zustand stores can be swapped to Supabase with minimal UI changes.
 
-export type Role = "admin" | "manager" | "cashier";
+export type Role = "manager" | "staff";
 
 export interface StoreRow {
   id: string;

@@ -42,8 +42,9 @@ function todayStr() {
 
 export default function TransactionsPage() {
   const auth = useAuth();
+  const isStaff = auth.staff?.role === "staff";
   const canManage =
-    auth.staff?.role === "manager" || auth.staff?.role === "admin" || !auth.staff;
+    auth.staff?.role === "manager" || !auth.staff;
   const [all, setAll] = useState<Transaction[]>([]);
   const [dateFilter, setDateFilter] = useState<string>(todayStr());
   const [methodFilter, setMethodFilter] = useState<PaymentMethod | "all">("all");
@@ -61,16 +62,17 @@ export default function TransactionsPage() {
   }, []);
 
   const dayTx = useMemo(() => {
+    const effectiveDate = isStaff ? todayStr() : dateFilter;
     return all
       .filter((t) => {
         if (!showVoided && (t.status === "cancelled" || t.status === "refunded"))
           return false;
-        if (dateFilter && t.createdAt.slice(0, 10) !== dateFilter) return false;
+        if (effectiveDate && t.createdAt.slice(0, 10) !== effectiveDate) return false;
         if (methodFilter !== "all" && t.paymentMethod !== methodFilter) return false;
         return true;
       })
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-  }, [all, dateFilter, methodFilter, showVoided]);
+  }, [all, dateFilter, methodFilter, showVoided, isStaff]);
 
   const rows = useMemo<ItemRow[]>(() => {
     const out: ItemRow[] = [];
@@ -133,9 +135,10 @@ export default function TransactionsPage() {
             Tanggal
             <input
               type="date"
-              value={dateFilter}
+              value={isStaff ? todayStr() : dateFilter}
               onChange={(e) => setDateFilter(e.target.value)}
-              className="input ml-2 py-1.5 text-sm"
+              disabled={isStaff}
+              className="input ml-2 py-1.5 text-sm disabled:opacity-60"
             />
           </label>
           <label className="text-xs text-gray-600">

@@ -8,9 +8,9 @@ import type { Staff } from "@/store/data";
 const staffEmail = (staffId: string) => `staff-${staffId}@kebayaoma.local`;
 
 const demoStaff: Staff = {
-  id: "demo-admin",
+  id: "demo-manager",
   name: "Demo Kasir",
-  role: "admin",
+  role: "manager",
   active: true,
 };
 
