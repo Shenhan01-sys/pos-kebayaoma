@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { formatRupiah, type Product, type Variant } from "@/lib/dummy";
 import { useCart } from "@/store/cart";
 import { useData } from "@/store/data";
@@ -28,6 +28,28 @@ export default function PosPage() {
   const [customName, setCustomName] = useState("");
   const [customPrice, setCustomPrice] = useState("");
   const [customSeriesId, setCustomSeriesId] = useState("");
+
+  // HID barcode scanner support — auto-focus hidden input
+  const scanInputRef = useRef<HTMLInputElement>(null);
+  const [scanBuffer, setScanBuffer] = useState("");
+
+  // Re-focus hidden input when modals close
+  useEffect(() => {
+    if (!picker && !checkout && !scannerOpen && !customOpen) {
+      scanInputRef.current?.focus();
+    }
+  }, [picker, checkout, scannerOpen, customOpen]);
+
+  function onScanKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter") {
+      const code = scanBuffer.trim();
+      if (code) {
+        handleScan(code);
+        setScanBuffer("");
+      }
+      e.preventDefault();
+    }
+  }
 
   const allSeries = products.flatMap((p) =>
     p.variants.map((v) => ({
@@ -66,7 +88,7 @@ export default function PosPage() {
     );
 
   return (
-    <div className="flex flex-col gap-4 lg:h-[calc(100vh-2.5rem)] lg:flex-row">
+    <div className="flex flex-col gap-4 lg:h-[calc(100vh-2.5rem)] lg:flex-row" onClick={() => scanInputRef.current?.focus()}>
       {/* Catalog */}
       <section className="flex min-h-0 flex-1 flex-col">
         <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -160,6 +182,18 @@ export default function PosPage() {
             <p className="col-span-full text-sm text-gray-600">Tidak ada produk.</p>
           )}
         </div>
+
+        {/* Hidden input for HID barcode scanner (USB/Bluetooth) */}
+        <input
+          ref={scanInputRef}
+          value={scanBuffer}
+          onChange={(e) => setScanBuffer(e.target.value)}
+          onKeyDown={onScanKeyDown}
+          onBlur={() => setTimeout(() => scanInputRef.current?.focus(), 100)}
+          className="absolute opacity-0 pointer-events-none h-0 w-0"
+          aria-label="Scanner input"
+          autoComplete="off"
+        />
       </section>
 
       {/* Cart */}
