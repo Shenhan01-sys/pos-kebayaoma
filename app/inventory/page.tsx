@@ -19,6 +19,8 @@ export default function InventoryPage() {
   const [reason, setReason] = useState<Reason>("Penyesuaian");
   const [note, setNote] = useState("");
   const [tab, setTab] = useState<"stock" | "log">("stock");
+  const [busy, setBusy] = useState(false);
+  const [applyError, setApplyError] = useState<string | null>(null);
 
   const active = products.filter((p) => p.active);
   const low = active.filter((p) => p.stock <= 5);
@@ -29,9 +31,11 @@ export default function InventoryPage() {
     setQty(1);
     setReason("Penyesuaian");
     setNote("");
+    setBusy(false);
+    setApplyError(null);
   }
-  function apply() {
-    if (!stockOpen || qty <= 0) return;
+  async function apply() {
+    if (!stockOpen || qty <= 0 || busy) return;
     if (mode === "out" && qty > stockOpen.current) {
       const ok = confirm(
         `Stok ${stockOpen.productName} hanya ${stockOpen.current}, mau kurangi ${qty}? Kelebihan akan diabaikan (stok jadi 0).`
@@ -40,8 +44,18 @@ export default function InventoryPage() {
     }
     const delta = mode === "in" ? qty : -qty;
     const type = mode === "in" ? "restock" : "adjustment";
-    adjustStock(stockOpen.productId, delta, type, cashierName, reason, note);
-    setStockOpen(null);
+    setBusy(true);
+    setApplyError(null);
+    try {
+      const ok = await adjustStock(stockOpen.productId, delta, type, cashierName, reason, note);
+      if (!ok) {
+        setApplyError(useData.getState().error ?? "Gagal menyimpan penyesuaian stok.");
+        return;
+      }
+      setStockOpen(null);
+    } finally {
+      setBusy(false);
+    }
   }
   const newStock = stockOpen ? Math.max(0, stockOpen.current + (mode === "in" ? qty : -qty)) : 0;
 
@@ -185,9 +199,12 @@ export default function InventoryPage() {
             </select>
             <label className="mb-1 block text-sm text-olive">Catatan</label>
             <input value={note} onChange={(e) => setNote(e.target.value)} className="input mb-4" />
+            {applyError && (
+              <p className="mb-3 rounded-xl bg-danger/10 px-3 py-2 text-sm font-medium text-danger">{applyError}</p>
+            )}
             <div className="flex gap-2">
-              <button onClick={() => setStockOpen(null)} className="btn-ghost flex-1">Batal</button>
-              <button onClick={apply} disabled={qty <= 0} className="btn-violet flex-1 disabled:opacity-40">Simpan</button>
+              <button onClick={() => setStockOpen(null)} disabled={busy} className="btn-ghost flex-1 disabled:opacity-40">Batal</button>
+              <button onClick={apply} disabled={qty <= 0 || busy} className="btn-violet flex-1 disabled:opacity-40">{busy ? "Menyimpan…" : "Simpan"}</button>
             </div>
           </div>
         </div>

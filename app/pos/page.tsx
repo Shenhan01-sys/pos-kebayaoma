@@ -32,13 +32,34 @@ export default function PosPage() {
   // HID barcode scanner support — auto-focus hidden input
   const scanInputRef = useRef<HTMLInputElement>(null);
   const [scanBuffer, setScanBuffer] = useState("");
+  const [scanMsg, setScanMsg] = useState<string | null>(null);
+  const scanMsgTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function focusScan() {
+    // Jangan rebut fokus dari input/select yang sedang dipakai kasir
+    if (document.activeElement === document.body) {
+      scanInputRef.current?.focus();
+    }
+  }
+
+  function flashScanMsg(msg: string) {
+    setScanMsg(msg);
+    if (scanMsgTimer.current) clearTimeout(scanMsgTimer.current);
+    scanMsgTimer.current = setTimeout(() => setScanMsg(null), 2500);
+  }
 
   // Re-focus hidden input when modals close
   useEffect(() => {
     if (!picker && !checkout && !scannerOpen && !customOpen) {
-      scanInputRef.current?.focus();
+      focusScan();
     }
   }, [picker, checkout, scannerOpen, customOpen]);
+
+  useEffect(() => {
+    return () => {
+      if (scanMsgTimer.current) clearTimeout(scanMsgTimer.current);
+    };
+  }, []);
 
   function onScanKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === "Enter") {
@@ -75,6 +96,7 @@ export default function PosPage() {
         }
       }
     }
+    flashScanMsg(`Barcode tidak dikenal: ${code}`);
   };
 
   const filtered = products
@@ -83,14 +105,19 @@ export default function PosPage() {
       query
         ? p.name.toLowerCase().includes(query.toLowerCase()) ||
           p.sku.toLowerCase().includes(query.toLowerCase()) ||
-          p.tags.some((t) => t.includes(query.toLowerCase()))
+          p.tags.some((t) => t.toLowerCase().includes(query.toLowerCase()))
         : true
     );
 
   return (
-    <div className="flex flex-col gap-4 lg:h-[calc(100vh-2.5rem)] lg:flex-row" onClick={() => scanInputRef.current?.focus()}>
+    <div className="flex flex-col gap-4 lg:h-[calc(100vh-2.5rem)] lg:flex-row" onClick={focusScan}>
       {/* Catalog */}
       <section className="flex min-h-0 flex-1 flex-col">
+        {scanMsg && (
+          <div className="mb-3 flex items-center gap-2 rounded-2xl bg-danger/10 px-3 py-2.5 text-sm font-medium text-danger">
+            <Icon name="alert" size={16} /> {scanMsg}
+          </div>
+        )}
         <div className="mb-3 flex flex-wrap items-center gap-2">
           <div className="relative flex-1">
             <Icon

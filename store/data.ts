@@ -126,7 +126,7 @@ interface DataState {
   updateVariant: (productId: string, variantId: string, patch: Partial<Variant>) => Promise<void>;
   removeVariant: (productId: string, variantId: string) => Promise<void>;
 
-  // stock
+  // stock — return true jika tersimpan
   adjustStock: (
     productId: string,
     quantity: number,
@@ -134,7 +134,7 @@ interface DataState {
     staff: string,
     reason?: string,
     note?: string
-  ) => Promise<void>;
+  ) => Promise<boolean>;
 
   // customers
   addCustomer: (c: Omit<Customer, "id">) => Promise<void>;
@@ -777,7 +777,7 @@ export const useData = create<DataState>()(
 
       adjustStock: async (productId, quantity, type, staff, reason, note) => {
         const product = get().products.find((p) => p.id === productId);
-        if (!product) return;
+        if (!product) return false;
 
         const newStock = Math.max(0, (product.stock ?? 0) + quantity);
 
@@ -809,7 +809,7 @@ export const useData = create<DataState>()(
               ...s.movements,
             ],
           }));
-          return;
+          return true;
         }
 
         if (!isSupabaseReady) {
@@ -833,7 +833,7 @@ export const useData = create<DataState>()(
               ...s.movements,
             ],
           }));
-          return;
+          return true;
         }
 
         try {
@@ -880,8 +880,10 @@ export const useData = create<DataState>()(
               ...s.movements
             ]
           }));
+          return true;
         } catch (error: any) {
           set({ error: error.message });
+          return false;
         }
       },
 
