@@ -96,7 +96,7 @@ create table if not exists public.staff (
   store_id uuid not null references public.stores(id) on delete cascade,
   name     text not null,
   pin      text not null,            -- hash (bcrypt/argon) sebelum produksi
-  role     text not null check (role in ('admin','manager','cashier')),
+  role     text not null check (role in ('manager','staff')),
   phone    text,
   active   boolean not null default true
 );
@@ -113,7 +113,7 @@ create table if not exists public.transactions (
   customer_name  text,
   status         text not null default 'paid'
                   check (status in ('pending','paid','cancelled','refunded')),
-  payment_method text not null check (payment_method in ('qris','cash','transfer')),
+  payment_method text not null check (payment_method in ('qris','cash','transfer','shopee')),
   payment_status text not null default 'pending'
                   check (payment_status in ('pending','paid','failed','expired')),
   subtotal       numeric(12,2) not null default 0,
