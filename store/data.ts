@@ -1646,6 +1646,7 @@ export const useData = create<DataState>()(
           await get().fetchStaff();
         } catch (error: any) {
           set({ error: error.message });
+          throw error;
         }
       },
 
@@ -1670,6 +1671,7 @@ export const useData = create<DataState>()(
           await get().fetchStaff();
         } catch (error: any) {
           set({ error: error.message });
+          throw error;
         }
       },
 
@@ -1694,6 +1696,7 @@ export const useData = create<DataState>()(
           await get().fetchStaff();
         } catch (error: any) {
           set({ error: error.message });
+          throw error;
         }
       },
 

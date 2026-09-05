@@ -11,9 +11,14 @@ const admin = createClient(url, serviceRoleKey, {
 const staffEmail = (staffId: string) => `staff-${staffId}@kebayaoma.local`;
 
 const ROLE_RE = /^(manager|staff)$/;
-const PIN_RE = /^\d{4,6}$/;
+const PIN_RE = /^\d{6}$/; // Supabase Auth menolak password < 6 karakter
 
-async function requireAdmin(req: NextRequest): Promise<{ ok: true; userId: string } | { ok: false; res: NextResponse }> {
+interface Caller {
+  id: string;
+  store_id: string;
+}
+
+async function requireAdmin(req: NextRequest): Promise<{ ok: true; caller: Caller } | { ok: false; res: NextResponse }> {
   const token = req.headers.get("authorization")?.replace(/^Bearer /, "");
   if (!token) return { ok: false, res: NextResponse.json({ error: "Tidak terautentikasi" }, { status: 401 }) };
 
@@ -30,7 +35,18 @@ async function requireAdmin(req: NextRequest): Promise<{ ok: true; userId: strin
     return { ok: false, res: NextResponse.json({ error: "Hanya manager yang bisa mengelola staff" }, { status: 403 }) };
   }
 
-  return { ok: true, userId: data.user.id };
+  return { ok: true, caller: { id: staff.id as string, store_id: staff.store_id as string } };
+}
+
+async function otherActiveManagerCount(storeId: string, excludeId: string): Promise<number> {
+  const { count } = await admin
+    .from("staff")
+    .select("id", { count: "exact", head: true })
+    .eq("store_id", storeId)
+    .eq("role", "manager")
+    .eq("active", true)
+    .neq("id", excludeId);
+  return count ?? 0;
 }
 
 export async function POST(req: NextRequest) {
@@ -50,7 +66,7 @@ export async function POST(req: NextRequest) {
     case "create": {
       const { name, pin, role, phone, active } = body;
       if (!name?.trim()) return NextResponse.json({ error: "Nama wajib diisi" }, { status: 400 });
-      if (!PIN_RE.test(String(pin ?? ""))) return NextResponse.json({ error: "PIN harus 4-6 digit" }, { status: 400 });
+      if (!PIN_RE.test(String(pin ?? ""))) return NextResponse.json({ error: "PIN harus 6 digit angka" }, { status: 400 });
       if (!ROLE_RE.test(String(role ?? ""))) return NextResponse.json({ error: "Role tidak valid" }, { status: 400 });
 
       const { data: staff, error: insErr } = await admin
@@ -83,10 +99,26 @@ export async function POST(req: NextRequest) {
 
       const { data: existing, error: findErr } = await admin
         .from("staff")
-        .select("id, user_id")
+        .select("id, user_id, role, active, store_id")
         .eq("id", id)
+        .eq("store_id", auth.caller.store_id)
         .maybeSingle();
       if (findErr || !existing) return NextResponse.json({ error: "Staff tidak ditemukan" }, { status: 404 });
+
+      const demoteSelf =
+        existing.id === auth.caller.id &&
+        ((role !== undefined && role !== "manager") || active === false);
+      if (demoteSelf) {
+        return NextResponse.json({ error: "Tidak bisa menurunkan/menonaktifkan akun sendiri" }, { status: 400 });
+      }
+
+      const removingManager =
+        existing.role === "manager" &&
+        existing.active &&
+        ((role !== undefined && role !== "manager") || active === false);
+      if (removingManager && (await otherActiveManagerCount(auth.caller.store_id, existing.id)) === 0) {
+        return NextResponse.json({ error: "Tidak bisa menonaktifkan/menurunkan manager terakhir" }, { status: 400 });
+      }
 
       const patch: Record<string, any> = {};
       if (name !== undefined) {
@@ -106,7 +138,7 @@ export async function POST(req: NextRequest) {
       }
 
       if (pin !== undefined && pin !== "" && existing.user_id) {
-        if (!PIN_RE.test(String(pin))) return NextResponse.json({ error: "PIN harus 4-6 digit" }, { status: 400 });
+        if (!PIN_RE.test(String(pin))) return NextResponse.json({ error: "PIN harus 6 digit angka" }, { status: 400 });
         const { error: pwdErr } = await admin.auth.admin.updateUserById(existing.user_id, { password: String(pin) });
         if (pwdErr) return NextResponse.json({ error: pwdErr.message }, { status: 500 });
       }
@@ -120,10 +152,22 @@ export async function POST(req: NextRequest) {
 
       const { data: existing, error: findErr } = await admin
         .from("staff")
-        .select("id, user_id")
+        .select("id, user_id, role, active, store_id")
         .eq("id", id)
+        .eq("store_id", auth.caller.store_id)
         .maybeSingle();
       if (findErr || !existing) return NextResponse.json({ error: "Staff tidak ditemukan" }, { status: 404 });
+
+      if (existing.id === auth.caller.id) {
+        return NextResponse.json({ error: "Tidak bisa menghapus akun sendiri" }, { status: 400 });
+      }
+      if (
+        existing.role === "manager" &&
+        existing.active &&
+        (await otherActiveManagerCount(auth.caller.store_id, existing.id)) === 0
+      ) {
+        return NextResponse.json({ error: "Tidak bisa menghapus manager terakhir" }, { status: 400 });
+      }
 
       if (existing.user_id) {
         const { error: delUserErr } = await admin.auth.admin.deleteUser(existing.user_id);

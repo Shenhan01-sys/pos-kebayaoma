@@ -123,10 +123,10 @@ export interface StaffRow {
   id: string;
   store_id: string;
   name: string;
-  pin: string; // hashed before production
   role: Role;
   phone: string | null;
   active: boolean;
+  user_id: string | null; // Supabase Auth user; PIN = password akun ini (lihat 20250809_auth_pin.sql)
 }
 
 export type ShiftStatus = "open" | "closed" | "reconciled";

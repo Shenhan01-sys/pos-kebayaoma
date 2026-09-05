@@ -38,8 +38,8 @@ export default function StaffPage() {
     setModalError(null);
 
     if (editing) {
-      if (form.pin && (form.pin.length < 4 || form.pin.length > 6)) {
-        setPinError("PIN harus 4-6 digit");
+      if (form.pin && form.pin.length !== 6) {
+        setPinError("PIN harus 6 digit angka");
         return;
       }
       setPinError(null);
@@ -65,8 +65,8 @@ export default function StaffPage() {
         setBusy(false);
       }
     } else {
-      if (!form.pin || form.pin.length < 4 || form.pin.length > 6) {
-        setPinError("PIN harus 4-6 digit");
+      if (!form.pin || form.pin.length !== 6) {
+        setPinError("PIN harus 6 digit angka");
         return;
       }
       setPinError(null);
@@ -195,9 +195,9 @@ export default function StaffPage() {
               </label>
               <label className="block">
                 <span className="mb-1 block text-xs font-medium text-gray-600">
-                  {editing ? "PIN baru (4-6 digit, kosongkan jika tetap)" : "PIN (4-6 digit)"}
+                  {editing ? "PIN baru (6 digit, kosongkan jika tetap)" : "PIN (6 digit)"}
                 </span>
-                <input className="input" type="password" inputMode="numeric" maxLength={6} placeholder={editing ? "Kosongkan jika tetap" : "4-6 digit"} value={form.pin} onChange={(e) => { setForm({ ...form, pin: e.target.value.replace(/\D/g, "") }); setPinError(null); }} />
+                <input className="input" type="password" inputMode="numeric" maxLength={6} placeholder={editing ? "Kosongkan jika tetap" : "6 digit"} value={form.pin} onChange={(e) => { setForm({ ...form, pin: e.target.value.replace(/\D/g, "") }); setPinError(null); }} />
               </label>
               {pinError && <div className="text-xs font-semibold text-danger">{pinError}</div>}
               <label className="block">

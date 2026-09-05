@@ -76,7 +76,7 @@ export default function LoginScreen() {
   }
 
   const submit = async (value: string) => {
-    if (!selected || value.length < 4 || busy) return;
+    if (!selected || value.length !== 6 || busy) return;
     setBusy(true);
     setError(null);
     const err = await login(selected.id, value);
@@ -150,7 +150,7 @@ export default function LoginScreen() {
 
           <button
             onClick={() => submit(pin)}
-            disabled={pin.length < 4 || busy}
+            disabled={pin.length !== 6 || busy}
             className="btn-violet mt-4 w-full py-3.5 disabled:cursor-not-allowed disabled:opacity-40"
           >
             {busy ? "Memeriksa…" : `Masuk sebagai ${selected.name}`}
