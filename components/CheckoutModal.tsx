@@ -27,7 +27,7 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
   const s = useSettings();
   const auth = useAuth();
   const cashierName = auth.staff?.name ?? s.cashierName;
-  const { setTransactionStatus, recordCustomItem } = useData();
+  const { products, setTransactionStatus, recordCustomItem } = useData();
 
   const [method, setMethod] = useState<PaymentMethod>("qris");
   const [paid, setPaid] = useState<Transaction | null>(null);
@@ -185,6 +185,22 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
 
   async function finish() {
     setError(null);
+
+    const lacking = lines.filter((l) => {
+      const p = products.find((p) => p.id === l.productId);
+      return p ? l.quantity > p.stock : false;
+    });
+    if (lacking.length > 0) {
+      setError(
+        `Stok tidak cukup: ${lacking
+          .map((l) => {
+            const s = products.find((p) => p.id === l.productId)?.stock ?? 0;
+            return `${l.name} (minta ${l.quantity}, sisa ${s})`;
+          })
+          .join("; ")}. Kurangi qty di keranjang dulu.`
+      );
+      return;
+    }
 
     if (!photo) {
       setError("Foto bukti pembayaran wajib diunggah.");

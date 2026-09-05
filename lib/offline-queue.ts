@@ -52,10 +52,10 @@ export async function enqueueTransaction(
   try {
     const db = await openDb();
     await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction(STORE, "readwrite");
-      tx.objectStore(STORE).put(tx);
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
+      const idbTx = db.transaction(STORE, "readwrite");
+      idbTx.objectStore(STORE).put(tx);
+      idbTx.oncomplete = () => resolve();
+      idbTx.onerror = () => reject(idbTx.error);
     });
   } catch (err) {
     console.error("[offline-queue] enqueue error:", err);

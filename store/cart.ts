@@ -52,16 +52,19 @@ export const useCart = create<CartState>((set, get) => ({
   discount: 0,
   addVariant: (product, variant, qty = 1) =>
     set((state) => {
+      const cap = Math.max(0, product.stock ?? 0);
       const existing = state.lines.find((l) => l.variantId === variant.id);
       if (existing) {
+        const nextQty = Math.min(existing.quantity + qty, cap);
+        if (nextQty <= 0 || nextQty === existing.quantity) return state;
         return {
           lines: state.lines.map((l) =>
-            l.variantId === variant.id
-              ? { ...l, quantity: l.quantity + qty }
-              : l
+            l.variantId === variant.id ? { ...l, quantity: nextQty } : l
           ),
         };
       }
+      const startQty = Math.min(qty, cap);
+      if (startQty <= 0) return state;
       const line: CartLine = {
         key: variant.id,
         productId: product.id,
@@ -73,7 +76,7 @@ export const useCart = create<CartState>((set, get) => ({
         color: variant.color,
         unitPrice: variant.sellingPrice,
         costPrice: variant.costPrice,
-        quantity: qty,
+        quantity: startQty,
         discount: 0,
       };
       return { lines: [...state.lines, line] };
@@ -106,9 +109,13 @@ export const useCart = create<CartState>((set, get) => ({
     })),
   inc: (key) =>
     set((s) => ({
-      lines: s.lines.map((l) =>
-        l.variantId === key ? { ...l, quantity: l.quantity + 1 } : l
-      ),
+      lines: s.lines.map((l) => {
+        if (l.variantId !== key) return l;
+        if (l.custom && l.productId === "custom") return { ...l, quantity: l.quantity + 1 };
+        const stock = useData.getState().products.find((p) => p.id === l.productId)?.stock;
+        if (stock !== undefined && l.quantity + 1 > stock) return l; // mentok stok
+        return { ...l, quantity: l.quantity + 1 };
+      }),
     })),
   dec: (key) =>
     set((s) => ({
@@ -121,7 +128,15 @@ export const useCart = create<CartState>((set, get) => ({
   setQty: (key, qty) =>
     set((s) => ({
       lines: s.lines
-        .map((l) => (l.variantId === key ? { ...l, quantity: Math.max(0, qty) } : l))
+        .map((l) => {
+          if (l.variantId !== key) return l;
+          let next = Math.max(0, qty);
+          if (!(l.custom && l.productId === "custom")) {
+            const stock = useData.getState().products.find((p) => p.id === l.productId)?.stock;
+            if (stock !== undefined) next = Math.min(next, Math.max(0, stock));
+          }
+          return { ...l, quantity: next };
+        })
         .filter((l) => l.quantity > 0),
     })),
   remove: (key) =>

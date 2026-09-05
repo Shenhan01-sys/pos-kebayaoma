@@ -1370,6 +1370,10 @@ export const useData = create<DataState>()(
              }
             const saved: Transaction = { ...tx, id, customerId: customer?.id, createdAt: new Date().toISOString() };
             set((s) => ({ transactions: [saved, ...s.transactions] }));
+            // PowerSync lokal tanpa trigger DB — efek stok dikerjakan di client
+            if (saved.status === "paid") {
+              await get().applySaleSideEffects(saved);
+            }
             return saved;
           }
 
@@ -1389,6 +1393,9 @@ export const useData = create<DataState>()(
             return saved;
           }
 
+          // Simpan header sebagai pending dulu: trigger AFTER INSERT tidak boleh
+          // jalan sebelum items ada. Status final diterapkan via update di bawah,
+          // sehingga trigger pending->paid melihat items lengkap.
           const { data: header, error: headerError } = await supabase
             .from('transactions')
             .insert([{
@@ -1397,9 +1404,9 @@ export const useData = create<DataState>()(
               cashier: tx.cashier,
               customer_id: customer?.id ?? null,
               customer_name: tx.customerName ?? null,
-              status: tx.status,
+              status: 'pending',
               payment_method: tx.paymentMethod,
-              payment_status: tx.paymentStatus,
+              payment_status: 'pending',
               subtotal: tx.subtotal,
               tax: tx.tax,
               discount: tx.discount,
@@ -1433,15 +1440,30 @@ export const useData = create<DataState>()(
 
           if (itemsError) throw itemsError;
 
+          // Terapkan status final — trigger pending->paid jalan di sini (items sudah ada)
+          let finalStatus: Transaction["status"] = "pending";
+          let finalPaymentStatus: Transaction["paymentStatus"] = "pending";
+          if (tx.status !== "pending" || tx.paymentStatus !== "pending") {
+            const { data: updated, error: statusError } = await supabase
+              .from('transactions')
+              .update({ status: tx.status, payment_status: tx.paymentStatus })
+              .eq('id', header.id)
+              .select()
+              .single();
+            if (statusError) throw statusError;
+            finalStatus = updated.status;
+            finalPaymentStatus = updated.payment_status;
+          }
+
           const saved: Transaction = {
             id: header.id,
             number: header.number,
             cashier: header.cashier,
             customerId: header.customer_id ?? undefined,
             customerName: header.customer_name ?? undefined,
-            status: header.status,
+            status: finalStatus,
             paymentMethod: header.payment_method,
-            paymentStatus: header.payment_status,
+            paymentStatus: finalPaymentStatus,
             subtotal: header.subtotal,
             tax: header.tax,
             discount: header.discount,
@@ -1458,9 +1480,7 @@ export const useData = create<DataState>()(
             transactions: [saved, ...s.transactions.filter((x) => x.id !== saved.id)],
           }));
 
-          if (!isSupabaseReady && saved.status === "paid") {
-            await get().applySaleSideEffects(saved);
-          }
+          // Efek stok online dikerjakan trigger DB pending->paid (bukan client)
 
           return saved;
         } catch (error: any) {

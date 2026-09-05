@@ -33,6 +33,7 @@ const methodColor: Record<string, string> = {
   qris: "#D4954D",
   cash: "#775533",
   transfer: "#4a0e3f",
+  shopee: "#2f9e57",
 };
 
 export default function DashboardPage() {
@@ -71,8 +72,8 @@ export default function DashboardPage() {
     .filter((p) => p.stock <= 5)
     .map((p) => ({ ...p, product: p }));
 
-  const methodColor: Record<string, string> = { qris: C.apricot, cash: C.olive, transfer: C.violet };
-  const methodLabel: Record<string, string> = { qris: "QRIS", cash: "Tunai", transfer: "Transfer" };
+  const methodColor: Record<string, string> = { qris: C.apricot, cash: C.olive, transfer: C.violet, shopee: C.success };
+  const methodLabel: Record<string, string> = { qris: "QRIS", cash: "Tunai", transfer: "Transfer", shopee: "Shopee" };
 
   // ---- ECharts options (solid palette) ----
   const donutOption: EChartsCoreOption = {

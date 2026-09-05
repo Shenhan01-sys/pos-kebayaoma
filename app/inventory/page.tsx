@@ -32,6 +32,12 @@ export default function InventoryPage() {
   }
   function apply() {
     if (!stockOpen || qty <= 0) return;
+    if (mode === "out" && qty > stockOpen.current) {
+      const ok = confirm(
+        `Stok ${stockOpen.productName} hanya ${stockOpen.current}, mau kurangi ${qty}? Kelebihan akan diabaikan (stok jadi 0).`
+      );
+      if (!ok) return;
+    }
     const delta = mode === "in" ? qty : -qty;
     const type = mode === "in" ? "restock" : "adjustment";
     adjustStock(stockOpen.productId, delta, type, cashierName, reason, note);
