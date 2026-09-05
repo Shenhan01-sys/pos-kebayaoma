@@ -1058,9 +1058,9 @@ export const useData = create<DataState>()(
 
           if (error) throw error;
 
-          set({ staff: data.map(mapStaffRow) });
+          set({ staff: data.map(mapStaffRow), loading: false });
         } catch (error: any) {
-          set({ error: error.message });
+          set({ error: error.message, loading: false });
         }
       },
 
@@ -1110,9 +1110,9 @@ export const useData = create<DataState>()(
             mapTransactionRow(t, (t.transaction_items ?? []).map(mapTransactionItemRow))
           );
 
-          set({ transactions });
+          set({ transactions, loading: false });
         } catch (error: any) {
-          set({ error: error.message });
+          set({ error: error.message, loading: false });
         }
       },
 
@@ -1147,9 +1147,9 @@ export const useData = create<DataState>()(
 
           if (error) throw error;
 
-          set({ shifts: data.map(mapShiftRow) });
+          set({ shifts: data.map(mapShiftRow), loading: false });
         } catch (error: any) {
-          set({ error: error.message });
+          set({ error: error.message, loading: false });
         }
       },
 

@@ -2796,3 +2796,15 @@ export function getProductBySku(sku: string): Product | undefined {
 export function categoryName(id: string): string {
   return categories.find((c) => c.id === id)?.name ?? "—";
 }
+
+// Kunci hari dalam zona waktu lokal kasir (WIB di tablet). Jangan pakai
+// toISOString().slice(0,10) untuk filter harian — itu UTC dan geser 7 jam.
+export function toLocalDayKey(iso: string): string {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+export function todayLocalKey(): string {
+  return toLocalDayKey(new Date().toISOString());
+}

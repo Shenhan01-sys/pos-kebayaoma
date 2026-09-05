@@ -5,6 +5,8 @@ import Link from "next/link";
 import {
   transactions as dummyTx,
   formatRupiah,
+  toLocalDayKey,
+  todayLocalKey,
   type Transaction,
   type TransactionItem,
   type PaymentMethod,
@@ -37,7 +39,7 @@ interface ItemRow {
 }
 
 function todayStr() {
-  return new Date().toISOString().slice(0, 10);
+  return todayLocalKey();
 }
 
 export default function TransactionsPage() {
@@ -66,7 +68,7 @@ export default function TransactionsPage() {
       .filter((t) => {
         if (!showVoided && (t.status === "cancelled" || t.status === "refunded"))
           return false;
-        if (effectiveDate && t.createdAt.slice(0, 10) !== effectiveDate) return false;
+        if (effectiveDate && toLocalDayKey(t.createdAt) !== effectiveDate) return false;
         if (methodFilter !== "all" && t.paymentMethod !== methodFilter) return false;
         return true;
       })

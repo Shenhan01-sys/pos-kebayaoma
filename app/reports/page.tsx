@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { transactions as dummyTx, formatRupiah } from "@/lib/dummy";
+import { transactions as dummyTx, formatRupiah, toLocalDayKey } from "@/lib/dummy";
 import { getAllTransactions } from "@/store/cart";
 import { Icon, type IconName } from "@/components/icons";
 import dynamic from "next/dynamic";
@@ -71,7 +71,7 @@ export default function ReportsPage() {
 
   const byDay: Record<string, number> = {};
   inRange.forEach((t) => {
-    const d = t.createdAt.slice(0, 10);
+    const d = toLocalDayKey(t.createdAt);
     byDay[d] = (byDay[d] ?? 0) + t.total;
   });
   const days = Object.entries(byDay).sort();
