@@ -27,8 +27,9 @@ const links: { href: string; label: string; icon: IconName }[] = [
 const STAFF_ALLOWED = ["/", "/pos", "/transactions"];
 
 function canAccess(href: string, role?: string) {
-  if (!role || role === "manager") return true;
-  return STAFF_ALLOWED.includes(href);
+  if (role === "manager") return true;
+  if (role === "staff") return STAFF_ALLOWED.includes(href);
+  return false; // role tak dikenal / belum termuat = tidak ada akses (fail-closed)
 }
 
 const PUBLIC_PREFIXES = ["/product/"];

@@ -43,8 +43,7 @@ function todayStr() {
 export default function TransactionsPage() {
   const auth = useAuth();
   const isStaff = auth.staff?.role === "staff";
-  const canManage =
-    auth.staff?.role === "manager" || !auth.staff;
+  const canManage = auth.staff?.role === "manager";
   const [all, setAll] = useState<Transaction[]>([]);
   const [dateFilter, setDateFilter] = useState<string>(todayStr());
   const [methodFilter, setMethodFilter] = useState<PaymentMethod | "all">("all");

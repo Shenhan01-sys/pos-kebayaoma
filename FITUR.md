@@ -66,7 +66,7 @@ Palette: Beige `#F2F5E2`, Vanilla Custard `#E3DEA4`, Golden Apricot `#D4954D`, O
 
 ## H. Staff & Peran (`/staff`) — CRUD
 - [x] Tambah / Edit / Hapus staff
-- [x] Role: Admin / Manager / Kasir
+- [x] Role: Manager / Staff (RBAC 2-role; guard manager-terakhir + anti self-delete di API)
 - [x] PIN login via Supabase Auth, telepon, status aktif/nonaktif
 
 ## I. Transaksi (`/transactions`)

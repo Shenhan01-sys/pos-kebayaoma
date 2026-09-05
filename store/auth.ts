@@ -55,8 +55,8 @@ export const useAuth = create<AuthState>()((set) => ({
 
     if (session) {
       const profile = await loadStaffProfile(session.user.id);
-      if (!profile) {
-        // Session valid tapi staff tidak ditemukan (mis. user dihapus)
+      if (!profile || !profile.active) {
+        // Session valid tapi staff tidak ada / sudah dinonaktifkan
         await supabase.auth.signOut();
         session = null;
       } else {
@@ -69,7 +69,12 @@ export const useAuth = create<AuthState>()((set) => ({
     supabase.auth.onAuthStateChange(async (event, next) => {
       if (event === "SIGNED_IN" && next) {
         const profile = await loadStaffProfile(next.user.id);
-        set({ session: next, staff: profile });
+        if (!profile || !profile.active) {
+          await supabase.auth.signOut();
+          set({ session: null, staff: null });
+        } else {
+          set({ session: next, staff: profile });
+        }
       } else if (event === "TOKEN_REFRESHED" && next) {
         // Token diperbarui — jangan log out staff; sesi tetap valid.
         set({ session: next });
