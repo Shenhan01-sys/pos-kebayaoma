@@ -1395,6 +1395,16 @@ export const useData = create<DataState>()(
             return saved;
           }
 
+          // Nomor nota atomik dari server — aman untuk multi-kasir.
+          // RPC gagal = simpan gagal; jangan fallback ke nomor client (duplikat).
+          const { data: serverNumber, error: numberError } = await supabase.rpc(
+            'next_tx_number',
+            { p_store_id: process.env.NEXT_PUBLIC_STORE_ID }
+          );
+          if (numberError || !serverNumber) {
+            throw numberError ?? new Error("Gagal membuat nomor nota");
+          }
+
           // Simpan header sebagai pending dulu: trigger AFTER INSERT tidak boleh
           // jalan sebelum items ada. Status final diterapkan via update di bawah,
           // sehingga trigger pending->paid melihat items lengkap.
@@ -1402,7 +1412,7 @@ export const useData = create<DataState>()(
             .from('transactions')
             .insert([{
               store_id: process.env.NEXT_PUBLIC_STORE_ID,
-              number: tx.number,
+              number: serverNumber as string,
               cashier: tx.cashier,
               customer_id: customer?.id ?? null,
               customer_name: tx.customerName ?? null,
