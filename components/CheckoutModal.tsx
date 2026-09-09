@@ -28,11 +28,15 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
   const auth = useAuth();
   const cashierName = auth.staff?.name ?? s.cashierName;
   const { products, setTransactionStatus, recordCustomItem } = useData();
+  const activeStoreId = useData((s) => s.activeStoreId);
+  const stores = useData((s) => s.stores);
+  const storePrefix =
+    stores.find((t) => t.id === activeStoreId)?.prefix ?? "TRX-";
 
   const [method, setMethod] = useState<PaymentMethod>("qris");
   const [paid, setPaid] = useState<Transaction | null>(null);
   const [pendingId, setPendingId] = useState<string | null>(null);
-  const [txNumber] = useState(() => nextTxNumber());
+  const [txNumber] = useState(() => nextTxNumber(storePrefix));
   const [customPrompt, setCustomPrompt] = useState<TransactionItem[]>([]);
 
   const rawSubtotal = useMemo(
@@ -211,6 +215,16 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
     };
   }
 
+  async function saveTx(tx: Transaction): Promise<Transaction | null> {
+    const saved = await saveTx(tx);
+    if (!saved) {
+      // saveTransaction gagal (misal toko operasional belum dipilih) — tampilkan,
+      // jangan stuck diam. Transaksi offline tetap antre via saveTransaction.
+      setError(useData.getState().error ?? "Gagal menyimpan transaksi.");
+    }
+    return saved;
+  }
+
   async function finish() {
     setError(null);
 
@@ -242,7 +256,7 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
         return;
       }
       const tx = buildTx("paid", "paid", amt);
-      const saved = await addTransaction(tx);
+      const saved = await saveTx(tx);
       if (saved) {
         setCustomPrompt(saved.items.filter((i) => i.productId === "custom"));
         setPaid(saved);
@@ -252,7 +266,7 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
 
     if (method === "transfer") {
       const tx = buildTx("paid", "paid", grand);
-      const saved = await addTransaction(tx);
+      const saved = await saveTx(tx);
       if (saved) {
         setCustomPrompt(saved.items.filter((i) => i.productId === "custom"));
         setPaid(saved);
@@ -263,7 +277,7 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
     // QRIS
     if (qr?.mock) {
       const tx = buildTx("paid", "paid", grand);
-      const saved = await addTransaction(tx);
+      const saved = await saveTx(tx);
       if (saved) {
         setCustomPrompt(saved.items.filter((i) => i.productId === "custom"));
         setPaid(saved);
@@ -273,7 +287,7 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
 
     // Real QRIS: buat transaksi pending, tunggu webhook/realtime
     const tx = buildTx("pending", "pending", 0);
-    const saved = await addTransaction(tx);
+    const saved = await saveTx(tx);
     if (saved) setPendingId(saved.id);
   }
 

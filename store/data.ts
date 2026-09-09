@@ -58,6 +58,13 @@ export interface Staff {
   email?: string;
   commissionRate?: number;
   active: boolean;
+  storeId: string | null; // NULL = manager lintas semua toko
+}
+
+export interface StoreInfo {
+  id: string;
+  name: string;
+  prefix: string; // MJL / KTB / TRX-
 }
 
 export type MovementType =
@@ -85,22 +92,29 @@ interface DataState {
   categories: Category[];
   customers: Customer[];
   staff: Staff[];
+  stores: StoreInfo[];
   movements: Movement[];
   transactions: Transaction[];
   shifts: Shift[];
   loading: boolean;
   error: string | null;
+  // Scope toko runtime: id toko operasional, atau null = semua toko (manager-all).
+  // Ditentukan saat login dari staff.store_id; staff terkunci selalu terisi.
+  activeStoreId: string | null;
+  setActiveStore: (id: string | null) => Promise<void>;
+  syncStoreScope: (storeId: string | null) => Promise<void>;
 
   // fetch
   fetchProducts: () => Promise<void>;
   fetchCategories: () => Promise<void>;
   fetchCustomers: () => Promise<void>;
   fetchStaff: () => Promise<void>;
+  fetchStores: () => Promise<void>;
   fetchTransactions: () => Promise<void>;
   fetchShifts: () => Promise<void>;
 
   // transactions
-  saveTransaction: (tx: Omit<Transaction, "id" | "items"> & { items: TransactionItem[] }) => Promise<Transaction | null>;
+  saveTransaction: (tx: Omit<Transaction, "id" | "items"> & { items: TransactionItem[] }, storeOverride?: string) => Promise<Transaction | null>;
   setTransactionStatus: (id: string, status: Transaction["status"]) => Promise<void>;
   flushOfflineQueue: () => Promise<void>;
 
@@ -142,8 +156,8 @@ interface DataState {
   deleteCustomer: (id: string) => Promise<void>;
 
   // staff
-  addStaff: (s: { name: string; pin: string; role: Role; phone?: string; active: boolean }) => Promise<void>;
-  updateStaff: (id: string, patch: { name?: string; pin?: string; role?: Role; phone?: string; active?: boolean }) => Promise<void>;
+  addStaff: (s: { name: string; pin: string; role: Role; phone?: string; active: boolean; storeId?: string | null }) => Promise<void>;
+  updateStaff: (id: string, patch: { name?: string; pin?: string; role?: Role; phone?: string; active?: boolean; storeId?: string | null }) => Promise<void>;
   deleteStaff: (id: string) => Promise<void>;
 
   // custom items
@@ -229,11 +243,62 @@ export const useData = create<DataState>()(
       categories: [],
       customers: [],
       staff: [],
+      stores: [],
       movements: [],
       transactions: [],
       shifts: [],
       loading: false,
       error: null,
+      // Default = store env (perilaku single-store lama) sampai login menentukan scope.
+      activeStoreId: process.env.NEXT_PUBLIC_STORE_ID ?? null,
+
+      setActiveStore: async (id) => {
+        if (get().activeStoreId === id) return;
+        set({ activeStoreId: id });
+        await Promise.all([
+          get().fetchProducts(),
+          get().fetchCategories(),
+          get().fetchCustomers(),
+          get().fetchStaff(),
+          get().fetchTransactions(),
+          get().fetchShifts(),
+        ]);
+      },
+
+      syncStoreScope: async (storeId) => {
+        // Dipanggil auth setelah profil termuat: staff terkunci -> storeId terisi,
+        // manager-all -> null (semua toko). Lalu refetch dengan scope baru.
+        set({ activeStoreId: storeId });
+        await Promise.all([
+          get().fetchStores(),
+          get().fetchProducts(),
+          get().fetchCategories(),
+          get().fetchCustomers(),
+          get().fetchStaff(),
+          get().fetchTransactions(),
+          get().fetchShifts(),
+        ]);
+      },
+
+      fetchStores: async () => {
+        if (!isSupabaseReady) return;
+        try {
+          const { data, error } = await supabase
+            .from("store_directory")
+            .select("*")
+            .order("name");
+          if (error) throw error;
+          set({
+            stores: (data ?? []).map((r: any) => ({
+              id: r.id,
+              name: r.name,
+              prefix: r.receipt_prefix && String(r.receipt_prefix).trim() !== "" ? r.receipt_prefix : "TRX-",
+            })),
+          });
+        } catch (error: any) {
+          set({ error: error.message });
+        }
+      },
 
       loadFallback: () => {
         // Demo mode: muat data dummy jika state masih kosong
@@ -245,21 +310,23 @@ export const useData = create<DataState>()(
           transactions: dummyTransactions,
           shifts: dummyShifts,
           staff: [
-            { id: "demo-manager", name: "Demo Manager", role: "manager", active: true },
-            { id: "demo-staff", name: "Demo Staff", role: "staff", active: true },
+            { id: "demo-manager", name: "Demo Manager", role: "manager", active: true, storeId: null },
+            { id: "demo-staff", name: "Demo Staff", role: "staff", active: true, storeId: null },
           ],
         });
       },
 
       fetchProducts: async () => {
         set({ loading: true, error: null });
+        const sid = get().activeStoreId;
 
         const psDb = getPowerSyncDb();
         if (psDb) {
           try {
             const rows = await psDb.getAll(
-              `SELECT * FROM products WHERE store_id = ? ORDER BY name`,
-              [STORE_ID]
+              sid ? `SELECT * FROM products WHERE store_id = ? ORDER BY name`
+                  : `SELECT * FROM products ORDER BY name`,
+              sid ? [sid] : []
             ) as Record<string, any>[];
             const products: Product[] = [];
             for (const p of rows) {
@@ -283,13 +350,15 @@ export const useData = create<DataState>()(
           return;
         }
         try {
-          const { data, error } = await supabase
+          let query: any = supabase
             .from('products')
             .select(`
               *,
               variants (*)
             `)
             .order('name');
+          if (sid) query = query.eq('store_id', sid);
+          const { data, error } = await query;
 
           if (error) throw error;
 
@@ -305,13 +374,15 @@ export const useData = create<DataState>()(
 
       fetchCategories: async () => {
         set({ loading: true, error: null });
+        const sid = get().activeStoreId;
 
         const psDb = getPowerSyncDb();
         if (psDb) {
           try {
             const rows = await psDb.getAll(
-              `SELECT * FROM categories WHERE store_id = ? ORDER BY name`,
-              [STORE_ID]
+              sid ? `SELECT * FROM categories WHERE store_id = ? ORDER BY name`
+                  : `SELECT * FROM categories ORDER BY name`,
+              sid ? [sid] : []
             ) as Record<string, any>[];
             set({ categories: rows.map(mapCategoryRow), loading: false });
             return;
@@ -326,10 +397,12 @@ export const useData = create<DataState>()(
           return;
         }
         try {
-          const { data, error } = await supabase
+          let query: any = supabase
             .from('categories')
             .select('*')
             .order('name');
+          if (sid) query = query.eq('store_id', sid);
+          const { data, error } = await query;
 
           if (error) throw error;
 
@@ -341,13 +414,15 @@ export const useData = create<DataState>()(
 
       fetchCustomers: async () => {
         set({ loading: true, error: null });
+        const sid = get().activeStoreId;
 
         const psDb = getPowerSyncDb();
         if (psDb) {
           try {
             const rows = await psDb.getAll(
-              `SELECT * FROM customers WHERE store_id = ? ORDER BY name`,
-              [STORE_ID]
+              sid ? `SELECT * FROM customers WHERE store_id = ? ORDER BY name`
+                  : `SELECT * FROM customers ORDER BY name`,
+              sid ? [sid] : []
             ) as Record<string, any>[];
             set({ customers: rows.map(mapCustomerRow), loading: false });
             return;
@@ -362,10 +437,12 @@ export const useData = create<DataState>()(
           return;
         }
         try {
-          const { data, error } = await supabase
+          let query: any = supabase
             .from('customers')
             .select('*')
             .order('name');
+          if (sid) query = query.eq('store_id', sid);
+          const { data, error } = await query;
 
           if (error) throw error;
 
@@ -376,12 +453,17 @@ export const useData = create<DataState>()(
       },
 
       addCategory: async (c) => {
+        const sid = get().activeStoreId;
+        if (!sid) {
+          set({ error: "Pilih toko operasional (MJL/KTB) dulu." });
+          return;
+        }
         const psDb = getPowerSyncDb();
         if (psDb) {
           const id = generateLocalId();
           await psDb.execute(
             `INSERT INTO categories (id, store_id, name, slug) VALUES (?, ?, ?, ?)`,
-            [id, STORE_ID, c.name, c.slug]
+            [id, sid, c.name, c.slug]
           );
           set((s) => ({
             categories: [...s.categories, { id, name: c.name, slug: c.slug }],
@@ -397,7 +479,7 @@ export const useData = create<DataState>()(
         try {
           const { data, error } = await supabase
             .from('categories')
-            .insert([{ name: c.name, slug: c.slug, store_id: process.env.NEXT_PUBLIC_STORE_ID }])
+            .insert([{ name: c.name, slug: c.slug, store_id: sid }])
             .select()
             .single();
 
@@ -479,13 +561,18 @@ export const useData = create<DataState>()(
       },
 
       addProduct: async (p) => {
+        const sid = get().activeStoreId;
+        if (!sid) {
+          set({ error: "Pilih toko operasional (MJL/KTB) dulu." });
+          return;
+        }
         const psDb = getPowerSyncDb();
         if (psDb) {
           const id = generateLocalId();
           await psDb.execute(
             `INSERT INTO products (id, store_id, sku, name, description, category_id, images, tags, active, stock, fabric, care, season, brand, compare_at, created_at, updated_at)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
-            [id, STORE_ID, p.sku, p.name, p.description ?? null, p.categoryId ?? null, JSON.stringify(p.images ?? []), JSON.stringify(p.tags ?? []), p.active ? 1 : 0, p.stock ?? 0, p.fabric ?? null, p.care ?? null, p.season ?? null, p.brand ?? null, p.compareAt ?? null]
+            [id, sid, p.sku, p.name, p.description ?? null, p.categoryId ?? null, JSON.stringify(p.images ?? []), JSON.stringify(p.tags ?? []), p.active ? 1 : 0, p.stock ?? 0, p.fabric ?? null, p.care ?? null, p.season ?? null, p.brand ?? null, p.compareAt ?? null]
           );
           for (const v of p.variants) {
             const vid = v.id || generateLocalId();
@@ -525,7 +612,7 @@ export const useData = create<DataState>()(
               season: p.season ?? null,
               brand: p.brand ?? null,
               compare_at: p.compareAt ?? null,
-              store_id: process.env.NEXT_PUBLIC_STORE_ID
+              store_id: sid
             }])
             .select()
             .single();
@@ -844,6 +931,11 @@ export const useData = create<DataState>()(
       adjustStock: async (productId, quantity, type, staff, reason, note) => {
         const product = get().products.find((p) => p.id === productId);
         if (!product) return false;
+        const sid = get().activeStoreId;
+        if (!sid) {
+          set({ error: "Pilih toko operasional (MJL/KTB) dulu." });
+          return false;
+        }
 
         const newStock = Math.max(0, (product.stock ?? 0) + quantity);
 
@@ -853,7 +945,7 @@ export const useData = create<DataState>()(
           await psDb.execute(
             `INSERT INTO stock_movements (id, store_id, variant_id, sku, product_name, type, quantity, reason, note, staff, created_at)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
-            [generateLocalId(), STORE_ID, productId, product.sku, product.name, type, quantity, reason ?? null, note ?? null, staff]
+            [generateLocalId(), sid, productId, product.sku, product.name, type, quantity, reason ?? null, note ?? null, staff]
           );
           set((s) => ({
             products: s.products.map((p) =>
@@ -922,7 +1014,7 @@ export const useData = create<DataState>()(
               reason,
               note,
               staff,
-              store_id: process.env.NEXT_PUBLIC_STORE_ID
+              store_id: sid
             }]);
 
           // Update local state
@@ -954,13 +1046,18 @@ export const useData = create<DataState>()(
       },
 
       addCustomer: async (c) => {
+        const sid = get().activeStoreId;
+        if (!sid) {
+          set({ error: "Pilih toko operasional (MJL/KTB) dulu." });
+          return;
+        }
         const psDb = getPowerSyncDb();
         if (psDb) {
           const id = generateLocalId();
           await psDb.execute(
             `INSERT INTO customers (id, store_id, name, phone, email, address, birthday, notes, tags, total_purchases, visit_count)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [id, STORE_ID, c.name, c.phone ?? null, c.email ?? null, c.address ?? null, c.birthday ?? null, c.notes ?? null, JSON.stringify(c.tags ?? []), 0, 0]
+            [id, sid, c.name, c.phone ?? null, c.email ?? null, c.address ?? null, c.birthday ?? null, c.notes ?? null, JSON.stringify(c.tags ?? []), 0, 0]
           );
           set((s) => ({
             customers: [...s.customers, { id, ...c, totalPurchases: 0, visitCount: 0 }],
@@ -992,7 +1089,7 @@ export const useData = create<DataState>()(
               birthday: c.birthday ?? null,
               notes: c.notes ?? null,
               tags: c.tags ?? [],
-              store_id: process.env.NEXT_PUBLIC_STORE_ID
+              store_id: sid
             }])
             .select()
             .single();
@@ -1098,13 +1195,15 @@ export const useData = create<DataState>()(
 
       fetchStaff: async () => {
         set({ loading: true, error: null });
+        const sid = get().activeStoreId;
 
         const psDb = getPowerSyncDb();
         if (psDb) {
           try {
             const rows = await psDb.getAll(
-              `SELECT * FROM staff WHERE store_id = ? ORDER BY name`,
-              [STORE_ID]
+              sid ? `SELECT * FROM staff WHERE store_id = ? ORDER BY name`
+                  : `SELECT * FROM staff ORDER BY name`,
+              sid ? [sid] : []
             ) as Record<string, any>[];
             set({ staff: rows.map(mapStaffRow), loading: false });
             return;
@@ -1119,10 +1218,13 @@ export const useData = create<DataState>()(
           return;
         }
         try {
-          const { data, error } = await supabase
+          let query: any = supabase
             .from('staff')
             .select('*')
             .order('name');
+          // Manager-all (sid null) sengaja tanpa filter: halaman Staff kelola semua toko.
+          if (sid) query = query.eq('store_id', sid);
+          const { data, error } = await query;
 
           if (error) throw error;
 
@@ -1134,13 +1236,15 @@ export const useData = create<DataState>()(
 
       fetchTransactions: async () => {
         set({ loading: true, error: null });
+        const sid = get().activeStoreId;
 
         const psDb = getPowerSyncDb();
         if (psDb) {
           try {
             const rows = await psDb.getAll(
-              `SELECT * FROM transactions WHERE store_id = ? ORDER BY created_at DESC LIMIT 500`,
-              [STORE_ID]
+              sid ? `SELECT * FROM transactions WHERE store_id = ? ORDER BY created_at DESC LIMIT 500`
+                  : `SELECT * FROM transactions ORDER BY created_at DESC LIMIT 500`,
+              sid ? [sid] : []
             ) as Record<string, any>[];
             const transactions: Transaction[] = [];
             for (const t of rows) {
@@ -1163,7 +1267,7 @@ export const useData = create<DataState>()(
           return;
         }
         try {
-          const { data, error } = await supabase
+          let query: any = supabase
             .from('transactions')
             .select(`
               *,
@@ -1171,6 +1275,8 @@ export const useData = create<DataState>()(
             `)
             .order('created_at', { ascending: false })
             .limit(500);
+          if (sid) query = query.eq('store_id', sid);
+          const { data, error } = await query;
 
           if (error) throw error;
 
@@ -1186,13 +1292,15 @@ export const useData = create<DataState>()(
 
       fetchShifts: async () => {
         set({ loading: true, error: null });
+        const sid = get().activeStoreId;
 
         const psDb = getPowerSyncDb();
         if (psDb) {
           try {
             const rows = await psDb.getAll(
-              `SELECT * FROM shifts WHERE store_id = ? ORDER BY opened_at DESC LIMIT 100`,
-              [STORE_ID]
+              sid ? `SELECT * FROM shifts WHERE store_id = ? ORDER BY opened_at DESC LIMIT 100`
+                  : `SELECT * FROM shifts ORDER BY opened_at DESC LIMIT 100`,
+              sid ? [sid] : []
             ) as Record<string, any>[];
             set({ shifts: rows.map(mapShiftRow), loading: false });
             return;
@@ -1207,11 +1315,13 @@ export const useData = create<DataState>()(
           return;
         }
         try {
-          const { data, error } = await supabase
+          let query: any = supabase
             .from('shifts')
             .select('*')
             .order('opened_at', { ascending: false })
             .limit(100);
+          if (sid) query = query.eq('store_id', sid);
+          const { data, error } = await query;
 
           if (error) throw error;
 
@@ -1222,13 +1332,18 @@ export const useData = create<DataState>()(
       },
 
       openShift: async (startingCash, staffName) => {
+        const sid = get().activeStoreId;
+        if (!sid) {
+          set({ error: "Pilih toko operasional (MJL/KTB) dulu." });
+          return;
+        }
         const psDb = getPowerSyncDb();
         if (psDb) {
           const id = generateLocalId();
           await psDb.execute(
             `INSERT INTO shifts (id, store_id, staff_name, opened_at, starting_cash, status, total_transactions, total_sales, total_qris, total_cash)
              VALUES (?, ?, ?, datetime('now'), ?, ?, ?, ?, ?, ?)`,
-            [id, STORE_ID, staffName, startingCash, "open", 0, 0, 0, 0]
+            [id, sid, staffName, startingCash, "open", 0, 0, 0, 0]
           );
           await get().fetchShifts();
           return;
@@ -1252,7 +1367,7 @@ export const useData = create<DataState>()(
           const { data, error } = await supabase
             .from('shifts')
             .insert([{
-              store_id: process.env.NEXT_PUBLIC_STORE_ID,
+              store_id: sid,
               staff_name: staffName,
               opened_at: new Date().toISOString(),
               starting_cash: startingCash,
@@ -1393,8 +1508,15 @@ export const useData = create<DataState>()(
         return get().shifts.find((s) => s.status === "open");
       },
 
-      saveTransaction: async (tx) => {
+      saveTransaction: async (tx, storeOverride) => {
         try {
+          // Toko konkret wajib: manager-all (scope Semua) harus pilih MJL/KTB dulu.
+          // storeOverride dipakai flush offline-queue agar ikut toko asal antrean.
+          const sid = storeOverride ?? get().activeStoreId;
+          if (!sid) {
+            set({ error: "Pilih toko operasional (MJL/KTB) dulu." });
+            return null;
+          }
           const customer = tx.customerName
             ? get().customers.find((c) => c.name === tx.customerName)
             : undefined;
@@ -1405,6 +1527,7 @@ export const useData = create<DataState>()(
             const saved: Transaction = {
               ...tx,
               id: localId,
+              storeId: sid,
               customerId: customer?.id,
               createdAt: new Date().toISOString(),
             };
@@ -1416,6 +1539,7 @@ export const useData = create<DataState>()(
               localId,
               tx: { ...tx, items: tx.items },
               enqueuedAt: new Date().toISOString(),
+              storeId: sid,
             } as QueuedTransaction);
             console.info("[offline-queue] Transaction queued:", localId);
             return saved;
@@ -1427,7 +1551,7 @@ export const useData = create<DataState>()(
              await psDb.execute(
                `INSERT INTO transactions (id, store_id, number, cashier, customer_id, customer_name, status, payment_method, payment_status, subtotal, tax, discount, total, amount_paid, change, qris_ref, photo_proof, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
-               [id, STORE_ID, tx.number, tx.cashier, customer?.id ?? null, tx.customerName ?? null, tx.status, tx.paymentMethod, tx.paymentStatus, tx.subtotal, tx.tax, tx.discount, tx.total, tx.amountPaid, tx.change, tx.qrisRef ?? null, (tx as any).photoProof ?? null]
+               [id, sid, tx.number, tx.cashier, customer?.id ?? null, tx.customerName ?? null, tx.status, tx.paymentMethod, tx.paymentStatus, tx.subtotal, tx.tax, tx.discount, tx.total, tx.amountPaid, tx.change, tx.qrisRef ?? null, (tx as any).photoProof ?? null]
              );
             for (const i of tx.items) {
                await psDb.execute(
@@ -1436,7 +1560,7 @@ export const useData = create<DataState>()(
                  [generateLocalId(), id, i.productId, i.variantId, i.name, i.sku, i.size, i.color, i.quantity, i.unitPrice, i.costPrice ?? 0, i.discount, i.total]
                );
              }
-            const saved: Transaction = { ...tx, id, customerId: customer?.id, createdAt: new Date().toISOString() };
+            const saved: Transaction = { ...tx, id, storeId: sid, customerId: customer?.id, createdAt: new Date().toISOString() };
             set((s) => ({ transactions: [saved, ...s.transactions] }));
             // PowerSync lokal tanpa trigger DB — efek stok dikerjakan di client
             if (saved.status === "paid") {
@@ -1449,6 +1573,7 @@ export const useData = create<DataState>()(
             const saved: Transaction = {
               ...tx,
               id: generateLocalId(),
+              storeId: sid,
               customerId: customer?.id,
               createdAt: new Date().toISOString(),
             };
@@ -1465,7 +1590,7 @@ export const useData = create<DataState>()(
           // RPC gagal = simpan gagal; jangan fallback ke nomor client (duplikat).
           const { data: serverNumber, error: numberError } = await supabase.rpc(
             'next_tx_number',
-            { p_store_id: process.env.NEXT_PUBLIC_STORE_ID }
+            { p_store_id: sid }
           );
           if (numberError || !serverNumber) {
             throw numberError ?? new Error("Gagal membuat nomor nota");
@@ -1477,7 +1602,7 @@ export const useData = create<DataState>()(
           const { data: header, error: headerError } = await supabase
             .from('transactions')
             .insert([{
-              store_id: process.env.NEXT_PUBLIC_STORE_ID,
+              store_id: sid,
               number: serverNumber as string,
               cashier: tx.cashier,
               customer_id: customer?.id ?? null,
@@ -1536,6 +1661,7 @@ export const useData = create<DataState>()(
           const saved: Transaction = {
             id: header.id,
             number: header.number,
+            storeId: header.store_id ?? sid,
             cashier: header.cashier,
             customerId: header.customer_id ?? undefined,
             customerName: header.customer_name ?? undefined,
@@ -1705,7 +1831,7 @@ export const useData = create<DataState>()(
         let flushed = 0;
         for (const q of pending) {
           try {
-            const saved = await get().saveTransaction(q.tx);
+            const saved = await get().saveTransaction(q.tx, (q as QueuedTransaction).storeId);
             if (saved) {
               set((s) => ({
                 transactions: s.transactions.filter((t) => t.id !== q.localId),
@@ -1726,7 +1852,7 @@ export const useData = create<DataState>()(
       addStaff: async (s) => {
         if (!isSupabaseReady) {
           set((state) => ({
-            staff: [...state.staff, { id: generateLocalId(), ...s, active: s.active ?? true }],
+            staff: [...state.staff, { id: generateLocalId(), ...s, storeId: s.storeId ?? null, active: s.active ?? true }],
           }));
           return;
         }
@@ -1738,7 +1864,7 @@ export const useData = create<DataState>()(
               "Content-Type": "application/json",
               Authorization: `Bearer ${session.session?.access_token ?? ""}`,
             },
-            body: JSON.stringify({ action: "create", ...s }),
+            body: JSON.stringify({ action: "create", ...s, store_id: s.storeId ?? null }),
           });
           if (!res.ok) throw new Error((await res.json()).error ?? "Gagal menambah staff");
           await get().fetchStaff();
@@ -1763,7 +1889,7 @@ export const useData = create<DataState>()(
               "Content-Type": "application/json",
               Authorization: `Bearer ${session.session?.access_token ?? ""}`,
             },
-            body: JSON.stringify({ action: "update", id, ...patch }),
+            body: JSON.stringify({ action: "update", id, ...patch, ...(patch.storeId !== undefined ? { store_id: patch.storeId } : {}) }),
           });
           if (!res.ok) throw new Error((await res.json()).error ?? "Gagal memperbarui staff");
           await get().fetchStaff();
@@ -1829,11 +1955,15 @@ export const useData = create<DataState>()(
 
       subscribeRealtime: () => {
         if (!isSupabaseReady) return () => {};
+        const sid = get().activeStoreId;
+        // Scope realtime ke toko aktif; manager-all (null) tanpa filter.
+        // variants tak punya store_id -> listener-nya global, patch by id aman (UUID unik).
+        const storeFilter = sid ? { filter: `store_id=eq.${sid}` } : {};
         const channel = supabase
           .channel('pos-db-changes')
           .on(
             'postgres_changes',
-            { event: 'UPDATE', schema: 'public', table: 'products' },
+            { event: 'UPDATE', schema: 'public', table: 'products', ...storeFilter },
             (payload) => {
               const p = payload.new as { id: string; stock: number };
               set((s) => ({
@@ -1845,14 +1975,14 @@ export const useData = create<DataState>()(
           )
           .on(
             'postgres_changes',
-            { event: 'INSERT', schema: 'public', table: 'transactions' },
+            { event: 'INSERT', schema: 'public', table: 'transactions', ...storeFilter },
             async () => {
               await get().fetchTransactions();
             }
           )
           .on(
             'postgres_changes',
-            { event: 'UPDATE', schema: 'public', table: 'transactions' },
+            { event: 'UPDATE', schema: 'public', table: 'transactions', ...storeFilter },
             async () => {
               await get().fetchTransactions();
             }
@@ -1872,6 +2002,7 @@ export const useData = create<DataState>()(
         categories: s.categories,
         customers: s.customers,
         staff: s.staff,
+        stores: s.stores,
         shifts: s.shifts,
         transactions: s.transactions.slice(0, 100).map(stripTxForPersist),
         movements: s.movements.slice(0, 200),

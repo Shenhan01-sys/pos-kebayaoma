@@ -4,6 +4,7 @@ import { create } from "zustand";
 import type { Session } from "@supabase/supabase-js";
 import { supabase, isSupabaseReady } from "@/lib/supabase";
 import type { Staff } from "@/store/data";
+import { useData } from "@/store/data";
 
 const staffEmail = (staffId: string) => `staff-${staffId}@kebayaoma.local`;
 
@@ -12,6 +13,7 @@ const demoStaff: Staff = {
   name: "Demo Kasir",
   role: "manager",
   active: true,
+  storeId: null,
 };
 
 interface AuthState {
@@ -26,7 +28,7 @@ interface AuthState {
 async function loadStaffProfile(userId: string): Promise<Staff | null> {
   const { data } = await supabase
     .from("staff")
-    .select("id, name, role, phone, active")
+    .select("id, name, role, phone, active, store_id")
     .eq("user_id", userId)
     .maybeSingle();
   if (!data) return null;
@@ -36,7 +38,14 @@ async function loadStaffProfile(userId: string): Promise<Staff | null> {
     role: data.role,
     phone: data.phone,
     active: data.active,
+    storeId: (data as any).store_id ?? null, // NULL = manager lintas semua toko
   };
+}
+
+// Samakan scope toko data dengan user yang login, lalu refetch.
+// Staff terkunci -> tokonya; manager-all (storeId null) -> semua (null).
+async function applyLoginScope(profile: Staff | null) {
+  await useData.getState().syncStoreScope(profile?.storeId ?? null);
 }
 
 export const useAuth = create<AuthState>()((set) => ({
@@ -61,6 +70,7 @@ export const useAuth = create<AuthState>()((set) => ({
         session = null;
       } else {
         set({ staff: profile });
+        await applyLoginScope(profile);
       }
     }
 
@@ -74,6 +84,7 @@ export const useAuth = create<AuthState>()((set) => ({
           set({ session: null, staff: null });
         } else {
           set({ session: next, staff: profile });
+          await applyLoginScope(profile);
         }
       } else if (event === "TOKEN_REFRESHED" && next) {
         // Token diperbarui — jangan log out staff; sesi tetap valid.
@@ -101,6 +112,8 @@ export const useAuth = create<AuthState>()((set) => ({
     if (isSupabaseReady) {
       await supabase.auth.signOut();
     }
+    // Kembalikan scope default agar data toko sebelumnya tidak bocor ke login berikut.
+    await useData.getState().syncStoreScope(process.env.NEXT_PUBLIC_STORE_ID ?? null);
     set({ session: null, staff: null });
   },
 }));

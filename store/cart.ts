@@ -189,10 +189,10 @@ export function subscribeTransactions(l: () => void) {
   };
 }
 
-export function nextTxNumber(): string {
+export function nextTxNumber(prefix = "TRX-"): string {
   const d = new Date();
   const pad = (n: number) => String(n).padStart(2, "0");
-  const datePrefix = `TRX-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(
+  const datePrefix = `${prefix}${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(
     d.getDate()
   )}-`;
   const seq =

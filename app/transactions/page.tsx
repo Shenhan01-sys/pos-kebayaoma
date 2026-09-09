@@ -17,6 +17,7 @@ import {
   setTransactionStatus,
 } from "@/store/cart";
 import { useAuth } from "@/store/auth";
+import { useData } from "@/store/data";
 import { Icon } from "@/components/icons";
 
 const METHOD_LABELS: Record<PaymentMethod, string> = {
@@ -49,6 +50,12 @@ export default function TransactionsPage() {
   const [all, setAll] = useState<Transaction[]>([]);
   const [dateFilter, setDateFilter] = useState<string>(todayStr());
   const [methodFilter, setMethodFilter] = useState<PaymentMethod | "all">("all");
+  const [storeFilter, setStoreFilter] = useState<string | "all">("all");
+  const stores = useData((s) => s.stores);
+  // Manager-all (storeId null) boleh filter per toko; staff terkunci ikut scope datanya.
+  const canSeeAllStores = auth.staff?.storeId === null || auth.staff?.storeId === undefined;
+  const storePrefixOf = (id?: string) =>
+    stores.find((t) => t.id === id)?.prefix ?? "—";
   const [showVoided, setShowVoided] = useState(false);
   const [photoView, setPhotoView] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<{
@@ -70,10 +77,11 @@ export default function TransactionsPage() {
           return false;
         if (effectiveDate && toLocalDayKey(t.createdAt) !== effectiveDate) return false;
         if (methodFilter !== "all" && t.paymentMethod !== methodFilter) return false;
+        if (storeFilter !== "all" && t.storeId !== storeFilter) return false;
         return true;
       })
-      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-  }, [all, dateFilter, methodFilter, showVoided, isStaff]);
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt)); // terbaru di atas
+  }, [all, dateFilter, methodFilter, storeFilter, showVoided, isStaff]);
 
   const rows = useMemo<ItemRow[]>(() => {
     const out: ItemRow[] = [];
@@ -159,6 +167,23 @@ export default function TransactionsPage() {
               ))}
             </select>
           </label>
+          {canSeeAllStores && stores.length > 0 && (
+            <label className="text-xs text-gray-600">
+              Toko
+              <select
+                value={storeFilter}
+                onChange={(e) => setStoreFilter(e.target.value as string | "all")}
+                className="input ml-2 py-1.5 text-sm"
+              >
+                <option value="all">Semua</option>
+                {stores.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.prefix} · {t.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <label className="flex items-center gap-1.5 text-xs text-gray-600">
             <input
               type="checkbox"
@@ -177,6 +202,7 @@ export default function TransactionsPage() {
             <thead className="bg-beige/70 text-left text-olive">
               <tr>
                 <th className="p-2.5 font-semibold">No. Nota</th>
+                <th className="p-2.5 font-semibold">Toko</th>
                 <th className="p-2.5 font-semibold">Waktu</th>
                 <th className="p-2.5 font-semibold">Produk</th>
                 <th className="p-2.5 text-right font-semibold">Qty</th>
@@ -226,6 +252,13 @@ export default function TransactionsPage() {
                             month: "short",
                           })
                         : ""}
+                    </td>
+                    <td className="p-2.5 align-top">
+                      {r.isFirstOfNota ? (
+                        <span className="pill pill-soft">{storePrefixOf(r.tx.storeId)}</span>
+                      ) : (
+                        ""
+                      )}
                     </td>
                     <td className="p-2.5 align-top font-medium text-ink">
                       {r.item.name}
@@ -338,7 +371,7 @@ export default function TransactionsPage() {
                 <tr>
                   <td
                     className="p-4 text-center text-gray-600"
-                    colSpan={14}
+                    colSpan={15}
                   >
                     Tidak ada transaksi pada {dateFilter || "filter ini"}.
                   </td>
@@ -348,7 +381,7 @@ export default function TransactionsPage() {
             {rows.length > 0 && (
               <tfoot className="bg-beige/60 text-olive">
                 <tr className="border-t-2 border-olive/30">
-                  <td className="p-2.5 font-bold" colSpan={3}>
+                  <td className="p-2.5 font-bold" colSpan={4}>
                     Total {recap.count} nota
                   </td>
                   <td className="p-2.5" colSpan={4}></td>
@@ -433,6 +466,7 @@ export default function TransactionsPage() {
               <li><b>YT</b> = akumulasi total per nota</li>
               <li><b>Margin</b> = Total − Disc − Cost×Qty</li>
               <li><b>Ket</b> = "bonus" bila Price 0 (FE-only, tidak disimpan di DB)</li>
+              <li><b>Toko</b> = prefix toko nota (MJL/KTB); filter Toko untuk manager lintas-toko</li>
             </ul>
           </div>
         </aside>

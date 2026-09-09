@@ -46,13 +46,22 @@ export default function LoginScreen() {
     }
     supabase
       .from("staff")
-      .select("id, name, role, phone, active")
+      .select("id, name, role, phone, active, store_id")
       .eq("active", true)
       .order("name")
       .then(({ data, error }) => {
-        if (!error && data) setStaffList(data as Staff[]);
+        if (!error && data) {
+          setStaffList(
+            (data as any[]).map((r) => ({ ...r, storeId: r.store_id ?? null })) as Staff[]
+          );
+        }
       });
+    useData.getState().fetchStores();
   }, []);
+  const storePrefixOf = (id: string | null) => {
+    if (id === null || id === undefined) return "Semua";
+    return useData.getState().stores.find((t) => t.id === id)?.prefix ?? "";
+  };
 
   function handleNext() {
     setError(null);
@@ -110,7 +119,10 @@ export default function LoginScreen() {
             <span className="avatar h-12 w-12 bg-grad-violet">{initials(selected.name)}</span>
             <div className="min-w-0">
               <div className="truncate text-base font-extrabold text-ink">{selected.name}</div>
-              <div className={`pill ${rolePill[selected.role]}`}>{roleLabel[selected.role]}</div>
+              <div className="flex items-center gap-1.5">
+                <div className={`pill ${rolePill[selected.role]}`}>{roleLabel[selected.role]}</div>
+                <div className="pill pill-soft">{storePrefixOf(selected.storeId)}</div>
+              </div>
             </div>
           </div>
 

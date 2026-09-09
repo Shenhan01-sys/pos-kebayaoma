@@ -44,6 +44,7 @@ export interface QueuedTransaction {
   localId: string;
   tx: Omit<Transaction, "id" | "items"> & { items: TransactionItem[] };
   enqueuedAt: string;
+  storeId: string; // toko operasional saat transaksi dibuat (anti salah toko saat flush)
 }
 
 export async function enqueueTransaction(

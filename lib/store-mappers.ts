@@ -63,13 +63,14 @@ export function mapCustomerRow(c: Record<string, any>): Customer {
   };
 }
 
-export function mapStaffRow(s: Record<string, any>): { id: string; name: string; role: Role; phone: string | undefined; active: boolean } {
+export function mapStaffRow(s: Record<string, any>): { id: string; name: string; role: Role; phone: string | undefined; active: boolean; storeId: string | null } {
   return {
     id: s.id,
     name: s.name,
     role: s.role,
     phone: s.phone ?? undefined,
     active: Boolean(s.active),
+    storeId: s.store_id ?? null,
   };
 }
 
@@ -93,6 +94,7 @@ export function mapTransactionRow(t: Record<string, any>, items: TransactionItem
   return {
     id: t.id,
     number: t.number,
+    storeId: t.store_id ?? undefined,
     cashier: t.cashier,
     customerId: t.customer_id ?? undefined,
     customerName: t.customer_name ?? undefined,

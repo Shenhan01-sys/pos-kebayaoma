@@ -69,6 +69,7 @@ export interface TransactionItem {
 export interface Transaction {
   id: string;
   number: string;
+  storeId?: string;
   cashier: string;
   customerId?: string;
   customerName?: string;

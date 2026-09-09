@@ -6,36 +6,51 @@ import { useAuth } from "@/store/auth";
 import { Icon } from "@/components/icons";
 
 export default function StaffPage() {
-  const { staff, addStaff, updateStaff, deleteStaff } = useData();
+  const { staff, stores, addStaff, updateStaff, deleteStaff } = useData();
   const auth = useAuth();
   const isManager = auth.staff?.role === "manager";
+  // Manager lintas-toko (storeId null) boleh assign ke toko mana pun / semua.
+  const canAssignAll = isManager && (auth.staff?.storeId === null || auth.staff?.storeId === undefined);
+  const ownStoreId = auth.staff?.storeId ?? "";
   const [editing, setEditing] = useState<Staff | null>(null);
   const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [form, setForm] = useState({ name: "", pin: "", role: "staff" as Role, phone: "", active: true });
+  const [form, setForm] = useState({ name: "", pin: "", role: "staff" as Role, phone: "", active: true, storeId: "" });
   const [pinError, setPinError] = useState<string | null>(null);
   const [modalError, setModalError] = useState<string | null>(null);
+  const storePrefixOf = (id: string | null) =>
+    id === null ? "Semua" : stores.find((t) => t.id === id)?.prefix ?? "…";
 
   function openAdd() {
-    setForm({ name: "", pin: "", role: "staff", phone: "", active: true });
+    setForm({ name: "", pin: "", role: "staff", phone: "", active: true, storeId: canAssignAll ? "" : ownStoreId });
     setAdding(true);
     setEditing(null);
     setPinError(null);
     setModalError(null);
   }
   function openEdit(s: Staff) {
-    setForm({ name: s.name, pin: "", role: s.role, phone: s.phone ?? "", active: s.active });
+    setForm({ name: s.name, pin: "", role: s.role, phone: s.phone ?? "", active: s.active, storeId: s.storeId ?? "" });
     setAdding(false);
     setEditing(s);
     setPinError(null);
     setModalError(null);
   }
 
-  const managerCount = staff.filter((s) => s.role === "manager" && s.active).length;
+  // Guard manager-terakhir dihitung per cakupan toko (manager lintas-toko meng-cover semua).
+  const coversStore = (m: Staff, target: string | null) =>
+    m.role === "manager" && m.active && (m.storeId === null || (target !== null && m.storeId === target));
+  const managerCountFor = (target: string | null, excludeId?: string) =>
+    staff.filter((s) => (excludeId === undefined || s.id !== excludeId) && coversStore(s, target)).length;
 
   async function save() {
     if (!form.name) return;
     setModalError(null);
+    const targetStore: string | null = form.storeId === "" ? null : form.storeId;
+    if (form.role === "staff" && !targetStore) {
+      setModalError("Kasir wajib assigned ke toko (MJL/KTB).");
+      return;
+    }
+    const payload = { ...form, storeId: targetStore };
 
     if (editing) {
       if (form.pin && form.pin.length !== 6) {
@@ -44,18 +59,18 @@ export default function StaffPage() {
       }
       setPinError(null);
 
-      if (editing.role === "manager" && editing.active && (form.role !== "manager" || !form.active) && managerCount <= 1) {
-        setModalError("Tidak ada manager lain yang aktif. Tidak bisa menonaktifkan/menurunkan manager terakhir.");
+      if (editing.role === "manager" && editing.active && (form.role !== "manager" || !form.active) && managerCountFor(editing.storeId, editing.id) <= 0) {
+        setModalError("Tidak ada manager lain yang meng-cover tokonya. Tidak bisa menonaktifkan/menurunkan manager terakhir.");
         return;
       }
 
       setBusy(true);
       try {
         if (!form.pin) {
-          const { pin: _pin, ...rest } = form;
+          const { pin: _pin, ...rest } = payload;
           await updateStaff(editing.id, rest);
         } else {
-          await updateStaff(editing.id, form);
+          await updateStaff(editing.id, payload);
         }
         setAdding(false);
         setEditing(null);
@@ -72,7 +87,7 @@ export default function StaffPage() {
       setPinError(null);
       setBusy(true);
       try {
-        await addStaff(form);
+        await addStaff(payload);
         setAdding(false);
       } catch (err: any) {
         setModalError(err?.message || "Gagal menambah staff");
@@ -87,8 +102,8 @@ export default function StaffPage() {
       alert("Tidak bisa menghapus akun sendiri.");
       return;
     }
-    if (s.role === "manager" && managerCount <= 1) {
-      alert("Tidak bisa menghapus manager terakhir. Tambahkan manager lain dulu.");
+    if (s.role === "manager" && managerCountFor(s.storeId, s.id) <= 0) {
+      alert("Tidak bisa menghapus manager terakhir yang meng-cover tokonya. Tambahkan manager lain dulu.");
       return;
     }
     if (!confirm(`Hapus ${s.name}? Akun login staff ini juga akan dihapus.`)) return;
@@ -163,6 +178,7 @@ export default function StaffPage() {
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-1">
+                <span className="pill pill-soft">{storePrefixOf(s.storeId)}</span>
                 <span className={`pill ${rolePill[s.role]}`}>{roleLabel[s.role]}</span>
                 {isManager && (
                   <>
@@ -202,10 +218,33 @@ export default function StaffPage() {
               {pinError && <div className="text-xs font-semibold text-danger">{pinError}</div>}
               <label className="block">
                 <span className="mb-1 block text-xs font-medium text-gray-600">Peran</span>
-                <select className="input" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as Role })}>
+                <select className="input" value={form.role} onChange={(e) => {
+                  const role = e.target.value as Role;
+                  setForm({
+                    ...form,
+                    role,
+                    // Kasir wajib toko konkret: default ke toko pertama bila masih "Semua".
+                    storeId: role === "staff" && form.storeId === "" ? stores[0]?.id ?? "" : form.storeId,
+                  });
+                }}>
                   <option value="manager">Manager</option>
                   <option value="staff">Staff</option>
                 </select>
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-gray-600">Toko</span>
+                {canAssignAll ? (
+                  <select className="input" value={form.storeId} onChange={(e) => setForm({ ...form, storeId: e.target.value })}>
+                    {form.role === "manager" && <option value="">Semua toko (lintas-toko)</option>}
+                    {stores.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.prefix} · {t.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input className="input" value={storePrefixOf(ownStoreId || null)} disabled />
+                )}
               </label>
               <label className="block">
                 <span className="mb-1 block text-xs font-medium text-gray-600">Telepon</span>

@@ -23,6 +23,8 @@ export default function PosPage() {
   const { lines, addVariant, addCustomItem, inc, dec, remove, total, customerName, setCustomer } =
     useCart();
   const { products, categories, customers, addProduct } = useData();
+  const stores = useData((s) => s.stores);
+  const activeStoreId = useData((s) => s.activeStoreId);
 
   const [customOpen, setCustomOpen] = useState(false);
   const [customName, setCustomName] = useState("");
@@ -114,6 +116,22 @@ export default function PosPage() {
     <div className="flex flex-col gap-4 lg:h-[calc(100vh-2.5rem)] lg:flex-row" onClick={focusScan}>
       {/* Catalog */}
       <section className="flex min-h-0 flex-1 flex-col">
+        {activeStoreId === null && stores.length > 0 && (
+          <div className="mb-3 rounded-2xl bg-violet/10 px-3 py-2.5 text-sm font-medium text-violet">
+            <div className="mb-1.5">Pilih toko operasional dulu, transaksi dan stok masuk ke toko ini:</div>
+            <div className="flex gap-2">
+              {stores.map((t) => (
+                <button
+                  key={t.id}
+                  onClick={() => useData.getState().setActiveStore(t.id)}
+                  className="btn-violet flex-1 py-2 text-sm"
+                >
+                  {t.prefix} - {t.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         {scanMsg && (
           <div className="mb-3 flex items-center gap-2 rounded-2xl bg-danger/10 px-3 py-2.5 text-sm font-medium text-danger">
             <Icon name="alert" size={16} /> {scanMsg}

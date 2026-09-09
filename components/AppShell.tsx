@@ -43,6 +43,39 @@ const initials = (name: string) =>
     .join("")
     .toUpperCase();
 
+// Pemilih scope toko — hanya untuk manager lintas-toko (storeId null).
+// Staff terkunci tidak melihat ini; scope mereka ikut akun login.
+function StoreSwitcher() {
+  const staff = useAuth((a) => a.staff);
+  const stores = useData((s) => s.stores);
+  const activeStoreId = useData((s) => s.activeStoreId);
+  if (staff?.role !== "manager" || staff?.storeId !== null) return null;
+  if (stores.length === 0) return null;
+  const set = (id: string | null) => useData.getState().setActiveStore(id);
+  const btn = (label: string, id: string | null, isActive: boolean) => (
+    <button
+      key={label}
+      onClick={() => set(id)}
+      className={`flex-1 rounded-xl px-2 py-1.5 text-[11px] font-bold transition ${
+        isActive ? "bg-violet text-white shadow-soft" : "text-olive hover:bg-black/5"
+      }`}
+    >
+      {label}
+    </button>
+  );
+  return (
+    <div className="relative z-10 mx-2 mb-1 rounded-2xl bg-beige p-2">
+      <div className="mb-1 px-1 text-[10px] font-semibold uppercase tracking-wide text-olive">
+        Toko: {activeStoreId === null ? "Semua" : stores.find((t) => t.id === activeStoreId)?.prefix ?? "…"}
+      </div>
+      <div className="flex gap-1">
+        {btn("Semua", null, activeStoreId === null)}
+        {stores.map((t) => btn(t.prefix, t.id, activeStoreId === t.id))}
+      </div>
+    </div>
+  );
+}
+
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -70,15 +103,23 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       useData.getState().loadFallback();
       return;
     }
+    useData.getState().fetchStores();
     useData.getState().fetchProducts();
     useData.getState().fetchCategories();
     useData.getState().fetchCustomers();
     useData.getState().fetchStaff();
     useData.getState().fetchTransactions();
     useData.getState().fetchShifts();
-    const unsubRealtime = useData.getState().subscribeRealtime();
-    return () => { if (typeof unsubRealtime === "function") unsubRealtime(); };
   }, []);
+
+  // Re-subscribe realtime saat scope toko berubah (filter store_id per toko).
+  const activeStoreId = useData((s) => s.activeStoreId);
+  useEffect(() => {
+    if (!isSupabaseReady || !auth.initialized) return;
+    const unsub = useData.getState().subscribeRealtime();
+    return () => { if (typeof unsub === "function") unsub(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeStoreId]);
 
   const products = useData((s) => s.products);
   const lowCount = products.filter((p) => p.stock <= 5).length;
@@ -157,6 +198,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
           {nav}
 
+          <StoreSwitcher />
           <div className="relative z-10 m-2 flex items-center gap-3 rounded-2xl bg-beige p-2.5">
             <div className="avatar h-9 w-9 bg-violet">
               {initials(auth.staff?.name ?? s.cashierName)}

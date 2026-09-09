@@ -15,7 +15,8 @@ const PIN_RE = /^\d{6}$/; // Supabase Auth menolak password < 6 karakter
 
 interface Caller {
   id: string;
-  store_id: string;
+  store_id: string | null; // NULL = manager lintas semua toko
+  isAll: boolean;
 }
 
 async function requireAdmin(req: NextRequest): Promise<{ ok: true; caller: Caller } | { ok: false; res: NextResponse }> {
@@ -35,39 +36,64 @@ async function requireAdmin(req: NextRequest): Promise<{ ok: true; caller: Calle
     return { ok: false, res: NextResponse.json({ error: "Hanya manager yang bisa mengelola staff" }, { status: 403 }) };
   }
 
-  return { ok: true, caller: { id: staff.id as string, store_id: staff.store_id as string } };
+  const storeId = (staff.store_id as string | null) ?? null;
+  return { ok: true, caller: { id: staff.id as string, store_id: storeId, isAll: storeId === null } };
 }
 
-async function otherActiveManagerCount(storeId: string, excludeId: string): Promise<number> {
-  const { count } = await admin
+async function otherActiveManagerCount(storeId: string | null, excludeId: string): Promise<number> {
+  // Manager lintas-toko (store NULL) meng-cover semua toko.
+  let q = admin
     .from("staff")
     .select("id", { count: "exact", head: true })
-    .eq("store_id", storeId)
     .eq("role", "manager")
     .eq("active", true)
     .neq("id", excludeId);
+  q = storeId === null ? q.is("store_id", null) : q.or(`store_id.is.null,store_id.eq.${storeId}`);
+  const { count } = await q;
   return count ?? 0;
+}
+
+function resolveTargetStore(
+  caller: Caller,
+  requested: unknown,
+  role: string
+): { ok: true; storeId: string | null } | { ok: false; res: NextResponse } {
+  let storeId: string | null =
+    requested === undefined || requested === null || requested === ""
+      ? null
+      : String(requested);
+  if (role !== "manager" && !storeId) {
+    // Kasir wajib terikat 1 toko; default ikut toko manager pembuat.
+    if (!caller.isAll && caller.store_id) return { ok: true, storeId: caller.store_id };
+    return { ok: false, res: NextResponse.json({ error: "Kasir wajib assigned ke toko (MJL/KTB)" }, { status: 400 }) };
+  }
+  if (!caller.isAll && storeId !== caller.store_id) {
+    // Manager toko tidak bisa membuat/memindah staff ke toko lain.
+    return { ok: false, res: NextResponse.json({ error: "Hanya bisa mengelola staff toko sendiri" }, { status: 403 }) };
+  }
+  if (role === "manager" && !storeId && !caller.isAll) {
+    // Manager toko tidak bisa mengangkat manager lintas-toko.
+    return { ok: false, res: NextResponse.json({ error: "Hanya manager lintas-toko yang bisa membuat manager lintas-toko" }, { status: 403 }) };
+  }
+  return { ok: true, storeId };
 }
 
 export async function POST(req: NextRequest) {
   const auth = await requireAdmin(req);
   if (!auth.ok) return auth.res;
 
-  let body: any;
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "Body tidak valid" }, { status: 400 });
-  }
-
-  const storeId = process.env.NEXT_PUBLIC_STORE_ID;
+  const body: any = await req.json().catch(() => null);
+  if (!body) return NextResponse.json({ error: "Body tidak valid" }, { status: 400 });
 
   switch (body.action) {
     case "create": {
-      const { name, pin, role, phone, active } = body;
+      const { name, pin, role, phone, active, store_id } = body;
       if (!name?.trim()) return NextResponse.json({ error: "Nama wajib diisi" }, { status: 400 });
       if (!PIN_RE.test(String(pin ?? ""))) return NextResponse.json({ error: "PIN harus 6 digit angka" }, { status: 400 });
       if (!ROLE_RE.test(String(role ?? ""))) return NextResponse.json({ error: "Role tidak valid" }, { status: 400 });
+      const target = resolveTargetStore(auth.caller, store_id, String(role));
+      if (!target.ok) return target.res;
+      const storeId = target.storeId;
 
       const { data: staff, error: insErr } = await admin
         .from("staff")
@@ -94,15 +120,15 @@ export async function POST(req: NextRequest) {
     }
 
     case "update": {
-      const { id, name, pin, role, phone, active } = body;
+      const { id, name, pin, role, phone, active, store_id } = body;
       if (!id) return NextResponse.json({ error: "id wajib" }, { status: 400 });
 
-      const { data: existing, error: findErr } = await admin
+      let findQuery = admin
         .from("staff")
         .select("id, user_id, role, active, store_id")
-        .eq("id", id)
-        .eq("store_id", auth.caller.store_id)
-        .maybeSingle();
+        .eq("id", id);
+      if (!auth.caller.isAll) findQuery = findQuery.eq("store_id", auth.caller.store_id as string);
+      const { data: existing, error: findErr } = await findQuery.maybeSingle();
       if (findErr || !existing) return NextResponse.json({ error: "Staff tidak ditemukan" }, { status: 404 });
 
       const demoteSelf =
@@ -116,7 +142,7 @@ export async function POST(req: NextRequest) {
         existing.role === "manager" &&
         existing.active &&
         ((role !== undefined && role !== "manager") || active === false);
-      if (removingManager && (await otherActiveManagerCount(auth.caller.store_id, existing.id)) === 0) {
+      if (removingManager && (await otherActiveManagerCount((existing.store_id as string | null) ?? null, existing.id)) === 0) {
         return NextResponse.json({ error: "Tidak bisa menonaktifkan/menurunkan manager terakhir" }, { status: 400 });
       }
 
@@ -131,6 +157,12 @@ export async function POST(req: NextRequest) {
       }
       if (phone !== undefined) patch.phone = phone || null;
       if (active !== undefined) patch.active = active !== false;
+      if (store_id !== undefined) {
+        const nextRole = (role !== undefined ? String(role) : existing.role) as string;
+        const target = resolveTargetStore(auth.caller, store_id, nextRole);
+        if (!target.ok) return target.res;
+        patch.store_id = target.storeId;
+      }
 
       if (Object.keys(patch).length) {
         const { error: updErr } = await admin.from("staff").update(patch).eq("id", id);
@@ -150,12 +182,12 @@ export async function POST(req: NextRequest) {
       const { id } = body;
       if (!id) return NextResponse.json({ error: "id wajib" }, { status: 400 });
 
-      const { data: existing, error: findErr } = await admin
+      let delQuery = admin
         .from("staff")
         .select("id, user_id, role, active, store_id")
-        .eq("id", id)
-        .eq("store_id", auth.caller.store_id)
-        .maybeSingle();
+        .eq("id", id);
+      if (!auth.caller.isAll) delQuery = delQuery.eq("store_id", auth.caller.store_id as string);
+      const { data: existing, error: findErr } = await delQuery.maybeSingle();
       if (findErr || !existing) return NextResponse.json({ error: "Staff tidak ditemukan" }, { status: 404 });
 
       if (existing.id === auth.caller.id) {
@@ -164,7 +196,7 @@ export async function POST(req: NextRequest) {
       if (
         existing.role === "manager" &&
         existing.active &&
-        (await otherActiveManagerCount(auth.caller.store_id, existing.id)) === 0
+        (await otherActiveManagerCount((existing.store_id as string | null) ?? null, existing.id)) === 0
       ) {
         return NextResponse.json({ error: "Tidak bisa menghapus manager terakhir" }, { status: 400 });
       }
