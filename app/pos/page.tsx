@@ -217,7 +217,16 @@ export default function PosPage() {
           value={scanBuffer}
           onChange={(e) => setScanBuffer(e.target.value)}
           onKeyDown={onScanKeyDown}
-          onBlur={() => setTimeout(() => scanInputRef.current?.focus(), 100)}
+          onBlur={() => setTimeout(() => {
+            // Jangan rebut fokus saat modal terbuka (picker/checkout/scanner/custom),
+            // dan jangan rebut dari select/input/textarea — native dropdown akan
+            // collapse sepersekian detik kalau fokus dicuri balik (bug dropdown series).
+            if (picker || checkout || scannerOpen || customOpen) return;
+            const el = document.activeElement as HTMLElement | null;
+            if (el && (el.tagName === "SELECT" || el.tagName === "TEXTAREA" ||
+              (el.tagName === "INPUT" && el !== scanInputRef.current))) return;
+            scanInputRef.current?.focus();
+          }, 100)}
           className="absolute opacity-0 pointer-events-none h-0 w-0"
           aria-label="Scanner input"
           autoComplete="off"
