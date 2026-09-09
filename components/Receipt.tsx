@@ -41,7 +41,9 @@ export default function Receipt({ tx }: { tx: Transaction }) {
 
       {tx.items.map((it, i) => (
         <div key={i} className="mb-1">
-          <div className="font-semibold">{it.name}</div>
+          <div className="font-semibold">
+            {it.name} {it.unitPrice === 0 && <span>🎁 GRATIS</span>}
+          </div>
           <div className="flex justify-between">
             <span>
               {it.size} / {it.color} x{it.quantity}

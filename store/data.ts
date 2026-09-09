@@ -1,7 +1,7 @@
 "use client";
 
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { persist, createJSONStorage } from "zustand/middleware";
 import { supabase, isSupabaseReady } from "@/lib/supabase";
 import { getPowerSyncDb, initPowerSync, isPowerSyncReady } from "@/lib/powersync/client";
 import {
@@ -155,6 +155,72 @@ interface DataState {
   // fallback
   loadFallback: () => void;
 }
+
+// Foto bukti (base64 dataURL) + riwayat tak terbatas meledakkan localStorage
+// (kuota ~5MB) → QuotaExceededError saat saveTransaction → popup stuck.
+// Solusi: jangan persist photoProof, batasi jumlah tx/movement, dan
+// storage anti-macet (prune + retry, terakhir hapus key agar app tetap jalan).
+const stripTxForPersist = (t: Transaction) => {
+  const { photoProof, ...rest } = t as Transaction & { photoProof?: string };
+  return rest;
+};
+
+const quotaSafeStorage = {
+  getItem: (key: string): string | null => {
+    if (typeof window === "undefined" || !window.localStorage) return null;
+    try {
+      return window.localStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  },
+  setItem: (key: string, value: string): void => {
+    if (typeof window === "undefined" || !window.localStorage) return;
+    try {
+      window.localStorage.setItem(key, value);
+    } catch (e: any) {
+      const isQuota =
+        e?.name === "QuotaExceededError" ||
+        e?.code === 22 ||
+        e?.code === 1014;
+      if (!isQuota) throw e;
+      // Coba sekali: pangkas transaksi/movement lalu tulis ulang
+      try {
+        const parsed = JSON.parse(value);
+        const inner = parsed?.state ?? parsed;
+        if (Array.isArray(inner?.transactions)) {
+          inner.transactions = inner.transactions
+            .slice(0, 30)
+            .map((t: any) => {
+              const { photoProof, ...rest } = t ?? {};
+              return rest;
+            });
+        }
+        if (Array.isArray(inner?.movements)) {
+          inner.movements = inner.movements.slice(0, 50);
+        }
+        const pruned = parsed?.state ? { ...parsed, state: inner } : inner;
+        window.localStorage.setItem(key, JSON.stringify(pruned));
+      } catch {
+        // Jalan terakhir: hapus key agar transaksi Supabase tetap bisa lanjut.
+        // Data refetch dari server saat reload.
+        try {
+          window.localStorage.removeItem(key);
+        } catch {
+          /* abaikan */
+        }
+      }
+    }
+  },
+  removeItem: (key: string): void => {
+    if (typeof window === "undefined" || !window.localStorage) return;
+    try {
+      window.localStorage.removeItem(key);
+    } catch {
+      /* abaikan */
+    }
+  },
+};
 
 export const useData = create<DataState>()(
   persist(
@@ -1795,6 +1861,21 @@ export const useData = create<DataState>()(
         return () => { supabase.removeChannel(channel); };
       },
     }),
-    { name: "kebaya-oma-data" }
+    {
+      name: "kebaya-oma-data",
+      version: 2,
+      storage: createJSONStorage(() => quotaSafeStorage),
+      // Persist irit: foto bukti tetap di Supabase/in-memory, riwayat dibatasi.
+      // Mencegah QuotaExceededError yang dulu bikin popup pembayaran stuck.
+      partialize: (s) => ({
+        products: s.products,
+        categories: s.categories,
+        customers: s.customers,
+        staff: s.staff,
+        shifts: s.shifts,
+        transactions: s.transactions.slice(0, 100).map(stripTxForPersist),
+        movements: s.movements.slice(0, 200),
+      }),
+    }
   )
 );

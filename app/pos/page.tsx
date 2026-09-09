@@ -28,6 +28,7 @@ export default function PosPage() {
   const [customName, setCustomName] = useState("");
   const [customPrice, setCustomPrice] = useState("");
   const [customSeriesId, setCustomSeriesId] = useState("");
+  const [customBonus, setCustomBonus] = useState(false);
 
   // HID barcode scanner support — auto-focus hidden input
   const scanInputRef = useRef<HTMLInputElement>(null);
@@ -386,23 +387,37 @@ export default function PosPage() {
             <label className="mb-1 block text-sm text-olive">Harga (Rp)</label>
             <input
               type="number"
-              value={customPrice}
+              value={customBonus ? "0" : customPrice}
               onChange={(e) => setCustomPrice(e.target.value)}
               placeholder="0"
-              className="input mb-4 text-right text-lg font-semibold tnum"
+              disabled={customBonus}
+              className="input mb-3 text-right text-lg font-semibold tnum disabled:opacity-60"
             />
+            <label className="mb-4 flex cursor-pointer items-center gap-2 rounded-2xl bg-beige/60 px-3 py-2.5 text-sm font-medium text-olive">
+              <input
+                type="checkbox"
+                checked={customBonus}
+                onChange={(e) => setCustomBonus(e.target.checked)}
+              />
+              🎁 Bonus / Gratis (Rp0) — misal selendang, bros, ganci
+            </label>
             <div className="flex gap-2">
-              <button onClick={() => setCustomOpen(false)} className="btn-ghost flex-1">Batal</button>
+              <button onClick={() => { setCustomOpen(false); setCustomBonus(false); }} className="btn-ghost flex-1">Batal</button>
               <button
                 onClick={() => {
                   const name = customName.trim();
-                  const price = Number(customPrice) || 0;
-                  if (!name || price <= 0) return;
+                  const price = customBonus ? 0 : Number(customPrice) || 0;
+                  if (!name) return;
+                  if (!customBonus && price <= 0) return;
                   const series = allSeries.find((x) => x.variantId === customSeriesId);
                   addCustomItem(name, price, 1, series);
                   setCustomOpen(false);
+                  setCustomName("");
+                  setCustomPrice("");
+                  setCustomSeriesId("");
+                  setCustomBonus(false);
                 }}
-                disabled={!customName.trim() || (Number(customPrice) || 0) <= 0}
+                disabled={!customName.trim() || (!customBonus && (Number(customPrice) || 0) <= 0)}
                 className="btn-violet flex-1 disabled:opacity-40"
               >
                 Tambah ke Keranjang

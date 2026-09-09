@@ -186,6 +186,7 @@ export default function TransactionsPage() {
                 <th className="p-2.5 text-right font-semibold">YT</th>
                 <th className="p-2.5 text-right font-semibold">Disc</th>
                 <th className="p-2.5 text-right font-semibold">Margin</th>
+                <th className="p-2.5 font-semibold">Ket</th>
                 <th className="p-2.5 font-semibold">Method</th>
                 <th className="p-2.5 font-semibold">Bukti</th>
                 <th className="p-2.5 font-semibold">Aksi</th>
@@ -262,6 +263,13 @@ export default function TransactionsPage() {
                       {formatRupiah(r.margin)}
                     </td>
                     <td className="p-2.5 align-top">
+                      {r.item.unitPrice === 0 ? (
+                        <span className="pill pill-info">bonus</span>
+                      ) : (
+                        ""
+                      )}
+                    </td>
+                    <td className="p-2.5 align-top">
                       {r.isFirstOfNota ? (
                         <span
                           className={[
@@ -330,7 +338,7 @@ export default function TransactionsPage() {
                 <tr>
                   <td
                     className="p-4 text-center text-gray-600"
-                    colSpan={13}
+                    colSpan={14}
                   >
                     Tidak ada transaksi pada {dateFilter || "filter ini"}.
                   </td>
@@ -424,6 +432,7 @@ export default function TransactionsPage() {
               <li><b>Total</b> = Qty × Price (gross)</li>
               <li><b>YT</b> = akumulasi total per nota</li>
               <li><b>Margin</b> = Total − Disc − Cost×Qty</li>
+              <li><b>Ket</b> = "bonus" bila Price 0 (FE-only, tidak disimpan di DB)</li>
             </ul>
           </div>
         </aside>

@@ -60,9 +60,37 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
   function handlePhoto(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => setPhoto(reader.result as string);
-    reader.readAsDataURL(file);
+    // Kompres ke max 1024px JPEG 0.7 — foto HP mentah (3-5MB base64) adalah
+    // penyebab utama QuotaExceededError di localStorage 'kebaya-oma-data'.
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const MAX = 1024;
+        const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+        const w = Math.max(1, Math.round(img.width * scale));
+        const h = Math.max(1, Math.round(img.height * scale));
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        canvas.getContext("2d")?.drawImage(img, 0, 0, w, h);
+        setPhoto(canvas.toDataURL("image/jpeg", 0.7));
+      } catch {
+        // Fallback: baca mentah bila canvas gagal
+        const reader = new FileReader();
+        reader.onload = () => setPhoto(reader.result as string);
+        reader.readAsDataURL(file);
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      const reader = new FileReader();
+      reader.onload = () => setPhoto(reader.result as string);
+      reader.readAsDataURL(file);
+    };
+    img.src = url;
   }
 
   // Request dynamic QRIS whenever amount/method changes
@@ -444,7 +472,8 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
               {lines.map((l) => {
                 const profit = l.unitPrice - l.costPrice;
                 const margin = l.costPrice > 0 ? Math.round((profit / l.costPrice) * 100) : 100;
-                const atCost = l.costPrice > 0 && l.unitPrice <= l.costPrice;
+                const isBonus = l.unitPrice === 0;
+                const atCost = !isBonus && l.costPrice > 0 && l.unitPrice <= l.costPrice;
                 return (
                   <div key={l.key} className="rounded-2xl bg-beige/60 p-2.5">
                     <div className="mb-1.5 flex items-center justify-between gap-2">
@@ -459,7 +488,10 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
                           value={l.unitPrice}
                           onChange={(e) => {
                             const val = Number(e.target.value) || 0;
-                            if (l.costPrice > 0 && val < l.costPrice) {
+                            if (val === 0) {
+                              // Bonus Rp0 disengaja — jangan clamp ke modal
+                              setUnitPrice(l.key, 0);
+                            } else if (l.costPrice > 0 && val < l.costPrice) {
                               setUnitPrice(l.key, l.costPrice);
                             } else {
                               setUnitPrice(l.key, val);
@@ -468,8 +500,8 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
                           className="input pl-9 text-right text-sm font-semibold tnum"
                         />
                       </div>
-                      <span className={`text-xs font-bold ${atCost ? "text-danger" : margin < 20 ? "text-warning" : "text-success"}`}>
-                        {atCost ? "⚠ Margin 0%" : `Margin ${margin}%`}
+                      <span className={`text-xs font-bold ${isBonus ? "text-violet" : atCost ? "text-danger" : margin < 20 ? "text-warning" : "text-success"}`}>
+                        {isBonus ? "🎁 Bonus" : atCost ? "⚠ Margin 0%" : `Margin ${margin}%`}
                       </span>
                     </div>
                     {atCost && l.costPrice > 0 && (
