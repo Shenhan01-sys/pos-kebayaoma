@@ -119,7 +119,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     const unsub = useData.getState().subscribeRealtime();
     return () => { if (typeof unsub === "function") unsub(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeStoreId]);
+  }, [activeStoreId, auth.initialized]);
 
   const products = useData((s) => s.products);
   const lowCount = products.filter((p) => p.stock <= 5).length;

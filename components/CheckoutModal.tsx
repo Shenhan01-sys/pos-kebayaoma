@@ -216,7 +216,7 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
   }
 
   async function saveTx(tx: Transaction): Promise<Transaction | null> {
-    const saved = await saveTx(tx);
+    const saved = await addTransaction(tx);
     if (!saved) {
       // saveTransaction gagal (misal toko operasional belum dipilih) — tampilkan,
       // jangan stuck diam. Transaksi offline tetap antre via saveTransaction.
