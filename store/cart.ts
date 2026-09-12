@@ -28,12 +28,13 @@ interface CartState {
   customerName: string | null;
   discount: number;
   addVariant: (product: Product, variant: Variant, qty?: number) => void;
-  addCustomItem: (
-    name: string,
-    price: number,
-    qty?: number,
-    series?: { variantId: string; productId: string; seriesName: string; size: string; color: string; costPrice: number; sku: string }
-  ) => void;
+ addCustomItem: (
+ name: string,
+ price: number,
+ qty?: number,
+ series?: { variantId: string; productId: string; seriesName: string; size: string; color: string; costPrice: number; sku: string },
+ cost?: number
+ ) => void;
   setUnitPrice: (key: string, price: number) => void;
   inc: (key: string) => void;
   dec: (key: string) => void;
@@ -81,20 +82,20 @@ export const useCart = create<CartState>((set, get) => ({
       };
       return { lines: [...state.lines, line] };
     }),
-  addCustomItem: (name, price, qty = 1, series) =>
-    set((state) => {
-      const key = "custom-" + Date.now();
-      const line: CartLine = {
-        key,
-        productId: series?.productId ?? "custom",
-        variantId: series?.variantId ?? key,
-        name,
-        sku: series?.sku ?? "CUSTOM",
-        seriesName: series?.seriesName ?? "Custom",
-        size: series?.size ?? "Custom",
-        color: series?.color ?? "—",
-        unitPrice: price,
-        costPrice: series?.costPrice ?? 0,
+ addCustomItem: (name, price, qty = 1, series, cost) =>
+ set((state) => {
+ const key = "custom-" + Date.now();
+ const line: CartLine = {
+ key,
+ productId: series?.productId ?? "custom",
+ variantId: series?.variantId ?? key,
+ name,
+ sku: series?.sku ?? "CUSTOM",
+ seriesName: series?.seriesName ?? "Custom",
+ size: series?.size ?? "Custom",
+ color: series?.color ?? "—",
+ unitPrice: price,
+ costPrice: cost ?? series?.costPrice ?? 0,
         quantity: qty,
         discount: 0,
         custom: true,
@@ -142,7 +143,15 @@ export const useCart = create<CartState>((set, get) => ({
   remove: (key) =>
     set((s) => ({ lines: s.lines.filter((l) => l.variantId !== key) })),
   setCustomer: (name) => set({ customerName: name }),
-  setDiscount: (amount) => set({ discount: Math.max(0, amount) }),
+  setDiscount: (amount) =>
+ set((s) => {
+ // Diskon global tidak boleh membuat pendapatan di bawah total modal.
+ // Baris bonus (unitPrice === 0) dikecualikan — konvensi established.
+ const netBase = s.lines.reduce((a, l) => a + l.unitPrice * l.quantity - l.discount, 0);
+ const costTotal = s.lines.reduce((a, l) => a + (l.unitPrice === 0 ? 0 : l.costPrice * l.quantity), 0);
+ const max = Math.max(0, netBase - costTotal);
+ return { discount: Math.max(0, Math.min(amount, max)) };
+ }),
   clear: () => set({ lines: [], customerName: null, discount: 0 }),
   subtotal: () =>
     get().lines.reduce((s, l) => s + l.unitPrice * l.quantity - l.discount, 0),

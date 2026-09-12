@@ -26,11 +26,12 @@ export default function PosPage() {
   const stores = useData((s) => s.stores);
   const activeStoreId = useData((s) => s.activeStoreId);
 
-  const [customOpen, setCustomOpen] = useState(false);
-  const [customName, setCustomName] = useState("");
-  const [customPrice, setCustomPrice] = useState("");
-  const [customSeriesId, setCustomSeriesId] = useState("");
-  const [customBonus, setCustomBonus] = useState(false);
+ const [customOpen, setCustomOpen] = useState(false);
+ const [customName, setCustomName] = useState("");
+ const [customPrice, setCustomPrice] = useState("");
+ const [customCost, setCustomCost] = useState("");
+ const [customSeriesId, setCustomSeriesId] = useState("");
+ const [customBonus, setCustomBonus] = useState(false);
 
   // HID barcode scanner support — auto-focus hidden input
   const scanInputRef = useRef<HTMLInputElement>(null);
@@ -391,9 +392,12 @@ export default function PosPage() {
             <select
               value={customSeriesId}
               onChange={(e) => {
-                setCustomSeriesId(e.target.value);
-                const s = allSeries.find((x) => x.variantId === e.target.value);
-                if (s) setCustomPrice(String(s.sellingPrice));
+ setCustomSeriesId(e.target.value);
+ const s = allSeries.find((x) => x.variantId === e.target.value);
+ if (s) {
+ setCustomPrice(String(s.sellingPrice));
+ setCustomCost(String(s.costPrice));
+ }
               }}
               className="input mb-3"
             >
@@ -418,8 +422,17 @@ export default function PosPage() {
               onChange={(e) => setCustomPrice(e.target.value)}
               placeholder="0"
               disabled={customBonus}
-              className="input mb-3 text-right text-lg font-semibold tnum disabled:opacity-60"
-            />
+ className="input mb-3 text-right text-lg font-semibold tnum disabled:opacity-60"
+ />
+ <label className="mb-1 block text-sm text-olive">Harga Modal (Rp)</label>
+ <input
+ type="number"
+ value={customBonus ? "0" : customCost}
+ onChange={(e) => setCustomCost(e.target.value)}
+ placeholder="0"
+ disabled={customBonus}
+ className="input mb-3 text-right tnum disabled:opacity-60"
+ />
             <label className="mb-4 flex cursor-pointer items-center gap-2 rounded-2xl bg-beige/60 px-3 py-2.5 text-sm font-medium text-olive">
               <input
                 type="checkbox"
@@ -432,15 +445,18 @@ export default function PosPage() {
               <button onClick={() => { setCustomOpen(false); setCustomBonus(false); }} className="btn-ghost flex-1">Batal</button>
               <button
                 onClick={() => {
-                  const name = customName.trim();
-                  const price = customBonus ? 0 : Number(customPrice) || 0;
-                  if (!name) return;
-                  if (!customBonus && price <= 0) return;
-                  const series = allSeries.find((x) => x.variantId === customSeriesId);
-                  addCustomItem(name, price, 1, series);
-                  setCustomOpen(false);
-                  setCustomName("");
-                  setCustomPrice("");
+ const name = customName.trim();
+ const price = customBonus ? 0 : Number(customPrice) || 0;
+ if (!name) return;
+ if (!customBonus && price <= 0) return;
+ const series = allSeries.find((x) => x.variantId === customSeriesId);
+ // Modal custom tidak boleh di atas harga jual — kecuali bonus Rp0 (modal 0).
+ const cost = customBonus ? 0 : Math.min(Number(customCost) || 0, price);
+ addCustomItem(name, price, 1, series, cost);
+ setCustomOpen(false);
+ setCustomName("");
+ setCustomPrice("");
+ setCustomCost("");
                   setCustomSeriesId("");
                   setCustomBonus(false);
                 }}

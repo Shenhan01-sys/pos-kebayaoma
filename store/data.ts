@@ -1557,7 +1557,7 @@ export const useData = create<DataState>()(
                await psDb.execute(
                  `INSERT INTO transaction_items (id, transaction_id, product_id, variant_id, name, sku, size, color, quantity, unit_price, cost_price, discount, total)
                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                 [generateLocalId(), id, i.productId, i.variantId, i.name, i.sku, i.size, i.color, i.quantity, i.unitPrice, i.costPrice ?? 0, i.discount, i.total]
+                 [generateLocalId(), id, i.productId, i.variantId, i.name, i.sku, i.size, i.color, i.quantity, i.unitPrice, i.costPrice > 0 ? i.costPrice : null, i.discount, i.total]
                );
              }
             const saved: Transaction = { ...tx, id, storeId: sid, customerId: customer?.id, createdAt: new Date().toISOString() };
@@ -1636,7 +1636,7 @@ export const useData = create<DataState>()(
               color: i.color,
               quantity: i.quantity,
               unit_price: i.unitPrice,
-              cost_price: i.costPrice ?? 0,
+              cost_price: i.costPrice > 0 ? i.costPrice : null,
               discount: i.discount,
               total: i.total,
             })));
@@ -1947,8 +1947,8 @@ export const useData = create<DataState>()(
               size: "One Size",
               color: "Custom",
               colorCode: "#cccccc",
-              sellingPrice: item.unitPrice,
-              costPrice: 0,
+ sellingPrice: item.unitPrice,
+ costPrice: item.costPrice ?? 0,
             }],
         });
       },

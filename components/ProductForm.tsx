@@ -148,13 +148,13 @@ export default function ProductForm({
                   </button>
                 </div>
               </div>
-              {v.costPrice > 0 && v.sellingPrice > 0 && (
-                <div className="mt-1.5 flex items-center gap-2 text-[10px] text-gray-600">
-                  <span>Margin: <b className="text-olive">Rp {(v.sellingPrice - v.costPrice).toLocaleString("id-ID")}</b></span>
-                  <span>·</span>
-                  <span>{v.sellingPrice > 0 ? Math.round(((v.sellingPrice - v.costPrice) / v.sellingPrice) * 100) : 0}% margin</span>
-                </div>
-              )}
+ {v.costPrice > 0 && v.sellingPrice > 0 && (
+ <div className="mt-1.5 flex items-center gap-2 text-[10px] text-gray-600">
+ <span>Untung: <b className="text-olive">Rp {(v.sellingPrice - v.costPrice).toLocaleString("id-ID")}</b></span>
+ <span>·</span>
+ <span>{Math.round(((v.sellingPrice - v.costPrice) / v.costPrice) * 100)}% dari modal</span>
+ </div>
+ )}
             </div>
           ))}
         </div>

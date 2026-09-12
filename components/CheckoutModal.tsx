@@ -47,8 +47,15 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
     () => lines.reduce((sum, l) => sum + l.discount, 0),
     [lines]
   );
-  const disc = discount + lineDiscounts;
-  const net = Math.max(0, rawSubtotal - disc);
+ const disc = discount + lineDiscounts;
+ const net = Math.max(0, rawSubtotal - disc);
+ // Diskon maximum = pendapatan (setelah diskon per baris) dikurangi total modal.
+ // Baris bonus (unitPrice === 0) dikecualikan dari total modal.
+ const discMax = Math.max(
+ 0,
+ lines.reduce((a, l) => a + l.unitPrice * l.quantity - l.discount, 0) -
+ lines.reduce((a, l) => a + (l.unitPrice === 0 ? 0 : l.costPrice * l.quantity), 0)
+ );
   const taxAmt = Math.round(net * (s.taxRate / 100));
   const grand = net + taxAmt;
 
@@ -457,21 +464,27 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
             </div>
           </div>
 
-          <div className="mb-3 flex items-center gap-2">
-            <label className="text-sm font-medium text-gray-600">Diskon Tambahan</label>
-            <div className="relative ml-auto w-36">
-              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-600">
-                Rp
-              </span>
-              <input
-                type="number"
-                min={0}
-                value={discount}
-                onChange={(e) => setDiscount(Number(e.target.value) || 0)}
-                className="input pl-9 text-right tnum"
-              />
-            </div>
-          </div>
+ <div className="mb-1 flex items-center gap-2">
+ <label className="text-sm font-medium text-gray-600">Diskon Tambahan</label>
+ <div className="relative ml-auto w-36">
+ <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-600">
+ Rp
+ </span>
+ <input
+ type="number"
+ min={0}
+ max={discMax}
+ value={discount}
+ onChange={(e) => setDiscount(Number(e.target.value) || 0)}
+ className="input pl-9 text-right tnum"
+ />
+ </div>
+ </div>
+ {disc > 0 && discount >= discMax && (
+ <p className="mb-3 flex items-center gap-1.5 text-xs text-danger">
+ <Icon name="alert" size={12} /> Diskon dibatasi — tidak boleh membuat pendapatan di bawah total modal.
+ </p>
+ )}
 
           {/* Price negotiation */}
           <button
@@ -483,11 +496,12 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
           </button>
           {negoOpen && (
             <div className="mb-3 space-y-2">
-              {lines.map((l) => {
-                const profit = l.unitPrice - l.costPrice;
-                const margin = l.costPrice > 0 ? Math.round((profit / l.costPrice) * 100) : 100;
-                const isBonus = l.unitPrice === 0;
-                const atCost = !isBonus && l.costPrice > 0 && l.unitPrice <= l.costPrice;
+ {lines.map((l) => {
+ const isBonus = l.unitPrice === 0;
+ // Konvensi UMKM: % untung = untung ÷ modal (sama dengan ProductForm).
+ const hasCost = l.costPrice > 0;
+ const margin = hasCost ? Math.round(((l.unitPrice - l.costPrice) / l.costPrice) * 100) : null;
+ const atCost = !isBonus && hasCost && l.unitPrice <= l.costPrice;
                 return (
                   <div key={l.key} className="rounded-2xl bg-beige/60 p-2.5">
                     <div className="mb-1.5 flex items-center justify-between gap-2">
@@ -514,9 +528,9 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
                           className="input pl-9 text-right text-sm font-semibold tnum"
                         />
                       </div>
-                      <span className={`text-xs font-bold ${isBonus ? "text-violet" : atCost ? "text-danger" : margin < 20 ? "text-warning" : "text-success"}`}>
-                        {isBonus ? "🎁 Bonus" : atCost ? "⚠ Margin 0%" : `Margin ${margin}%`}
-                      </span>
+ <span className={`text-xs font-bold ${isBonus ? "text-violet" : atCost ? "text-danger" : margin === null ? "text-gray-500" : margin < 20 ? "text-warning" : "text-success"}`}>
+ {isBonus ? "🎁 Bonus" : atCost ? "⚠ Modal pas-pasan" : margin === null ? "Tanpa modal" : `Untung ${margin}% dr modal`}
+ </span>
                     </div>
                     {atCost && l.costPrice > 0 && (
                       <div className="mt-1.5 flex items-center gap-1.5 text-xs text-danger">
