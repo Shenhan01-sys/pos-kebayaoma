@@ -1,9 +1,11 @@
-import { PowerSyncDatabase } from "@powersync/web";
-import { schema } from "./schema";
+import type { PowerSyncDatabase } from "@powersync/web";
 
 // ============================================================================
 // PowerSync Client — offline-first SQLite di browser
 // ============================================================================
+// PowerSync hanya di-load secara dinamis saat NEXT_PUBLIC_POWERSYNC_URL di-set.
+// Tanpa URL, module @powersync/web (besar) tidak ikut di initial bundle,
+// sehingga first load lebih ringan dan tidak memicu worker-initialization error.
 
 let db: PowerSyncDatabase | null = null;
 let initPromise: Promise<PowerSyncDatabase | null> | null = null;
@@ -28,6 +30,12 @@ export async function initPowerSync(): Promise<PowerSyncDatabase | null> {
 
   initPromise = (async () => {
     try {
+      // Lazy-load package + schema agar tidak masuk bundle utama saat nonaktif.
+      const [{ PowerSyncDatabase }, { schema }] = await Promise.all([
+        import("@powersync/web"),
+        import("./schema"),
+      ]);
+
       db = new PowerSyncDatabase({
         database: { dbFilename: "kebaya-oma.db" },
         schema,

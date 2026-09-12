@@ -1,6 +1,12 @@
-// Kebaya Oma POS — minimal PWA service worker
-// Network-first for navigations & same-origin GET, fallback to cache when offline.
-const CACHE = "kebaya-oma-v1";
+// Kebaya Oma POS — PWA service worker
+// Strategi cache:
+// - Navigasi (/): network-first, fallback ke shell yang di-cache.
+// - Aset Next.js yang di-hash (/_next/static/...): cache-first karena URL-nya
+//   immutable — hash berubah saat konten berubah, jadi tidak ada risiko stale chunk.
+// - Aset statis lainnya: network-first, fallback ke cache.
+// Tujuannya: mencegah error "Cannot read properties of undefined (reading 'M_ID')"
+// yang muncul ketika cache lama menyervis chunk dari build berbeda.
+const CACHE = "kebaya-oma-v2";
 const OFFLINE_FALLBACK = "/";
 
 self.addEventListener("install", (event) => {
@@ -27,7 +33,7 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Navigations: network-first, fall back to cached shell when offline.
+  // Navigasi: network-first, fallback ke shell offline.
   if (req.mode === "navigate") {
     event.respondWith(
       fetch(req)
@@ -41,7 +47,22 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Static assets: network-first, cache fallback.
+  // Aset Next.js yang di-hash: cache-first (immutable URLs).
+  if (req.url.includes("/_next/static/")) {
+    event.respondWith(
+      caches.match(req).then((cached) => {
+        if (cached) return cached;
+        return fetch(req).then((res) => {
+          const copy = res.clone();
+          caches.open(CACHE).then((c) => c.put(req, copy));
+          return res;
+        });
+      })
+    );
+    return;
+  }
+
+  // Aset statis lainnya: network-first, fallback ke cache.
   event.respondWith(
     fetch(req)
       .then((res) => {
