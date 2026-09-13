@@ -1,30 +1,16 @@
 "use client";
 
-import { useState } from "react";
-import { transactions as dummyTx, formatRupiah, toLocalDayKey } from "@/lib/dummy";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { transactions as dummyTx, formatRupiah } from "@/lib/dummy";
 import { getAllTransactions } from "@/store/cart";
+import { useData } from "@/store/data";
 import { Icon, type IconName } from "@/components/icons";
+import { computeReport } from "@/lib/report-data";
+import { exportPdf, exportXlsx, type ExportMeta } from "@/lib/report-export";
 import dynamic from "next/dynamic";
 import type { EChartsCoreOption } from "echarts/core";
 
 const EChart = dynamic(() => import("@/components/EChart"), { ssr: false });
-
-function csvCell(v: string | number): string {
-  const s = String(v);
-  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-}
-function toCSV(rows: (string | number)[][]): string {
-  return rows.map((r) => r.map(csvCell).join(",")).join("\r\n");
-}
-function download(name: string, csv: string) {
-  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
-  const a = document.createElement("a");
-  const url = URL.createObjectURL(blob);
-  a.href = url;
-  a.download = name;
-  a.click();
-  URL.revokeObjectURL(url);
-}
 
 const C = {
   violet: "#290024",
@@ -40,41 +26,40 @@ const methodLabel: Record<string, string> = { qris: "QRIS", cash: "Tunai", trans
 export default function ReportsPage() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+  const stores = useData((s) => s.stores);
+  const activeStoreId = useData((s) => s.activeStoreId);
+  const storeName = useData((s) => s.stores.find((t) => t.id === s.activeStoreId)?.name);
+  // E3: filter outlet — default ikut switcher (manager boleh "semua").
+  const [storeSel, setStoreSel] = useState<string>("semua");
+  useEffect(() => { setStoreSel(activeStoreId ?? "semua"); }, [activeStoreId]);
+  const [exporting, setExporting] = useState<"pdf" | "xlsx" | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const methodRef = useRef<HTMLDivElement>(null);
+  const dailyRef = useRef<HTMLDivElement>(null);
+  const prodRef = useRef<HTMLDivElement>(null);
 
   const all = getAllTransactions(dummyTx).filter((t) => t.status === "paid");
-  const inRange = all.filter((t) => {
-    const d = new Date(t.createdAt);
-    if (from && d < new Date(from + "T00:00:00")) return false;
-    if (to && d > new Date(to + "T23:59:59")) return false;
-    return true;
-  });
-
-  const sales = inRange.reduce((s, t) => s + t.total, 0);
-  const tax = inRange.reduce((s, t) => s + (t.tax ?? 0), 0);
-  const discount = inRange.reduce((s, t) => s + (t.discount ?? 0), 0);
-  const count = inRange.length;
-  const avg = count ? sales / count : 0;
-
-  const byMethod: Record<string, number> = {};
-  inRange.forEach((t) => (byMethod[t.paymentMethod] = (byMethod[t.paymentMethod] ?? 0) + t.total));
-  const methodTotal = Object.values(byMethod).reduce((a, b) => a + b, 0);
-
-  const byProduct: Record<string, { qty: number; rev: number }> = {};
-  inRange.forEach((t) =>
-    t.items.forEach((it) => {
-      byProduct[it.name] = byProduct[it.name] ?? { qty: 0, rev: 0 };
-      byProduct[it.name].qty += it.quantity;
-      byProduct[it.name].rev += it.total;
-    })
+  const inRangeTxs = useMemo(
+    () => getAllTransactions(dummyTx).filter((t) => {
+      const d = new Date(t.createdAt);
+      if (from && d < new Date(from + "T00:00:00")) return false;
+      if (to && d > new Date(to + "T23:59:59")) return false;
+      return true;
+    }),
+    [from, to]
   );
-  const topProducts = Object.entries(byProduct).sort((a, b) => b[1].rev - a[1].rev);
+  const report = useMemo(
+    () => computeReport(inRangeTxs, storeSel === "semua" ? null : storeSel, from, to),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [storeSel, from, to, all.length]
+  );
+  const { sales, count, avg, discount, tax, hpp, bersih, unknownQty } = report;
+  const inRange = { length: count };
 
-  const byDay: Record<string, number> = {};
-  inRange.forEach((t) => {
-    const d = toLocalDayKey(t.createdAt);
-    byDay[d] = (byDay[d] ?? 0) + t.total;
-  });
-  const days = Object.entries(byDay).sort();
+  const byMethod = report.byMethod;
+  const methodTotal = Object.values(byMethod).reduce((a, b) => a + b, 0);
+  const topProducts = report.topProducts;
+  const days = report.byDay;
 
   // ---- ECharts options (solid palette) ----
   const donutOption: EChartsCoreOption = {
@@ -156,19 +141,37 @@ export default function ReportsPage() {
   };
 
   const kpis: { label: string; value: string; icon: IconName; bg: string }[] = [
-    { label: "Total Penjualan", value: formatRupiah(sales), icon: "wallet", bg: "bg-violet" },
+    { label: "Omzet", value: formatRupiah(sales), icon: "wallet", bg: "bg-violet" },
+    { label: "HPP", value: formatRupiah(hpp), icon: "box", bg: "bg-olive" },
+    { label: "Bersih", value: formatRupiah(bersih), icon: "spark", bg: "bg-success" },
     { label: "Transaksi", value: String(count), icon: "receipt", bg: "bg-apricot" },
-    { label: "Rata-rata", value: formatRupiah(avg), icon: "spark", bg: "bg-olive" },
-    { label: "Pajak", value: formatRupiah(tax), icon: "tag", bg: "bg-success" },
-    { label: "Diskon", value: formatRupiah(discount), icon: "minus", bg: "bg-violet" },
+    { label: "Rata-rata", value: formatRupiah(avg), icon: "shifts", bg: "bg-violet" },
   ];
 
-  function exportSales() {
-    const rows: (string | number)[][] = [["No", "Waktu", "Kasir", "Pelanggan", "Metode", "Subtotal", "Diskon", "Pajak", "Total"]];
-    inRange.forEach((t) =>
-      rows.push([t.number, t.createdAt, t.cashier, t.customerName ?? "", t.paymentMethod, t.subtotal, t.discount, t.tax, t.total])
-    );
-    download("laporan-penjualan.csv", toCSV(rows));
+  function meta(): ExportMeta {
+    return {
+      storeLabel: storeSel === "semua" ? "SEMUA" : stores.find((t) => t.id === storeSel)?.prefix ?? "MJL",
+      from, to, storeName: "Kebaya Oma",
+    };
+  }
+  async function doExportPdf() {
+    setExporting("pdf"); setExportError(null);
+    try {
+      await exportPdf({
+        report, meta: meta(),
+        chartNodes: { method: methodRef.current ?? undefined, daily: dailyRef.current ?? undefined, products: prodRef.current ?? undefined },
+      });
+    } catch (e: any) {
+      setExportError(e?.message ?? "Gagal membuat PDF.");
+    } finally {
+      setExporting(null);
+    }
+  }
+  async function doExportXlsx() {
+    setExporting("xlsx"); setExportError(null);
+    try { await exportXlsx(report, meta()); }
+    catch (e: any) { setExportError(e?.message ?? "Gagal membuat Excel."); }
+    finally { setExporting(null); }
   }
 
   return (
@@ -181,12 +184,24 @@ export default function ReportsPage() {
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-extrabold tracking-tight text-ink">Laporan</h1>
-            <p className="text-sm text-olive">Analitik penjualan & metode pembayaran</p>
+            <p className="text-sm text-olive">Analitik penjualan &amp; metode pembayaran</p>
           </div>
-          <button onClick={exportSales} className="btn-primary">
-            <Icon name="transactions" size={16} /> Export CSV
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <select value={storeSel} onChange={(e) => setStoreSel(e.target.value)} className="input w-auto" aria-label="Filter outlet">
+              <option value="semua">Semua Outlet</option>
+              {stores.map((t) => <option key={t.id} value={t.id}>{t.prefix} - {t.name}</option>)}
+            </select>
+            <button onClick={doExportPdf} disabled={exporting !== null || count === 0} className="btn-primary disabled:opacity-50">
+              <Icon name="receipt" size={16} /> {exporting === "pdf" ? "Membuat PDF…" : "Export PDF"}
+            </button>
+            <button onClick={doExportXlsx} disabled={exporting !== null || count === 0} className="btn-violet disabled:opacity-50">
+              <Icon name="transactions" size={16} /> {exporting === "xlsx" ? "Membuat…" : "Export Excel"}
+            </button>
+          </div>
         </div>
+        {exportError && (
+          <p className="mb-3 rounded-xl bg-danger/10 px-3 py-2 text-sm font-medium text-danger">{exportError}</p>
+        )}
 
         {/* Date range */}
         <div className="seg mb-5 w-full max-w-md">
@@ -223,9 +238,22 @@ export default function ReportsPage() {
           ))}
         </div>
 
+        {/* P&L ringkas — sama persis dgn PDF/xlsx (sumber: computeReport) */}
+        <div className="card card-pad mt-4 text-sm">
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-1">
+            <span><span className="text-gray-600">Omzet</span> <b className="tnum text-ink">{formatRupiah(sales)}</b></span>
+            <span>− <span className="text-gray-600">HPP</span> <b className="tnum text-ink">{formatRupiah(hpp)}</b></span>
+            <span>− <span className="text-gray-600">Pengeluaran</span> <b className="tnum text-ink">{formatRupiah(report.expenses)}</b> <span className="text-xs text-gray-500">(belum termasuk)</span></span>
+            <span>= <span className="text-gray-600">Keuntungan Bersih</span> <b className="tnum text-success">{formatRupiah(bersih)}</b></span>
+          </div>
+          {unknownQty > 0 && (
+            <p className="mt-1 text-xs text-warning">{unknownQty} unit tanpa data modal — HPP belum mencakupnya.</p>
+          )}
+        </div>
+
         {/* Bento charts */}
         <div className="mt-6 grid gap-4 lg:grid-cols-3">
-          <div className="card card-pad lg:col-span-1">
+          <div ref={methodRef} className="card card-pad lg:col-span-1">
             <h2 className="section-title mb-1">Per Metode Pembayaran</h2>
             {Object.keys(byMethod).length === 0 ? (
               <p className="py-10 text-center text-sm text-gray-500">Tidak ada data.</p>
@@ -240,7 +268,7 @@ export default function ReportsPage() {
             )}
           </div>
 
-          <div className="card card-pad lg:col-span-2">
+          <div ref={dailyRef} className="card card-pad lg:col-span-2">
             <h2 className="section-title mb-1">Tren Penjualan Harian</h2>
             {days.length === 0 ? (
               <p className="py-10 text-center text-sm text-gray-500">Tidak ada data.</p>
@@ -251,7 +279,7 @@ export default function ReportsPage() {
         </div>
 
         {/* Per product */}
-        <div className="card card-pad mt-6">
+        <div ref={prodRef} className="card card-pad mt-6">
           <h2 className="section-title mb-2">Penjualan per Produk</h2>
           {topProducts.length === 0 ? (
             <p className="py-6 text-center text-sm text-gray-500">Tidak ada data.</p>
