@@ -16,6 +16,10 @@ export interface Variant {
   sellingPrice: number;
   costPrice: number;
   barcode?: string;
+  // E7 sewa (fase 1): tarif flat + deposit per seri
+  rentalPrice?: number | null;
+  rentalDays?: number;
+  depositPrice?: number | null;
 }
 
 export interface Product {

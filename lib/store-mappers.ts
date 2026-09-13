@@ -21,6 +21,9 @@ export function mapVariantRow(v: Record<string, any>): Variant {
     sellingPrice: Number(v.selling_price),
     costPrice: Number(v.cost_price ?? 0),
     barcode: v.barcode,
+    rentalPrice: v.rental_price != null ? Number(v.rental_price) : undefined,
+    rentalDays: v.rental_days != null ? Number(v.rental_days) : undefined,
+    depositPrice: v.deposit_price != null ? Number(v.deposit_price) : undefined,
   };
 }
 

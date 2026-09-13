@@ -119,6 +119,22 @@ export interface Transfer {
   sentAt?: string | null;
 }
 
+export interface RentalRow {
+  id: string;
+  transactionId: string;
+  txNumber: string;
+  productId: string;
+  productName: string;
+  customerName?: string | null;
+  customerPhone?: string | null;
+  qty: number;
+  returnedQty: number;
+  rentPrice: number;
+  deposit?: number | null;
+  startDate: string;
+  dueDate: string;
+}
+
 interface DataState {
   products: Product[];
   categories: Category[];
@@ -197,6 +213,16 @@ interface DataState {
   requestTransfer: (fromStoreId: string, toStoreId: string, productId: string, qty: number, requestedBy: string, note?: string) => Promise<boolean>;
   sendTransfer: (id: string) => Promise<boolean>;
   cancelTransfer: (id: string) => Promise<boolean>;
+
+  // rentals (E7)
+  rentals: RentalRow[];
+  fetchRentals: () => Promise<void>;
+  createRental: (input: {
+    storeId: string; productId: string; variantId: string; qty: number;
+    rentPrice: number; deposit?: number | null; startDate: string; days: number;
+    customerName: string; customerPhone?: string | null; cashier: string; paymentMethod: string;
+  }) => Promise<string | null>;
+  returnRental: (id: string, qty: number, staff: string) => Promise<boolean>;
 
   // customers
   addCustomer: (c: Omit<Customer, "id">) => Promise<void>;
@@ -295,6 +321,7 @@ export const useData = create<DataState>()(
       movements: [],
       vendors: [],
       transfers: [],
+      rentals: [],
       transactions: [],
       shifts: [],
       loading: false,
@@ -314,6 +341,8 @@ export const useData = create<DataState>()(
           get().fetchShifts(),
           get().fetchVendors(),
           get().fetchMovements(),
+          get().fetchTransfers(),
+          get().fetchRentals(),
         ]);
       },
 
@@ -690,6 +719,9 @@ export const useData = create<DataState>()(
             selling_price: v.sellingPrice,
             cost_price: v.costPrice,
             barcode: v.barcode ?? null,
+            rental_price: v.rentalPrice ?? null,
+            rental_days: v.rentalDays ?? 3,
+            deposit_price: v.depositPrice ?? null,
             product_id: product.id
           }));
 
@@ -786,6 +818,9 @@ export const useData = create<DataState>()(
                     selling_price: v.sellingPrice,
                     cost_price: v.costPrice,
                     barcode: v.barcode ?? null,
+                    rental_price: v.rentalPrice ?? null,
+                    rental_days: v.rentalDays ?? 3,
+                    deposit_price: v.depositPrice ?? null,
                     product_id: id,
                   }]);
                 if (insErr) throw insErr;
@@ -801,6 +836,9 @@ export const useData = create<DataState>()(
                     selling_price: v.sellingPrice,
                     cost_price: v.costPrice,
                     barcode: v.barcode,
+                    rental_price: v.rentalPrice ?? null,
+                    rental_days: v.rentalDays ?? 3,
+                    deposit_price: v.depositPrice ?? null,
                   })
                   .eq('id', v.id);
                 if (updErr) throw updErr;
@@ -1275,6 +1313,79 @@ export const useData = create<DataState>()(
           const { error } = await supabase.rpc("cancel_transfer", { p_transfer: id });
           if (error) throw error;
           await get().fetchTransfers();
+          return true;
+        } catch (error: any) {
+          set({ error: error.message });
+          return false;
+        }
+      },
+
+      fetchRentals: async () => {
+        if (!isSupabaseReady) return;
+        const sid = get().activeStoreId;
+        try {
+          const { data, error } = await supabase
+            .from("rentals")
+            .select("*, customers(name, phone), transactions(number, store_id), products(name)")
+            .order("due_date", { ascending: true })
+            .limit(200);
+          if (error) throw error;
+          set({
+            rentals: (data ?? [])
+              .filter((r: any) => !sid || r.transactions?.store_id === sid)
+              .map((r: any) => ({
+              id: r.id,
+              transactionId: r.transaction_id,
+              txNumber: r.transactions?.number ?? "—",
+              productId: r.product_id,
+              productName: r.products?.name ?? "—",
+              customerName: r.customers?.name ?? null,
+              customerPhone: r.customers?.phone ?? null,
+              qty: Number(r.qty),
+              returnedQty: Number(r.returned_qty ?? 0),
+              rentPrice: Number(r.rent_price),
+              deposit: r.deposit != null ? Number(r.deposit) : null,
+              startDate: r.start_date,
+              dueDate: r.due_date,
+            })),
+          });
+        } catch (error: any) {
+          set({ error: error.message });
+        }
+      },
+
+      createRental: async (input) => {
+        if (!isSupabaseReady) { set({ error: "Sewa butuh koneksi server." }); return null; }
+        try {
+          const { data, error } = await supabase.rpc("create_rental", {
+            p_store: input.storeId,
+            p_product: input.productId,
+            p_variant: input.variantId,
+            p_qty: input.qty,
+            p_rent_price: input.rentPrice,
+            p_deposit: input.deposit ?? null,
+            p_start_date: input.startDate,
+            p_days: input.days,
+            p_customer_name: input.customerName,
+            p_customer_phone: input.customerPhone ?? null,
+            p_cashier: input.cashier,
+            p_payment_method: input.paymentMethod,
+          });
+          if (error) throw error;
+          await Promise.all([get().fetchProducts(), get().fetchRentals(), get().fetchTransactions(), get().fetchCustomers()]);
+          return (data as string) ?? null;
+        } catch (error: any) {
+          set({ error: error.message });
+          return null;
+        }
+      },
+
+      returnRental: async (id, qty, staff) => {
+        if (!isSupabaseReady) return false;
+        try {
+          const { error } = await supabase.rpc("return_rental", { p_rental: id, p_qty: qty, p_staff: staff });
+          if (error) throw error;
+          await Promise.all([get().fetchProducts(), get().fetchRentals(), get().fetchMovements()]);
           return true;
         } catch (error: any) {
           set({ error: error.message });

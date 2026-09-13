@@ -186,6 +186,9 @@ export default function ProductForm({
                 <VarInput label="Barcode" value={v.barcode ?? ""} onChange={(val) => setVar(i, { barcode: val })} />
                 <VarInput label="Modal (Rp)" type="number" value={String(v.costPrice)} onChange={(val) => setVar(i, { costPrice: Number(val) })} />
                 <VarInput label="Harga Jual (Rp)" type="number" value={String(v.sellingPrice)} onChange={(val) => setVar(i, { sellingPrice: Number(val) })} />
+                <VarInput label="Harga Sewa (Rp)" type="number" value={String(v.rentalPrice ?? "")} onChange={(val) => setVar(i, { rentalPrice: val ? Number(val) : null })} />
+                <VarInput label="Hari Sewa" type="number" value={String(v.rentalDays ?? 3)} onChange={(val) => setVar(i, { rentalDays: Number(val) || 3 })} />
+                <VarInput label="Deposit (Rp)" type="number" value={String(v.depositPrice ?? "")} onChange={(val) => setVar(i, { depositPrice: val ? Number(val) : null })} />
                 <div className="flex items-end">
                   <button onClick={() => setVariants((vs) => vs.filter((_, idx) => idx !== i))} className="btn-danger w-full px-2 py-1.5">
                     Hapus

@@ -112,6 +112,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     useData.getState().fetchShifts();
     useData.getState().fetchVendors();
     useData.getState().fetchMovements();
+    useData.getState().fetchTransfers();
+    useData.getState().fetchRentals();
   }, []);
 
   // Re-subscribe realtime saat scope toko berubah (filter store_id per toko).
