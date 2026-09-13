@@ -11,12 +11,15 @@ interface PrintBarcodeModalProps {
   isOpen: boolean;
   onClose: () => void;
   productId: string; // Product ID to print
+  // E2: preset dari restock — varian, jumlah = qty restock, konten VO + nama vendor
+  preset?: { variantId: string; copies: number; barcode: string; vendorName?: string } | null;
 }
 
 export default function PrintBarcodeModal({
   isOpen,
   onClose,
   productId,
+  preset,
 }: PrintBarcodeModalProps) {
   const { products } = useData();
   const [selectedVariants, setSelectedVariants] = useState<Record<string, number>>({});
@@ -27,18 +30,28 @@ export default function PrintBarcodeModal({
     ? products 
     : products.filter((p) => p.id === productId);
 
-  // Auto-check all variants on open
+  // Barcode + label vendor utk varian preset (E2), selain itu default varian
+  const barcodeFor = (variant: { id: string; barcode?: string | null; sku: string }) =>
+    preset && preset.variantId === variant.id ? preset.barcode : variant.barcode || variant.sku;
+  const vendorFor = (variantId: string) =>
+    preset && preset.variantId === variantId ? preset.vendorName : undefined;
+
+  // Auto-check all variants on open (preset → varian & copies dari restock)
   useEffect(() => {
     if (isOpen) {
-      const allVariants: Record<string, number> = {};
+      if (preset) {
+        setSelectedVariants({ [preset.variantId]: preset.copies });
+        return;
+      }
+      const allVariantsInit: Record<string, number> = {};
       productsToPrint.forEach((p) => {
         p.variants.forEach((v) => {
-          allVariants[v.id] = 1; // Default 1 copy each
+          allVariantsInit[v.id] = 1; // Default 1 copy each
         });
       });
-      setSelectedVariants(allVariants);
+      setSelectedVariants(allVariantsInit);
     }
-   }, [isOpen, productId]);
+   }, [isOpen, productId, preset]);
 
   // Handle checkbox toggle
   const toggleVariant = (variantId: string) => {
@@ -67,7 +80,7 @@ export default function PrintBarcodeModal({
     const labelHeight = labelSize === "60x30" ? 30 : labelSize === "50x25" ? 25 : 20;
 
     // Collect labels
-    const labels: { name: string; color?: string; size: string; price: number; barcode: string; }[] = [];
+    const labels: { name: string; color?: string; size: string; price: number; barcode: string; vendor?: string; }[] = [];
     allVariants.forEach(({ product, variant }) => {
       const count = selectedVariants[variant.id] || 0;
       if (count === 0) return;
@@ -77,7 +90,8 @@ export default function PrintBarcodeModal({
           color: variant.color,
           size: variant.size,
           price: variant.sellingPrice,
-          barcode: variant.barcode || variant.sku,
+          barcode: barcodeFor(variant),
+          vendor: vendorFor(variant.id),
         });
       }
     });
@@ -105,6 +119,7 @@ export default function PrintBarcodeModal({
           <div class="label-info">
             <div class="label-name">${label.name}</div>
             ${label.color ? `<div class="label-color">${label.color}</div>` : ""}
+            ${label.vendor ? `<div class="label-color">Vend: ${label.vendor}</div>` : ""}
             <div class="label-size">Size: ${label.size}</div>
             <div class="label-price">Rp ${label.price.toLocaleString("id-ID")}</div>
           </div>
@@ -203,6 +218,7 @@ ${labelHTML}
       size: string;
       price: number;
       barcode: string;
+      vendor?: string;
       image: string;
     }[] = [];
 
@@ -212,7 +228,7 @@ ${labelHTML}
 
       // Generate barcode image once per variant
       const canvas = document.createElement("canvas");
-      JsBarcode(canvas, variant.barcode || variant.sku, {
+      JsBarcode(canvas, barcodeFor(variant), {
         format: "CODE128",
         width: 2,
         height: 40,
@@ -227,7 +243,8 @@ ${labelHTML}
           color: variant.color,
           size: variant.size,
           price: variant.sellingPrice,
-          barcode: variant.barcode || variant.sku,
+          barcode: barcodeFor(variant),
+          vendor: vendorFor(variant.id),
           image,
         });
       }
@@ -277,6 +294,10 @@ ${labelHTML}
       let textY = y + 4 + nameLines.length * 3.5;
       if (label.color) {
         doc.text(label.color, infoX, textY);
+        textY += 3.5;
+      }
+      if (label.vendor) {
+        doc.text(`Vend: ${label.vendor}`, infoX, textY);
         textY += 3.5;
       }
       doc.text(`Size: ${label.size}`, infoX, textY);

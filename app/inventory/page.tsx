@@ -1,15 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useData } from "@/store/data";
 import { useAuth } from "@/store/auth";
 import { useSettings } from "@/store/settings";
+import { formatRupiah } from "@/lib/dummy";
+import { encodeVoBarcode } from "@/lib/barcode";
 import { Icon } from "@/components/icons";
+import PrintBarcodeModal from "@/components/PrintBarcodeModal";
 
 type Reason = "Rusak/Hilang" | "Penyesuaian" | "Stok Opname" | "Lainnya";
 
 export default function InventoryPage() {
-  const { products, movements, adjustStock } = useData();
+  const { products, movements, vendors, adjustStock, addVendor } = useData();
   const auth = useAuth();
   const s = useSettings();
   const cashierName = auth.staff?.name ?? s.cashierName;
@@ -21,6 +24,17 @@ export default function InventoryPage() {
   const [tab, setTab] = useState<"stock" | "log">("stock");
   const [busy, setBusy] = useState(false);
   const [applyError, setApplyError] = useState<string | null>(null);
+  const [vendorId, setVendorId] = useState("");
+  const [newVendor, setNewVendor] = useState("");
+  const [unitCost, setUnitCost] = useState("");
+  const [printPreset, setPrintPreset] = useState<{ productId: string; variantId: string; copies: number; content: string; vendorName: string } | null>(null);
+  const busyRef = useRef(false);
+
+  useEffect(() => {
+    useData.getState().fetchProducts();
+    useData.getState().fetchMovements();
+    useData.getState().fetchVendors();
+  }, []);
 
   const active = products.filter((p) => p.active);
   const low = active.filter((p) => p.stock <= 5);
@@ -33,31 +47,72 @@ export default function InventoryPage() {
     setNote("");
     setBusy(false);
     setApplyError(null);
+    setVendorId("");
+    setNewVendor("");
+    setUnitCost("");
+    busyRef.current = false;
   }
   async function apply() {
-    if (!stockOpen || qty <= 0 || busy) return;
+    if (!stockOpen || qty <= 0 || busyRef.current) return; // AC-E2a#2: guard ref — state busy belum ter-render saat dobel-klik < 1 frame
     if (mode === "out" && qty > stockOpen.current) {
       const ok = confirm(
         `Stok ${stockOpen.productName} hanya ${stockOpen.current}, mau kurangi ${qty}? Kelebihan akan diabaikan (stok jadi 0).`
       );
       if (!ok) return;
     }
+    if (mode === "in" && !vendorId && !newVendor.trim() && unitCost.trim()) {
+      setApplyError("Pilih / tulis vendor dulu untuk menyimpan harga modal.");
+      return;
+    }
     const delta = mode === "in" ? qty : -qty;
     const type = mode === "in" ? "restock" : "adjustment";
     setBusy(true);
+    busyRef.current = true;
     setApplyError(null);
     try {
-      const ok = await adjustStock(stockOpen.productId, delta, type, cashierName, reason, note);
+      // E2: vendor baru inline → auto-insert ke daftar vendor
+      let finalVendorId: string | null = vendorId || null;
+      let finalVendorName = vendors.find((v) => v.id === vendorId)?.name ?? "";
+      if (mode === "in" && newVendor.trim()) {
+        const v = await addVendor(newVendor.trim());
+        if (!v) {
+          setApplyError(useData.getState().error ?? "Gagal menambah vendor.");
+          return;
+        }
+        finalVendorId = v.id;
+        finalVendorName = v.name;
+      }
+      const finalUnitCost = mode === "in" && unitCost.trim() ? Number(unitCost) : null;
+
+      const ok = await adjustStock(stockOpen.productId, delta, type, cashierName, reason, note, finalVendorId, finalUnitCost);
       if (!ok) {
         setApplyError(useData.getState().error ?? "Gagal menyimpan penyesuaian stok.");
         return;
       }
+      const closedProduct = stockOpen;
       setStockOpen(null);
+      // AC-E2c#1: restock dengan vendor → auto-trigger print stiker barcode (qty = jumlah restock)
+      if (mode === "in" && finalVendorId) {
+        const prod = useData.getState().products.find((p) => p.id === closedProduct.productId);
+        const v0 = prod?.variants[0];
+        if (v0) {
+          setPrintPreset({
+            productId: closedProduct.productId,
+            variantId: v0.id,
+            copies: qty,
+            // konten VO: varian (jika tunggal) agar scan langsung presisi; multi-varian → ref produk
+            content: encodeVoBarcode(prod && prod.variants.length === 1 ? v0.id : closedProduct.productId, finalVendorId),
+            vendorName: finalVendorName || newVendor.trim(),
+          });
+        }
+      }
     } finally {
       setBusy(false);
+      busyRef.current = false;
     }
   }
   const newStock = stockOpen ? Math.max(0, stockOpen.current + (mode === "in" ? qty : -qty)) : 0;
+  const vendorNameOf = (id?: string | null) => (id ? vendors.find((v) => v.id === id)?.name ?? "—" : null);
 
   return (
     <div>
@@ -113,12 +168,14 @@ export default function InventoryPage() {
                 <th className="p-3 font-semibold">Tipe</th>
                 <th className="p-3 text-right font-semibold">Qty</th>
                 <th className="p-3 font-semibold">Alasan</th>
+                <th className="p-3 font-semibold">Vendor</th>
+                <th className="p-3 text-right font-semibold">Modal/unit</th>
                 <th className="p-3 font-semibold">Staff</th>
               </tr>
             </thead>
             <tbody>
               {movements.length === 0 && (
-                <tr><td className="p-4 text-center text-gray-600" colSpan={6}>Belum ada pergerakan stok.</td></tr>
+                <tr><td className="p-4 text-center text-gray-600" colSpan={8}>Belum ada pergerakan stok.</td></tr>
               )}
               {movements.map((m) => (
                 <tr key={m.id} className="border-t border-black/5">
@@ -127,6 +184,8 @@ export default function InventoryPage() {
                   <td className="p-3"><span className="pill-muted">{m.type}</span></td>
                   <td className={`p-3 text-right font-bold tnum ${m.quantity < 0 ? "text-danger" : "text-success"}`}>{m.quantity > 0 ? "+" : ""}{m.quantity}</td>
                   <td className="p-3">{m.reason ?? "—"}</td>
+                  <td className="p-3">{vendorNameOf(m.vendorId) ?? "—"}</td>
+                  <td className="p-3 text-right tnum">{m.unitCost != null ? formatRupiah(m.unitCost) : "—"}</td>
                   <td className="p-3">{m.staff}</td>
                 </tr>
               ))}
@@ -190,6 +249,42 @@ export default function InventoryPage() {
               <span className={`font-extrabold tnum ${newStock === 0 ? "text-danger" : "text-ink"}`}>{newStock}</span>
             </div>
 
+            {mode === "in" && (
+              <div className="mb-4 rounded-2xl bg-violet/5 p-3 ring-1 ring-violet/15">
+                <div className="mb-2 flex items-center gap-1.5 text-sm font-bold text-violet">
+                  <Icon name="box" size={15} /> Vendor / Kulaan
+                </div>
+                <label className="mb-1 block text-xs text-olive">Vendor</label>
+                <select
+                  value={vendorId}
+                  onChange={(e) => { setVendorId(e.target.value); setNewVendor(""); }}
+                  className="input mb-2"
+                  disabled={!!newVendor}
+                >
+                  <option value="">— pilih vendor (opsional) —</option>
+                  {vendors.filter((v) => v.active).map((v) => (
+                    <option key={v.id} value={v.id}>{v.name}</option>
+                  ))}
+                </select>
+                <label className="mb-1 block text-xs text-olive">atau vendor baru (auto tersimpan)</label>
+                <input
+                  value={newVendor}
+                  onChange={(e) => { setNewVendor(e.target.value); if (e.target.value.trim()) setVendorId(""); }}
+                  className="input mb-2"
+                  placeholder="mis. Bu Tini"
+                />
+                <label className="mb-1 block text-xs text-olive">Harga modal / unit (Rp)</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={unitCost}
+                  onChange={(e) => setUnitCost(e.target.value)}
+                  className="input"
+                  placeholder="mis. 45000"
+                />
+              </div>
+            )}
+
             <label className="mb-1 block text-sm text-olive">Alasan</label>
             <select value={reason} onChange={(e) => setReason(e.target.value as Reason)} className="input mb-2">
               <option>Rusak/Hilang</option>
@@ -208,6 +303,19 @@ export default function InventoryPage() {
             </div>
           </div>
         </div>
+      )}
+      {printPreset && (
+        <PrintBarcodeModal
+          isOpen
+          onClose={() => setPrintPreset(null)}
+          productId={printPreset.productId}
+          preset={{
+            variantId: printPreset.variantId,
+            copies: printPreset.copies,
+            barcode: printPreset.content,
+            vendorName: printPreset.vendorName,
+          }}
+        />
       )}
     </div>
   );

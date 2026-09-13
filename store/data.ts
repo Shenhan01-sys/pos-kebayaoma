@@ -85,6 +85,17 @@ export interface Movement {
   note?: string;
   staff: string;
   createdAt: string;
+  vendorId?: string | null; // E2: lot vendor (movement restock/adjust)
+  unitCost?: number | null; // E2: harga modal per unit lot ini
+}
+
+export interface Vendor {
+  id: string;
+  storeId: string;
+  name: string;
+  phone?: string | null;
+  note?: string | null;
+  active: boolean;
 }
 
 interface DataState {
@@ -94,6 +105,7 @@ interface DataState {
   staff: Staff[];
   stores: StoreInfo[];
   movements: Movement[];
+  vendors: Vendor[];
   transactions: Transaction[];
   shifts: Shift[];
   loading: boolean;
@@ -140,15 +152,22 @@ interface DataState {
   updateVariant: (productId: string, variantId: string, patch: Partial<Variant>) => Promise<void>;
   removeVariant: (productId: string, variantId: string) => Promise<void>;
 
-  // stock — return true jika tersimpan
+  // stock — return true jika tersimpan. E2: vendorId/unitCost utk lot restock.
   adjustStock: (
     productId: string,
     quantity: number,
     type: MovementType,
     staff: string,
     reason?: string,
-    note?: string
+    note?: string,
+    vendorId?: string | null,
+    unitCost?: number | null
   ) => Promise<boolean>;
+
+  // vendors (E2)
+  fetchVendors: () => Promise<void>;
+  addVendor: (name: string, phone?: string) => Promise<Vendor | null>;
+  fetchMovements: () => Promise<void>;
 
   // customers
   addCustomer: (c: Omit<Customer, "id">) => Promise<void>;
@@ -245,6 +264,7 @@ export const useData = create<DataState>()(
       staff: [],
       stores: [],
       movements: [],
+      vendors: [],
       transactions: [],
       shifts: [],
       loading: false,
@@ -262,6 +282,8 @@ export const useData = create<DataState>()(
           get().fetchStaff(),
           get().fetchTransactions(),
           get().fetchShifts(),
+          get().fetchVendors(),
+          get().fetchMovements(),
         ]);
       },
 
@@ -277,6 +299,8 @@ export const useData = create<DataState>()(
           get().fetchStaff(),
           get().fetchTransactions(),
           get().fetchShifts(),
+          get().fetchVendors(),
+          get().fetchMovements(),
         ]);
       },
 
@@ -596,22 +620,29 @@ export const useData = create<DataState>()(
         }
         try {
           // Insert product
+          // E2: stok baru = seed via adjust_stock (movement + vendor tercatat), bukan tulis absolut.
+          const { seed, vendorId, unitCost, ...pRest } = p as Product & {
+            seed?: number;
+            vendorId?: string | null;
+            unitCost?: number | null;
+          };
+          const seedQty = seed ?? pRest.stock ?? 0;
           const { data: product, error: productError } = await supabase
             .from('products')
             .insert([{
-              sku: p.sku,
-              name: p.name,
-              description: p.description,
-              category_id: p.categoryId,
-              images: p.images,
-              tags: p.tags,
-              active: p.active,
-              stock: p.stock ?? 0,
-              fabric: p.fabric,
-              care: p.care,
-              season: p.season ?? null,
-              brand: p.brand ?? null,
-              compare_at: p.compareAt ?? null,
+              sku: pRest.sku,
+              name: pRest.name,
+              description: pRest.description,
+              category_id: pRest.categoryId,
+              images: pRest.images,
+              tags: pRest.tags,
+              active: pRest.active,
+              stock: 0,
+              fabric: pRest.fabric,
+              care: pRest.care,
+              season: pRest.season ?? null,
+              brand: pRest.brand ?? null,
+              compare_at: pRest.compareAt ?? null,
               store_id: sid
             }])
             .select()
@@ -637,6 +668,20 @@ export const useData = create<DataState>()(
             .insert(variants);
 
           if (variantsError) throw variantsError;
+
+          // Seed stok awal tercatat di ledger (restock, vendor + unit cost bila diisi)
+          if (seedQty > 0) {
+            await get().adjustStock(
+              product.id,
+              seedQty,
+              "restock",
+              "katalog",
+              "Stok awal (katalog)",
+              undefined,
+              vendorId ?? null,
+              unitCost ?? null
+            );
+          }
 
           // Refresh products
           await get().fetchProducts();
@@ -678,6 +723,13 @@ export const useData = create<DataState>()(
             ...(rest.brand !== undefined && { brand: rest.brand ?? null }),
             ...(rest.compareAt !== undefined && { compare_at: rest.compareAt ?? null }),
           };
+
+          // E2: ubah stok dari form edit = lewat RPC atomik (movement tercatat), bukan tulis absolut.
+          const cur = get().products.find((p) => p.id === id);
+          const desiredStock = rest.stock;
+          const stockDelta =
+            desiredStock !== undefined && cur ? desiredStock - (cur.stock ?? 0) : 0;
+          if ("stock" in fields) delete fields.stock;
 
           const { error } = await supabase
             .from('products')
@@ -734,6 +786,17 @@ export const useData = create<DataState>()(
                 if (delErr) throw delErr;
               }
             }
+          }
+
+          // E2: sinkronkan stok lewat RPC (delta) setelah field lain tersimpan
+          if (stockDelta !== 0) {
+            await get().adjustStock(
+              id,
+              stockDelta,
+              stockDelta > 0 ? "restock" : "adjustment",
+              "katalog",
+              "Penyesuaian dari form produk"
+            );
           }
 
           // Refresh products
@@ -928,7 +991,7 @@ export const useData = create<DataState>()(
         }
       },
 
-      adjustStock: async (productId, quantity, type, staff, reason, note) => {
+      adjustStock: async (productId, quantity, type, staff, reason, note, vendorId, unitCost) => {
         const product = get().products.find((p) => p.id === productId);
         if (!product) return false;
         const sid = get().activeStoreId;
@@ -937,111 +1000,174 @@ export const useData = create<DataState>()(
           return false;
         }
 
-        const newStock = Math.max(0, (product.stock ?? 0) + quantity);
+        // E2 FIX: jalur online memakai RPC atomik server (adjust_stock) —
+        // stok dihitung server (baris di-lock), movement = delta NYATA, error tak lagi ditelan.
+        if (isSupabaseReady) {
+          try {
+            const { data: newStockData, error: rpcError } = await supabase.rpc("adjust_stock", {
+              p_product: productId,
+              p_store: sid,
+              p_delta: quantity,
+              p_type: type,
+              p_staff: staff,
+              p_reason: reason ?? null,
+              p_note: note ?? null,
+              p_vendor: vendorId ?? null,
+              p_unit_cost: unitCost ?? null,
+            });
+            if (rpcError) throw rpcError;
+            const serverStock = Number(newStockData);
+            set((s) => ({
+              products: s.products.map((p) =>
+                p.id === productId ? { ...p, stock: serverStock } : p
+              ),
+            }));
+            await get().fetchMovements();
+            return true;
+          } catch (error: any) {
+            set({ error: error.message });
+            return false;
+          }
+        }
 
+        // Offline/demo: hanya state lokal (PowerSync nonaktif; label tetap dibersihkan oleh ledger server).
         const psDb = getPowerSyncDb();
+        const newStock = Math.max(0, (product.stock ?? 0) + quantity);
         if (psDb) {
-          await psDb.execute(`UPDATE products SET stock = ? WHERE id = ?`, [newStock, productId]);
           await psDb.execute(
-            `INSERT INTO stock_movements (id, store_id, variant_id, sku, product_name, type, quantity, reason, note, staff, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
-            [generateLocalId(), sid, productId, product.sku, product.name, type, quantity, reason ?? null, note ?? null, staff]
+            `UPDATE products SET stock = MAX(0, stock + ?) WHERE id = ?`,
+            [quantity, productId]
           );
-          set((s) => ({
-            products: s.products.map((p) =>
-              p.id === productId ? { ...p, stock: newStock } : p
-            ),
-            movements: [
-              {
-                id: `mv-${Date.now()}`,
-                productId,
-                sku: product.sku,
-                productName: product.name,
-                type,
-                quantity,
-                reason,
-                note,
-                staff,
-                createdAt: new Date().toISOString(),
-              },
-              ...s.movements,
-            ],
-          }));
-          return true;
+          await psDb.execute(
+            `INSERT INTO stock_movements (id, store_id, variant_id, sku, product_name, type, quantity, reason, note, staff, vendor_id, unit_cost, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+            [generateLocalId(), sid, productId, product.sku, product.name, type, quantity, reason ?? null, note ?? null, staff, vendorId ?? null, unitCost ?? null]
+          );
         }
-
-        if (!isSupabaseReady) {
-          set((s) => ({
-            products: s.products.map((p) =>
-              p.id === productId ? { ...p, stock: newStock } : p
-            ),
-            movements: [
-              {
-                id: `mv-${Date.now()}`,
-                productId,
-                sku: product.sku,
-                productName: product.name,
-                type,
-                quantity,
-                reason,
-                note,
-                staff,
-                createdAt: new Date().toISOString(),
-              },
-              ...s.movements,
-            ],
-          }));
-          return true;
-        }
-
-        try {
-          const { error: updateError } = await supabase
-            .from('products')
-            .update({ stock: newStock })
-            .eq('id', productId);
-
-          if (updateError) throw updateError;
-
-          // Insert stock movement
-          await supabase
-            .from('stock_movements')
-            .insert([{
-              variant_id: productId,
+        set((s) => ({
+          products: s.products.map((p) =>
+            p.id === productId ? { ...p, stock: newStock } : p
+          ),
+          movements: [
+            {
+              id: `mv-${Date.now()}`,
+              productId,
               sku: product.sku,
-              product_name: product.name,
+              productName: product.name,
               type,
               quantity,
               reason,
               note,
               staff,
-              store_id: sid
-            }]);
+              vendorId: vendorId ?? null,
+              unitCost: unitCost ?? null,
+              createdAt: new Date().toISOString(),
+            },
+            ...s.movements,
+          ],
+        }));
+        return true;
+      },
 
-          // Update local state
-          set((s) => ({
-            products: s.products.map((p) =>
-              p.id === productId ? { ...p, stock: newStock } : p
-            ),
-            movements: [
-              {
-                id: `mv-${Date.now()}`,
-                productId,
-                sku: product.sku,
-                productName: product.name,
-                type,
-                quantity,
-                reason,
-                note,
-                staff,
-                createdAt: new Date().toISOString()
-              },
-              ...s.movements
-            ]
-          }));
-          return true;
+      fetchVendors: async () => {
+        if (!isSupabaseReady) return;
+        const sid = get().activeStoreId;
+        try {
+          let query: any = supabase.from("vendors").select("*").order("name");
+          if (sid) query = query.eq("store_id", sid);
+          const { data, error } = await query;
+          if (error) throw error;
+          set({
+            vendors: (data ?? []).map((v: any) => ({
+              id: v.id,
+              storeId: v.store_id,
+              name: v.name,
+              phone: v.phone ?? null,
+              note: v.note ?? null,
+              active: Boolean(v.active),
+            })),
+          });
         } catch (error: any) {
           set({ error: error.message });
-          return false;
+        }
+      },
+
+      addVendor: async (name, phone) => {
+        const sid = get().activeStoreId;
+        if (!sid) {
+          set({ error: "Pilih toko operasional (MJL/KTB) dulu." });
+          return null;
+        }
+        const trimmed = name.trim();
+        if (!trimmed) return null;
+        if (!isSupabaseReady) {
+          const local: Vendor = { id: generateLocalId(), storeId: sid, name: trimmed, phone: phone ?? null, active: true };
+          set((s) => ({ vendors: [...s.vendors, local] }));
+          return local;
+        }
+        try {
+          const { data, error } = await supabase
+            .from("vendors")
+            .insert([{ store_id: sid, name: trimmed, phone: phone ?? null }])
+            .select()
+            .single();
+          if (error) {
+            // 23505 = vendor sudah ada (beda kapital) → pakai yang ada (auto-insert idempoten)
+            if (error.code === "23505") {
+              const { data: existing } = await supabase
+                .from("vendors")
+                .select("*")
+                .eq("store_id", sid)
+                .ilike("name", trimmed)
+                .limit(1)
+                .maybeSingle();
+              if (existing) {
+                const v: Vendor = { id: existing.id, storeId: existing.store_id, name: existing.name, phone: existing.phone ?? null, note: existing.note ?? null, active: Boolean(existing.active) };
+                set((s) => ({ vendors: s.vendors.some((x) => x.id === v.id) ? s.vendors : [...s.vendors, v] }));
+                return v;
+              }
+            }
+            throw error;
+          }
+          const v: Vendor = { id: data.id, storeId: data.store_id, name: data.name, phone: data.phone ?? null, note: data.note ?? null, active: Boolean(data.active) };
+          set((s) => ({ vendors: [...s.vendors, v] }));
+          return v;
+        } catch (error: any) {
+          set({ error: error.message });
+          return null;
+        }
+      },
+
+      fetchMovements: async () => {
+        if (!isSupabaseReady) return;
+        const sid = get().activeStoreId;
+        try {
+          let query: any = supabase
+            .from("stock_movements")
+            .select("*")
+            .order("created_at", { ascending: false })
+            .limit(200);
+          if (sid) query = query.eq("store_id", sid);
+          const { data, error } = await query;
+          if (error) throw error;
+          set({
+            movements: (data ?? []).map((m: any) => ({
+              id: m.id,
+              productId: m.variant_id,
+              sku: m.sku,
+              productName: m.product_name,
+              type: m.type,
+              quantity: Number(m.quantity),
+              reason: m.reason ?? undefined,
+              note: m.note ?? undefined,
+              staff: m.staff,
+              vendorId: m.vendor_id ?? null,
+              unitCost: m.unit_cost != null ? Number(m.unit_cost) : null,
+              createdAt: m.created_at,
+            })),
+          });
+        } catch (error: any) {
+          set({ error: error.message });
         }
       },
 
@@ -1553,13 +1679,13 @@ export const useData = create<DataState>()(
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
                [id, sid, tx.number, tx.cashier, customer?.id ?? null, tx.customerName ?? null, tx.status, tx.paymentMethod, tx.paymentStatus, tx.subtotal, tx.tax, tx.discount, tx.total, tx.amountPaid, tx.change, tx.qrisRef ?? null, (tx as any).photoProof ?? null]
              );
-            for (const i of tx.items) {
-               await psDb.execute(
-                 `INSERT INTO transaction_items (id, transaction_id, product_id, variant_id, name, sku, size, color, quantity, unit_price, cost_price, discount, total)
-                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                 [generateLocalId(), id, i.productId, i.variantId, i.name, i.sku, i.size, i.color, i.quantity, i.unitPrice, i.costPrice > 0 ? i.costPrice : null, i.discount, i.total]
-               );
-             }
+             for (const i of tx.items) {
+                await psDb.execute(
+                  `INSERT INTO transaction_items (id, transaction_id, product_id, variant_id, name, sku, size, color, quantity, unit_price, cost_price, discount, total, vendor_id)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                  [generateLocalId(), id, i.productId, i.variantId, i.name, i.sku, i.size, i.color, i.quantity, i.unitPrice, i.costPrice > 0 ? i.costPrice : null, i.discount, i.total, i.vendorId ?? null]
+                );
+              }
             const saved: Transaction = { ...tx, id, storeId: sid, customerId: customer?.id, createdAt: new Date().toISOString() };
             set((s) => ({ transactions: [saved, ...s.transactions] }));
             // PowerSync lokal tanpa trigger DB — efek stok dikerjakan di client
@@ -1634,12 +1760,13 @@ export const useData = create<DataState>()(
               sku: i.sku,
               size: i.size,
               color: i.color,
-              quantity: i.quantity,
-              unit_price: i.unitPrice,
-              cost_price: i.costPrice > 0 ? i.costPrice : null,
-              discount: i.discount,
-              total: i.total,
-            })));
+               quantity: i.quantity,
+               unit_price: i.unitPrice,
+               cost_price: i.costPrice > 0 ? i.costPrice : null,
+               discount: i.discount,
+               total: i.total,
+               vendor_id: i.vendorId ?? null,
+             })));
 
           if (itemsError) throw itemsError;
 

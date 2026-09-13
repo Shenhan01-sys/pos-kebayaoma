@@ -64,6 +64,7 @@ export interface TransactionItem {
   costPrice: number;
   discount: number;
   total: number;
+  vendorId?: string | null; // E2: vendor asal lot saat scan barcode VO
 }
 
 export interface Transaction {

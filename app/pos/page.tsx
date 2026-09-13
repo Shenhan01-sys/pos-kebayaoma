@@ -6,6 +6,7 @@ import { useCart } from "@/store/cart";
 import { useData } from "@/store/data";
 import CheckoutModal from "@/components/CheckoutModal";
 import BarcodeScanner from "@/components/BarcodeScanner";
+import { parseVoBarcode, resolveVoScan } from "@/lib/barcode";
 import { Icon } from "@/components/icons";
 
 const thumbStyle: Record<string, { grad: string; emoji: string }> = {
@@ -22,7 +23,7 @@ export default function PosPage() {
   const [scannerOpen, setScannerOpen] = useState(false);
   const { lines, addVariant, addCustomItem, inc, dec, remove, total, customerName, setCustomer } =
     useCart();
-  const { products, categories, customers, addProduct } = useData();
+  const { products, categories, customers, addProduct, movements, vendors } = useData();
   const stores = useData((s) => s.stores);
   const activeStoreId = useData((s) => s.activeStoreId);
 
@@ -36,7 +37,7 @@ export default function PosPage() {
   // HID barcode scanner support — auto-focus hidden input
   const scanInputRef = useRef<HTMLInputElement>(null);
   const [scanBuffer, setScanBuffer] = useState("");
-  const [scanMsg, setScanMsg] = useState<string | null>(null);
+  const [scanMsg, setScanMsg] = useState<{ text: string; kind: "error" | "info" } | null>(null);
   const scanMsgTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function focusScan() {
@@ -46,8 +47,8 @@ export default function PosPage() {
     }
   }
 
-  function flashScanMsg(msg: string) {
-    setScanMsg(msg);
+  function flashScanMsg(msg: string, kind: "error" | "info" = "error") {
+    setScanMsg({ text: msg, kind });
     if (scanMsgTimer.current) clearTimeout(scanMsgTimer.current);
     scanMsgTimer.current = setTimeout(() => setScanMsg(null), 2500);
   }
@@ -92,6 +93,33 @@ export default function PosPage() {
 
   const handleScan = (code: string) => {
     setScannerOpen(false);
+    // E2: stiker vendor "VO:<ref>:<vendor>" — modal per lot, vendor ikut tercatat
+    const vo = parseVoBarcode(code);
+    if (vo) {
+      const candidates = products.flatMap((p) =>
+        p.variants.map((v) => ({ product: p, variant: v, productId: p.id, variantId: v.id }))
+      );
+      const hit = resolveVoScan(vo, candidates);
+      if (hit) {
+        const lot = movements.find(
+          (m) => m.vendorId === vo.vendorId && m.productId === hit.productId && m.unitCost != null
+        );
+        const vendor = vendors.find((v) => v.id === vo.vendorId);
+        addVariant(hit.product, hit.variant, 1, {
+          vendorId: vo.vendorId,
+          costPrice: lot?.unitCost ?? undefined,
+        });
+        flashScanMsg(
+          lot?.unitCost != null
+            ? `Vendor ${vendor?.name ?? "?"} · modal Rp ${lot.unitCost.toLocaleString("id-ID")}`
+            : `Vendor ${vendor?.name ?? "?"} · modal memakai harga varian`,
+          "info"
+        );
+        return;
+      }
+      flashScanMsg(`Barcode vendor tak dikenali: ${vo.refId.slice(0, 8)}…`);
+      return;
+    }
     for (const p of products) {
       for (const v of p.variants) {
         if (v.barcode === code || v.sku === code) {
@@ -134,8 +162,14 @@ export default function PosPage() {
           </div>
         )}
         {scanMsg && (
-          <div className="mb-3 flex items-center gap-2 rounded-2xl bg-danger/10 px-3 py-2.5 text-sm font-medium text-danger">
-            <Icon name="alert" size={16} /> {scanMsg}
+          <div
+            className={`mb-3 flex items-center gap-2 rounded-2xl px-3 py-2.5 text-sm font-medium ${
+              scanMsg.kind === "info"
+                ? "bg-violet/10 text-violet"
+                : "bg-danger/10 text-danger"
+            }`}
+          >
+            <Icon name="alert" size={16} /> {scanMsg.text}
           </div>
         )}
         <div className="mb-3 flex flex-wrap items-center gap-2">

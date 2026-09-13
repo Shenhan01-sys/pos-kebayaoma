@@ -52,6 +52,7 @@ export default function TransactionsPage() {
   const [methodFilter, setMethodFilter] = useState<PaymentMethod | "all">("all");
   const [storeFilter, setStoreFilter] = useState<string | "all">("all");
   const stores = useData((s) => s.stores);
+  const vendors = useData((s) => s.vendors);
   // Manager-all (storeId null) boleh filter per toko; staff terkunci ikut scope datanya.
   const canSeeAllStores = auth.staff?.storeId === null || auth.staff?.storeId === undefined;
   const storePrefixOf = (id?: string) =>
@@ -266,6 +267,11 @@ export default function TransactionsPage() {
                         <span className="ml-1 text-xs text-gray-500">
                           · {r.item.size}
                           {r.item.color ? ` · ${r.item.color}` : ""}
+                        </span>
+                      ) : null}
+                      {r.item.vendorId ? (
+                        <span className="pill-violet ml-1.5 text-[10px]">
+                          {vendors.find((v) => v.id === r.item.vendorId)?.name ?? "vendor"}
                         </span>
                       ) : null}
                     </td>

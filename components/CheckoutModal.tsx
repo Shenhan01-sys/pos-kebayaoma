@@ -218,6 +218,7 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
         costPrice: l.costPrice,
         discount: l.discount,
         total: l.unitPrice * l.quantity - l.discount,
+        vendorId: l.vendorId ?? null,
       })),
     };
   }

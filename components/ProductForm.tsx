@@ -15,7 +15,10 @@ export default function ProductForm({
   product?: Product;
   onSaved: () => void;
 }) {
-  const { categories, addProduct, updateProduct } = useData();
+  const { categories, addProduct, updateProduct, vendors, addVendor } = useData();
+  const [vendorId, setVendorId] = useState("");
+  const [newVendor, setNewVendor] = useState("");
+  const [unitCost, setUnitCost] = useState("");
   const [name, setName] = useState(product?.name ?? "");
   const [sku, setSku] = useState(product?.sku ?? "");
   const [categoryId, setCategoryId] = useState(
@@ -50,7 +53,14 @@ export default function ProductForm({
     setVariants((vs) => vs.map((v, idx) => (idx === i ? { ...v, ...patch } : v)));
   }
 
-  function submit() {
+  async function submit() {
+    // E2: vendor (pilih / tulis baru → auto-insert) + modal/unit utk seed stok awal
+    let finalVendorId = vendorId || null;
+    if (!product && newVendor.trim()) {
+      const v = await addVendor(newVendor.trim());
+      if (!v) return; // error sudah di-set store
+      finalVendorId = v.id;
+    }
     const base = {
       name,
       sku,
@@ -69,7 +79,13 @@ export default function ProductForm({
     if (product) {
       updateProduct(product.id, { ...base, variants });
     } else {
-      addProduct({ ...base, variants });
+      addProduct({
+        ...base,
+        variants,
+        seed: stock,
+        vendorId: finalVendorId,
+        unitCost: unitCost.trim() ? Number(unitCost) : null,
+      } as Parameters<typeof addProduct>[0] & { seed: number; vendorId: string | null; unitCost: number | null });
     }
     onSaved();
   }
@@ -111,6 +127,34 @@ export default function ProductForm({
         <Labeled label="Stok">
           <input value={stock} onChange={(e) => setStock(Number(e.target.value))} className="input" type="number" />
         </Labeled>
+        {!product && (
+          <>
+            <Labeled label="Vendor (asal kulaan)">
+              <div className="space-y-1.5">
+                <select
+                  value={vendorId}
+                  onChange={(e) => { setVendorId(e.target.value); setNewVendor(""); }}
+                  className="input"
+                  disabled={!!newVendor}
+                >
+                  <option value="">— pilih vendor (opsional) —</option>
+                  {vendors.filter((v) => v.active).map((v) => (
+                    <option key={v.id} value={v.id}>{v.name}</option>
+                  ))}
+                </select>
+                <input
+                  value={newVendor}
+                  onChange={(e) => { setNewVendor(e.target.value); if (e.target.value.trim()) setVendorId(""); }}
+                  className="input"
+                  placeholder="atau tulis vendor baru…"
+                />
+              </div>
+            </Labeled>
+            <Labeled label="Harga modal / unit (Rp)">
+              <input value={unitCost} onChange={(e) => setUnitCost(e.target.value)} className="input" type="number" min={0} placeholder="mis. 45000" />
+            </Labeled>
+          </>
+        )}
       </div>
       <Labeled label="Deskripsi">
         <textarea value={description} onChange={(e) => setDescription(e.target.value)} className="input" rows={2} />

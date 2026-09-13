@@ -21,13 +21,19 @@ export interface CartLine {
   quantity: number;
   discount: number;
   custom?: boolean;
+  vendorId?: string | null; // E2: vendor asal lot (dari scan barcode VO:)
 }
 
 interface CartState {
   lines: CartLine[];
   customerName: string | null;
   discount: number;
-  addVariant: (product: Product, variant: Variant, qty?: number) => void;
+  addVariant: (
+    product: Product,
+    variant: Variant,
+    qty?: number,
+    opts?: { vendorId?: string | null; costPrice?: number }
+  ) => void;
  addCustomItem: (
  name: string,
  price: number,
@@ -51,7 +57,7 @@ export const useCart = create<CartState>((set, get) => ({
   lines: [],
   customerName: null,
   discount: 0,
-  addVariant: (product, variant, qty = 1) =>
+  addVariant: (product, variant, qty = 1, opts) =>
     set((state) => {
       const cap = Math.max(0, product.stock ?? 0);
       const existing = state.lines.find((l) => l.variantId === variant.id);
@@ -60,7 +66,14 @@ export const useCart = create<CartState>((set, get) => ({
         if (nextQty <= 0 || nextQty === existing.quantity) return state;
         return {
           lines: state.lines.map((l) =>
-            l.variantId === variant.id ? { ...l, quantity: nextQty } : l
+            l.variantId === variant.id
+              ? {
+                  ...l,
+                  quantity: nextQty,
+                  vendorId: opts?.vendorId ?? l.vendorId,
+                  costPrice: opts?.costPrice ?? l.costPrice,
+                }
+              : l
           ),
         };
       }
@@ -76,9 +89,10 @@ export const useCart = create<CartState>((set, get) => ({
         size: variant.size,
         color: variant.color,
         unitPrice: variant.sellingPrice,
-        costPrice: variant.costPrice,
+        costPrice: opts?.costPrice ?? variant.costPrice,
         quantity: startQty,
         discount: 0,
+        vendorId: opts?.vendorId ?? null,
       };
       return { lines: [...state.lines, line] };
     }),

@@ -87,6 +87,7 @@ export function mapTransactionItemRow(i: Record<string, any>): TransactionItem {
     costPrice: Number(i.cost_price ?? 0),
     discount: Number(i.discount ?? 0),
     total: Number(i.total),
+    vendorId: i.vendor_id ?? undefined,
   };
 }
 
