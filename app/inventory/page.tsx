@@ -6,13 +6,15 @@ import { useAuth } from "@/store/auth";
 import { useSettings } from "@/store/settings";
 import { formatRupiah } from "@/lib/dummy";
 import { encodeVoBarcode } from "@/lib/barcode";
+import { canSendTransfer, canCancelTransfer, groupBySku } from "@/lib/transfer";
 import { Icon } from "@/components/icons";
 import PrintBarcodeModal from "@/components/PrintBarcodeModal";
 
 type Reason = "Rusak/Hilang" | "Penyesuaian" | "Stok Opname" | "Lainnya";
 
 export default function InventoryPage() {
-  const { products, movements, vendors, adjustStock, addVendor } = useData();
+  const { products, movements, vendors, stores, transfers, adjustStock, addVendor, requestTransfer, sendTransfer, cancelTransfer } = useData();
+  const activeStoreId = useData((s) => s.activeStoreId);
   const auth = useAuth();
   const s = useSettings();
   const cashierName = auth.staff?.name ?? s.cashierName;
@@ -21,7 +23,7 @@ export default function InventoryPage() {
   const [qty, setQty] = useState(1);
   const [reason, setReason] = useState<Reason>("Penyesuaian");
   const [note, setNote] = useState("");
-  const [tab, setTab] = useState<"stock" | "log">("stock");
+  const [tab, setTab] = useState<"stock" | "log" | "transfer">("stock");
   const [busy, setBusy] = useState(false);
   const [applyError, setApplyError] = useState<string | null>(null);
   const [vendorId, setVendorId] = useState("");
@@ -29,11 +31,22 @@ export default function InventoryPage() {
   const [unitCost, setUnitCost] = useState("");
   const [printPreset, setPrintPreset] = useState<{ productId: string; variantId: string; copies: number; content: string; vendorName: string } | null>(null);
   const busyRef = useRef(false);
+  // Transfer (E1)
+  const [trFrom, setTrFrom] = useState("");
+  const [trTo, setTrTo] = useState("");
+  const [trProduct, setTrProduct] = useState("");
+  const [trQty, setTrQty] = useState(1);
+  const [trNote, setTrNote] = useState("");
+  const [trFormOpen, setTrFormOpen] = useState(false);
+  const [trBusy, setTrBusy] = useState<string | null>(null);
+  const [trError, setTrError] = useState<string | null>(null);
 
   useEffect(() => {
     useData.getState().fetchProducts();
     useData.getState().fetchMovements();
     useData.getState().fetchVendors();
+    useData.getState().fetchTransfers();
+    useData.getState().fetchStores();
   }, []);
 
   const active = products.filter((p) => p.active);
@@ -114,6 +127,57 @@ export default function InventoryPage() {
   const newStock = stockOpen ? Math.max(0, stockOpen.current + (mode === "in" ? qty : -qty)) : 0;
   const vendorNameOf = (id?: string | null) => (id ? vendors.find((v) => v.id === id)?.name ?? "—" : null);
 
+  // ===== E1: view Gabungan (manager, scope "Semua") — 1 baris per SKU, kolom per toko =====
+  const isManagerAll = activeStoreId === null && auth.staff?.role === "manager";
+  const storePrefix = (id: string) => stores.find((t) => t.id === id)?.prefix ?? "?";
+  const combined = groupBySku(products, stores.map((s) => s.id));
+
+  // ===== E1: Transfer =====
+  const pending = transfers.filter((t) => t.status === "pending");
+  const historyTr = transfers.filter((t) => t.status !== "pending");
+  function openTransferForm() {
+    setTrFrom(activeStoreId ?? stores[0]?.id ?? "");
+    setTrTo(stores.find((t) => t.id !== (activeStoreId ?? stores[0]?.id))?.id ?? "");
+    const first = products.find((p) => p.stock > 0);
+    setTrProduct(first?.id ?? products[0]?.id ?? "");
+    setTrQty(1);
+    setTrNote("");
+    setTrError(null);
+    setTrFormOpen(true);
+  }
+  async function submitTransfer() {
+    if (!trFrom || !trTo || trFrom === trTo || !trProduct || trQty <= 0) {
+      setTrError("Lengkapi asal/tujuan (berbeda), produk, dan qty > 0.");
+      return;
+    }
+    const p = products.find((x) => x.id === trProduct);
+    if (p && p.storeId && p.storeId !== trFrom) {
+      // produk pilihan harus milik toko asal
+      setTrError("Produk harus berasal dari toko pengirim.");
+      return;
+    }
+    setTrBusy("form");
+    setTrError(null);
+    const ok = await requestTransfer(trFrom, trTo, trProduct, trQty, cashierName, trNote);
+    setTrBusy(null);
+    if (ok) setTrFormOpen(false);
+    else setTrError(useData.getState().error ?? "Gagal mengajukan transfer.");
+  }
+  async function doSend(id: string) {
+    setTrBusy(id);
+    setTrError(null);
+    const ok = await sendTransfer(id);
+    setTrBusy(null);
+    if (!ok) setTrError(useData.getState().error ?? "Gagal mengirim transfer.");
+  }
+  async function doCancel(id: string) {
+    setTrBusy(id);
+    setTrError(null);
+    const ok = await cancelTransfer(id);
+    setTrBusy(null);
+    if (!ok) setTrError(useData.getState().error ?? "Gagal membatalkan transfer.");
+  }
+
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
@@ -121,10 +185,49 @@ export default function InventoryPage() {
         <div className="seg">
           <button onClick={() => setTab("stock")} className={`seg-item ${tab === "stock" ? "seg-item-active" : ""}`}>Stok</button>
           <button onClick={() => setTab("log")} className={`seg-item ${tab === "log" ? "seg-item-active" : ""}`}>Riwayat</button>
+          <button onClick={() => setTab("transfer")} className={`seg-item ${tab === "transfer" ? "seg-item-active" : ""}`}>
+            Transfer{pending.length > 0 ? ` (${pending.length})` : ""}
+          </button>
         </div>
       </div>
 
-      {tab === "stock" && (
+      {tab === "stock" && isManagerAll && (
+        <>
+          <div className="mb-3 flex items-center gap-2 rounded-2xl bg-violet/10 px-3 py-2.5 text-sm font-medium text-violet">
+            <Icon name="box" size={16} /> Tampilan Gabungan semua toko — read-only. Pilih toko di switcher untuk adjust.
+          </div>
+          <div className="card overflow-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-beige/70 text-left text-olive">
+                <tr>
+                  <th className="p-3 font-semibold">Produk</th>
+                  <th className="p-3 font-semibold">SKU</th>
+                  {stores.map((t) => (
+                    <th key={t.id} className="p-3 text-right font-semibold">{t.prefix}</th>
+                  ))}
+                  <th className="p-3 text-right font-semibold">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {combined.map((row) => (
+                  <tr key={row.sku} className="border-t border-black/5 hover:bg-beige/40">
+                    <td className="p-3 font-medium text-ink">{row.name}</td>
+                    <td className="p-3 text-xs text-gray-600">{row.sku}</td>
+                    {stores.map((t) => (
+                      <td key={t.id} className={`p-3 text-right tnum ${!row.byStore[t.id] ? "text-gray-400" : row.byStore[t.id] <= 5 ? "text-warning font-bold" : ""}`}>
+                        {row.byStore[t.id] ?? "—"}
+                      </td>
+                    ))}
+                    <td className={`p-3 text-right font-extrabold tnum ${row.total === 0 ? "text-danger" : "text-ink"}`}>{row.total}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
+      {tab === "stock" && !isManagerAll && (
         <>
           <div className="mb-3 flex items-center gap-2 rounded-2xl bg-warning/10 px-3 py-2.5 text-sm font-medium text-warning">
             <Icon name="alert" size={16} /> {low.length} produk stok menipis (≤5)
@@ -191,6 +294,96 @@ export default function InventoryPage() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {tab === "transfer" && (
+        <>
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <div className="text-sm text-gray-600">Ajukan pengiriman antar toko, lalu pihak pengirim menekan Kirim (stok keluar saat dikirim).</div>
+            <button onClick={openTransferForm} className="btn-violet shrink-0 px-3 py-1.5 text-xs">+ Ajukan Transfer</button>
+          </div>
+          {trError && (
+            <p className="mb-3 rounded-xl bg-danger/10 px-3 py-2 text-sm font-medium text-danger">{trError}</p>
+          )}
+
+          <div className="card mb-4 overflow-auto">
+            <div className="border-b border-black/5 p-3 font-bold text-ink">Menunggu dikirim ({pending.length})</div>
+            {pending.length === 0 && <p className="p-4 text-center text-sm text-gray-600">Tidak ada pengajuan pending.</p>}
+            {pending.map((t) => (
+              <div key={t.id} className="flex flex-wrap items-center gap-2 border-t border-black/5 p-3">
+                <span className="pill-violet">{storePrefix(t.fromStore)} → {storePrefix(t.toStore)}</span>
+                <span className="font-medium text-ink">{t.productName}</span>
+                <span className="text-xs text-gray-600">({t.sku}) × {t.qty}</span>
+                <span className="text-xs text-gray-500">oleh {t.requestedBy}</span>
+                {t.note && <span className="text-xs text-gray-500">· {t.note}</span>}
+                <div className="ml-auto flex gap-2">
+                  {canSendTransfer(t, activeStoreId, isManagerAll) && (
+                    <button onClick={() => doSend(t.id)} disabled={trBusy !== null} className="btn-primary px-3 py-1 text-xs disabled:opacity-40">
+                      {trBusy === t.id ? "Mengirim…" : "Kirim"}
+                    </button>
+                  )}
+                  {canCancelTransfer(t, activeStoreId, isManagerAll) && (
+                    <button onClick={() => doCancel(t.id)} disabled={trBusy !== null} className="btn-ghost px-3 py-1 text-xs disabled:opacity-40">Batal</button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {historyTr.length > 0 && (
+            <div className="card overflow-auto">
+              <div className="border-b border-black/5 p-3 font-bold text-ink">Riwayat Transfer</div>
+              {historyTr.map((t) => (
+                <div key={t.id} className="flex flex-wrap items-center gap-2 border-t border-black/5 p-3 text-sm">
+                  <span className="pill-muted">{t.status === "sent" ? "Terkirim" : "Dibatalkan"}</span>
+                  <span className="text-ink">{storePrefix(t.fromStore)} → {storePrefix(t.toStore)}</span>
+                  <span className="text-gray-600">{t.productName} × {t.qty}</span>
+                  <span className="text-xs text-gray-500">{new Date(t.sentAt ?? t.createdAt).toLocaleString("id-ID")}</span>
+                  {t.sentBy && <span className="text-xs text-gray-500">dikirim {t.sentBy}</span>}
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      {trFormOpen && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 backdrop-blur-sm sm:items-center sm:p-4">
+          <div className="w-full max-w-[380px] rounded-t-4xl bg-white p-5 shadow-soft-xl sm:rounded-3xl">
+            <h3 className="mb-4 text-lg font-bold text-ink">Ajukan Transfer</h3>
+            <div className="mb-3 grid grid-cols-2 gap-2">
+              <div>
+                <label className="mb-1 block text-sm text-olive">Dari (pengirim)</label>
+                <select value={trFrom} onChange={(e) => { setTrFrom(e.target.value); setTrProduct(""); }} className="input">
+                  <option value="">—</option>
+                  {stores.map((t) => <option key={t.id} value={t.id}>{t.prefix} - {t.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm text-olive">Ke (penerima)</label>
+                <select value={trTo} onChange={(e) => setTrTo(e.target.value)} className="input">
+                  <option value="">—</option>
+                  {stores.filter((t) => t.id !== trFrom).map((t) => <option key={t.id} value={t.id}>{t.prefix} - {t.name}</option>)}
+                </select>
+              </div>
+            </div>
+            <label className="mb-1 block text-sm text-olive">Produk (dari toko pengirim)</label>
+            <select value={trProduct} onChange={(e) => setTrProduct(e.target.value)} className="input mb-3">
+              <option value="">— pilih —</option>
+              {products.filter((p) => !trFrom || !p.storeId || p.storeId === trFrom).map((p) => (
+                <option key={p.id} value={p.id}>{p.name} ({p.sku}) · stok {p.stock}</option>
+              ))}
+            </select>
+            <label className="mb-1 block text-sm text-olive">Jumlah</label>
+            <input type="number" min={1} value={trQty} onChange={(e) => setTrQty(Math.max(1, Number(e.target.value) || 1))} className="input mb-3" />
+            <label className="mb-1 block text-sm text-olive">Catatan</label>
+            <input value={trNote} onChange={(e) => setTrNote(e.target.value)} className="input mb-4" placeholder="opsional" />
+            <div className="flex gap-2">
+              <button onClick={() => setTrFormOpen(false)} disabled={trBusy === "form"} className="btn-ghost flex-1 disabled:opacity-40">Batal</button>
+              <button onClick={submitTransfer} disabled={trBusy === "form"} className="btn-violet flex-1 disabled:opacity-40">{trBusy === "form" ? "Menyimpan…" : "Ajukan"}</button>
+            </div>
+          </div>
         </div>
       )}
 

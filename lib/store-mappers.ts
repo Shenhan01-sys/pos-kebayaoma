@@ -40,6 +40,7 @@ export function mapProductRow(p: Record<string, any>, variants: Variant[]): Prod
     season: p.season ?? undefined,
     brand: p.brand ?? undefined,
     compareAt: p.compare_at ?? undefined,
+    storeId: p.store_id ?? null,
     variants,
   };
 }

@@ -98,6 +98,25 @@ export interface Vendor {
   active: boolean;
 }
 
+export type TransferStatus = "pending" | "sent" | "cancelled";
+
+export interface Transfer {
+  id: string;
+  fromStore: string;
+  toStore: string;
+  fromProduct: string;
+  toProduct?: string | null;
+  productName: string;
+  sku: string;
+  qty: number;
+  status: TransferStatus;
+  requestedBy: string;
+  sentBy?: string | null;
+  note?: string | null;
+  createdAt: string;
+  sentAt?: string | null;
+}
+
 interface DataState {
   products: Product[];
   categories: Category[];
@@ -168,6 +187,13 @@ interface DataState {
   fetchVendors: () => Promise<void>;
   addVendor: (name: string, phone?: string) => Promise<Vendor | null>;
   fetchMovements: () => Promise<void>;
+
+  // transfers (E1) — return true bila tersimpan
+  transfers: Transfer[];
+  fetchTransfers: () => Promise<void>;
+  requestTransfer: (fromStoreId: string, toStoreId: string, productId: string, qty: number, requestedBy: string, note?: string) => Promise<boolean>;
+  sendTransfer: (id: string) => Promise<boolean>;
+  cancelTransfer: (id: string) => Promise<boolean>;
 
   // customers
   addCustomer: (c: Omit<Customer, "id">) => Promise<void>;
@@ -265,6 +291,7 @@ export const useData = create<DataState>()(
       stores: [],
       movements: [],
       vendors: [],
+      transfers: [],
       transactions: [],
       shifts: [],
       loading: false,
@@ -1168,6 +1195,87 @@ export const useData = create<DataState>()(
           });
         } catch (error: any) {
           set({ error: error.message });
+        }
+      },
+
+      fetchTransfers: async () => {
+        if (!isSupabaseReady) return;
+        try {
+          const { data, error } = await supabase
+            .from("stock_transfers")
+            .select("*, from_product:products!stock_transfers_from_product_fkey(sku,name)")
+            .order("created_at", { ascending: false })
+            .limit(100);
+          if (error) throw error;
+          set({
+            transfers: (data ?? []).map((t: any) => ({
+              id: t.id,
+              fromStore: t.from_store,
+              toStore: t.to_store,
+              fromProduct: t.from_product,
+              toProduct: t.to_product ?? null,
+              productName: t.from_product?.name ?? "—",
+              sku: t.from_product?.sku ?? "—",
+              qty: Number(t.qty),
+              status: t.status,
+              requestedBy: t.requested_by,
+              sentBy: t.sent_by ?? null,
+              note: t.note ?? null,
+              createdAt: t.created_at,
+              sentAt: t.sent_at ?? null,
+            })),
+          });
+        } catch (error: any) {
+          set({ error: error.message });
+        }
+      },
+
+      requestTransfer: async (fromStoreId, toStoreId, productId, qty, requestedBy, note) => {
+        if (!isSupabaseReady) {
+          set({ error: "Transfer butuh koneksi ke server." });
+          return false;
+        }
+        try {
+          const { error } = await supabase.from("stock_transfers").insert([{
+            from_store: fromStoreId,
+            to_store: toStoreId,
+            from_product: productId,
+            qty,
+            requested_by: requestedBy,
+            note: note || null,
+          }]);
+          if (error) throw error;
+          await get().fetchTransfers();
+          return true;
+        } catch (error: any) {
+          set({ error: error.message });
+          return false;
+        }
+      },
+
+      sendTransfer: async (id) => {
+        if (!isSupabaseReady) return false;
+        try {
+          const { error } = await supabase.rpc("send_transfer", { p_transfer: id });
+          if (error) throw error;
+          await Promise.all([get().fetchTransfers(), get().fetchProducts(), get().fetchMovements()]);
+          return true;
+        } catch (error: any) {
+          set({ error: error.message });
+          return false;
+        }
+      },
+
+      cancelTransfer: async (id) => {
+        if (!isSupabaseReady) return false;
+        try {
+          const { error } = await supabase.rpc("cancel_transfer", { p_transfer: id });
+          if (error) throw error;
+          await get().fetchTransfers();
+          return true;
+        } catch (error: any) {
+          set({ error: error.message });
+          return false;
         }
       },
 
@@ -2112,6 +2220,13 @@ export const useData = create<DataState>()(
             { event: 'UPDATE', schema: 'public', table: 'transactions', ...storeFilter },
             async () => {
               await get().fetchTransactions();
+            }
+          )
+          .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'stock_transfers' },
+            async () => {
+              await get().fetchTransfers();
             }
           )
           .subscribe();

@@ -34,6 +34,7 @@ export interface Product {
   season?: string;
   brand?: string;
   compareAt?: number;
+  storeId?: string | null; // E1: untuk view gabungan lintas toko
 }
 
 export interface Customer {
