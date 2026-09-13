@@ -13,6 +13,7 @@ import { useSettings } from "@/store/settings";
 import { useData } from "@/store/data";
 import { useAuth } from "@/store/auth";
 import Receipt from "@/components/Receipt";
+import { inclusiveTax } from "@/lib/tax";
 import { Icon } from "@/components/icons";
 
 const methodMeta: Record<PaymentMethod, { label: string; icon: "qris" | "cash" | "transfer" | "shopee" }> = {
@@ -56,8 +57,9 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
  lines.reduce((a, l) => a + l.unitPrice * l.quantity - l.discount, 0) -
  lines.reduce((a, l) => a + (l.unitPrice === 0 ? 0 : l.costPrice * l.quantity), 0)
  );
-  const taxAmt = Math.round(net * (s.taxRate / 100));
-  const grand = net + taxAmt;
+  // E4: model INCLUSIVE — harga sudah termasuk pajak. grand = net (TANPA ditambah).
+  // taxAmt = PPn TERSIRAT yang disimpan di kolom transactions.tax (bukan penambah).
+  const { grand, impliedTax: taxAmt } = inclusiveTax(net, s.taxRate);
 
   const [cashPaid, setCashPaid] = useState(String(grand));
   useEffect(() => setCashPaid(String(grand)), [grand]);
@@ -454,9 +456,9 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
               </div>
             )}
             {taxAmt > 0 && (
-              <div className="flex justify-between text-gray-600">
-                <span>Pajak ({s.taxRate}%)</span>
-                <span className="tnum">{formatRupiah(taxAmt)}</span>
+              <div className="flex justify-between text-gray-500 text-xs">
+                <span>Sudah termasuk pajak {s.taxRate}%</span>
+                <span className="tnum">({formatRupiah(taxAmt)})</span>
               </div>
             )}
             <div className="flex justify-between border-t border-black/10 pt-1 font-semibold text-ink">

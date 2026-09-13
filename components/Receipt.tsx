@@ -59,7 +59,9 @@ export default function Receipt({ tx }: { tx: Transaction }) {
       {tx.discount > 0 && (
         <Row label="Diskon" value={"-" + formatRupiah(tx.discount)} />
       )}
-      {tx.tax > 0 && <Row label="Pajak" value={formatRupiah(tx.tax)} />}
+      {tx.tax > 0 && (
+        <div className="text-[10px] text-gray-500">Sudah termasuk PPN {formatRupiah(tx.tax)}</div>
+      )}
       <div className="my-1 border-t border-dashed border-black/30" />
       <div className="flex justify-between text-[13px] font-extrabold">
         <span>TOTAL</span>

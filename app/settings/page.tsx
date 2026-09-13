@@ -1,12 +1,17 @@
 "use client";
 
 import { useSettings } from "@/store/settings";
+import { useAuth } from "@/store/auth";
 import { useState } from "react";
 import { Icon } from "@/components/icons";
 
 export default function SettingsPage() {
   const s = useSettings();
+  const role = useAuth((a) => a.staff?.role);
   const [saved, setSaved] = useState(false);
+
+  // AC-E4#3: hanya manager yang bisa mengubah % pajak (fail-closed).
+  const canEditTax = role === "manager";
 
   function save() {
     setSaved(true);
@@ -39,6 +44,23 @@ export default function SettingsPage() {
             <option value="browser">Browser Print</option>
             <option value="cloud">Cloud Print</option>
           </select>
+        </Field>
+
+        <Field label="Pajak (%) — harga sudah termasuk pajak">
+          <input
+            type="number"
+            min={0}
+            max={100}
+            step={0.5}
+            value={s.taxRate}
+            onChange={(e) => canEditTax && s.update({ taxRate: Math.max(0, Number(e.target.value) || 0) })}
+            className="input disabled:opacity-50"
+            disabled={!canEditTax}
+          />
+          {!canEditTax && <p className="mt-1 text-xs text-gray-500">Hanya manajer yang dapat mengubah pajak.</p>}
+          <p className="mt-1 text-xs text-gray-600">
+            Model inclusive: harga label = harga bayar. Pajak ini hanya menghitung keterangan PPN tersirat di struk.
+          </p>
         </Field>
 
         <button onClick={save} className="btn-primary w-full py-3">
