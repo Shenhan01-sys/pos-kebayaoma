@@ -51,7 +51,8 @@ export interface Customer {
 }
 
 export type PaymentMethod = "qris" | "cash" | "transfer" | "shopee";
-export type TransactionStatus = "pending" | "paid" | "cancelled" | "refunded";
+export type TransactionStatus = "pending" | "paid" | "partial" | "cancelled" | "refunded";
+export type TransactionKind = "sale" | "preorder";
 
 export interface TransactionItem {
   productId: string;
@@ -88,6 +89,11 @@ export interface Transaction {
   createdAt: string;
   qrisRef?: string;
   photoProof?: string;
+  // E6 pre-order
+  kind?: TransactionKind;
+  dueDate?: string;      // 'YYYY-MM-DD'
+  dpAmount?: number;
+  dpMethod?: PaymentMethod | null;
 }
 
 export interface Shift {

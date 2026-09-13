@@ -63,6 +63,20 @@ export default function TransactionsPage() {
     tx: Transaction;
     action: "cancelled" | "refunded";
   } | null>(null);
+  // E6: modal pelunasan pre-order
+  const [settle, setSettle] = useState<Transaction | null>(null);
+  const [settleMethod, setSettleMethod] = useState<PaymentMethod>("cash");
+  const [settleBusy, setSettleBusy] = useState(false);
+  const settlePreorder = useData((s) => s.settlePreorder);
+
+  async function doSettle() {
+    if (!settle) return;
+    setSettleBusy(true);
+    const remaining = Math.max(0, (settle.total ?? 0) - (settle.amountPaid ?? 0));
+    const ok = await settlePreorder(settle.id, settleMethod, remaining);
+    setSettleBusy(false);
+    if (ok) setSettle(null);
+  }
 
   useEffect(() => {
     const sync = () => setAll(getAllTransactions(dummyTx));
@@ -243,6 +257,12 @@ export default function TransactionsPage() {
                       ) : (
                         ""
                       )}
+                      {r.isFirstOfNota && r.tx.kind === "preorder" ? (
+                        <span className="pill-apricot ml-1 text-[10px]" title={r.tx.dueDate ? `Tempo ${r.tx.dueDate}` : "Pre-order"}>PO</span>
+                      ) : null}
+                      {r.isFirstOfNota && r.tx.status === "partial" ? (
+                        <span className="pill-warning ml-1 text-[10px]">kurang {formatRupiah(Math.max(0, (r.tx.total ?? 0) - (r.tx.amountPaid ?? 0)))}</span>
+                      ) : null}
                     </td>
                     <td className="p-2.5 align-top text-xs text-gray-600">
                       {r.isFirstOfNota
@@ -347,7 +367,22 @@ export default function TransactionsPage() {
                       )}
                     </td>
                     <td className="p-2.5 align-top">
-                      {r.isFirstOfNota && r.tx.status === "paid" && canManage ? (
+                      {r.isFirstOfNota && r.tx.status === "partial" && canManage ? (
+                        <div className="flex gap-1">
+                          <button
+                            onClick={() => { setSettleMethod((r.tx.paymentMethod === "qris" ? "cash" : r.tx.paymentMethod) as PaymentMethod); setSettle(r.tx); }}
+                            className="btn-primary px-2 py-0.5 text-[10px]"
+                          >
+                            Lunas
+                          </button>
+                          <button
+                            onClick={() => setConfirm({ tx: r.tx, action: "cancelled" })}
+                            className="btn-danger px-2 py-0.5 text-[10px]"
+                          >
+                            Batal
+                          </button>
+                        </div>
+                      ) : r.isFirstOfNota && r.tx.status === "paid" && canManage ? (
                         <div className="flex gap-1">
                           <button
                             onClick={() =>
@@ -535,6 +570,45 @@ export default function TransactionsPage() {
                 }
               >
                 Ya, {confirm.action === "cancelled" ? "Batalkan" : "Refund"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* E6: Pelunasan Pre-order */}
+      {settle && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-[360px] rounded-3xl bg-white p-5 shadow-soft-xl">
+            <h3 className="mb-1 text-lg font-bold text-ink">Lunasi Pre-order</h3>
+            <p className="mb-3 text-sm text-gray-600">
+              {settle.number} · total {formatRupiah(settle.total)} · DP {formatRupiah(settle.dpAmount ?? settle.amountPaid)}
+            </p>
+            <div className="mb-3 rounded-2xl bg-beige/60 px-3 py-2.5 text-sm">
+              <div className="flex justify-between">
+                <span className="text-gray-600">Sisa kurang bayar</span>
+                <b className="tnum text-ink">{formatRupiah(Math.max(0, (settle.total ?? 0) - (settle.amountPaid ?? 0)))}</b>
+              </div>
+            </div>
+            <label className="mb-1 block text-sm text-olive">Metode pelunasan</label>
+            <div className="seg mb-4">
+              {(["cash", "transfer", "qris"] as PaymentMethod[]).map((m) => (
+                <button
+                  key={m}
+                  onClick={() => setSettleMethod(m)}
+                  className={`seg-item flex-1 ${settleMethod === m ? "seg-item-active" : ""}`}
+                >
+                  {METHOD_LABELS[m]}
+                </button>
+              ))}
+            </div>
+            <p className="mb-3 text-xs text-gray-500">
+              Stok sudah dicadangkan saat DP — pelunasan tidak mengubah stok.
+            </p>
+            <div className="flex gap-2">
+              <button onClick={() => setSettle(null)} disabled={settleBusy} className="btn-ghost flex-1 disabled:opacity-40">Batal</button>
+              <button onClick={doSettle} disabled={settleBusy} className="btn-primary flex-1 disabled:opacity-40">
+                {settleBusy ? "Menyimpan…" : "Konfirmasi Lunas"}
               </button>
             </div>
           </div>

@@ -111,6 +111,10 @@ export function mapTransactionRow(t: Record<string, any>, items: TransactionItem
     change: Number(t.change ?? 0),
     qrisRef: t.qris_ref ?? undefined,
     photoProof: t.photo_proof ?? undefined,
+    kind: (t.kind ?? "sale") as Transaction["kind"],
+    dueDate: t.due_date ?? undefined,
+    dpAmount: t.dp_amount != null ? Number(t.dp_amount) : undefined,
+    dpMethod: t.dp_method ?? undefined,
     createdAt: t.created_at,
     items,
   };

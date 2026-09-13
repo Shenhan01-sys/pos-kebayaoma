@@ -39,6 +39,14 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [txNumber] = useState(() => nextTxNumber(storePrefix));
   const [customPrompt, setCustomPrompt] = useState<TransactionItem[]>([]);
+  // E6: Pre-order DP
+  const [po, setPo] = useState(false);
+  const [dueDate, setDueDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 7);
+    return d.toISOString().slice(0, 10);
+  });
+  const [dpStr, setDpStr] = useState("");
 
   const rawSubtotal = useMemo(
     () => lines.reduce((sum, l) => sum + l.unitPrice * l.quantity, 0),
@@ -256,6 +264,37 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
 
     if (!photo) {
       setError("Foto bukti pembayaran wajib diunggah.");
+      return;
+    }
+
+    // ===== E6 PRE-ORDER (DP) : status partial → trigger pending->partial reserve stok =====
+    if (po) {
+      const dp = Number(dpStr) || 0;
+      if (dp <= 0 || dp >= grand) {
+        setError("DP harus > 0 dan kurang dari total. Sisa bayar dicatat saat pelunasan.");
+        return;
+      }
+      if (!dueDate) {
+        setError("Isi tanggal jatuh tempo pelunasan.");
+        return;
+      }
+      if (method === "qris") {
+        setError("Pre-order: pilih metode Tunai/Transfer untuk pembayaran DP.");
+        return;
+      }
+      const tx: Transaction = {
+        ...buildTx("partial", "paid", dp),
+        kind: "preorder",
+        dueDate,
+        dpAmount: dp,
+        dpMethod: method,
+        change: 0,
+      };
+      const saved = await saveTx(tx);
+      if (saved) {
+        setCustomPrompt(saved.items.filter((i) => i.productId === "custom"));
+        setPaid(saved);
+      }
       return;
     }
 
@@ -608,6 +647,34 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
             <p className="rounded-2xl bg-beige/60 p-4 text-sm text-gray-600">
               Konfirmasi setelah transfer masuk. Sistem akan mencatat sebagai lunas.
             </p>
+          )}
+
+          {/* E6 Pre-order */}
+          <button
+            onClick={() => setPo((v) => !v)}
+            className={`mb-3 flex w-full items-center gap-2 rounded-2xl px-3 py-2.5 text-sm font-semibold transition ${
+              po ? "bg-apricot/20 text-ink ring-1 ring-apricot" : "bg-beige/60 text-gray-600 hover:bg-beige"
+            }`}
+          >
+            <Icon name="shifts" size={16} /> Pre-order (bayar DP dulu)
+            <span className={`ml-auto inline-flex h-5 w-9 items-center rounded-full p-0.5 transition ${po ? "justify-end bg-apricot" : "justify-start bg-black/15"}`}>
+              <span className="block h-4 w-4 rounded-full bg-white shadow" />
+            </span>
+          </button>
+          {po && (
+            <div className="mb-3 space-y-2 rounded-2xl bg-apricot/10 p-3">
+              <div className="flex items-center justify-between gap-2 text-sm">
+                <label className="text-olive">Jatuh tempo pelunasan</label>
+                <input type="date" value={dueDate} min={new Date().toISOString().slice(0, 10)} onChange={(e) => setDueDate(e.target.value)} className="input w-auto" />
+              </div>
+              <div className="flex items-center justify-between gap-2 text-sm">
+                <label className="text-olive">Uang muka (DP)</label>
+                <input type="number" min={0} value={dpStr} onChange={(e) => setDpStr(e.target.value)} className="input w-32 text-right tnum" placeholder={`${Math.round(grand / 2)}`} />
+              </div>
+              <p className="text-xs text-gray-600">
+                Stok dicadangkan saat DP. Sisa <b className="tnum">{formatRupiah(Math.max(0, grand - (Number(dpStr) || 0)))}</b> dilunasi lewat tombol Lunas di /transactions. Metode DP ikut tercatat.
+              </p>
+            </div>
           )}
 
           {error && (

@@ -23,6 +23,8 @@ import {
   type Customer,
   type Transaction,
   type TransactionItem,
+  type TransactionStatus,
+  type PaymentMethod,
   type Shift,
 } from "@/lib/dummy";
 import {
@@ -147,6 +149,7 @@ interface DataState {
   // transactions
   saveTransaction: (tx: Omit<Transaction, "id" | "items"> & { items: TransactionItem[] }, storeOverride?: string) => Promise<Transaction | null>;
   setTransactionStatus: (id: string, status: Transaction["status"]) => Promise<void>;
+  settlePreorder: (id: string, method: PaymentMethod, remaining: number) => Promise<boolean>; // E6
   flushOfflineQueue: () => Promise<void>;
 
   // internal side effects
@@ -1821,9 +1824,10 @@ export const useData = create<DataState>()(
           }
 
           // Nomor nota atomik dari server — aman untuk multi-kasir.
-          // RPC gagal = simpan gagal; jangan fallback ke nomor client (duplikat).
+          // Preorder memakai prefix khusus PO- (E6).
+          const isPo = (tx as Transaction).kind === "preorder";
           const { data: serverNumber, error: numberError } = await supabase.rpc(
-            'next_tx_number',
+            isPo ? 'next_po_number' : 'next_tx_number',
             { p_store_id: sid }
           );
           if (numberError || !serverNumber) {
@@ -1832,7 +1836,7 @@ export const useData = create<DataState>()(
 
           // Simpan header sebagai pending dulu: trigger AFTER INSERT tidak boleh
           // jalan sebelum items ada. Status final diterapkan via update di bawah,
-          // sehingga trigger pending->paid melihat items lengkap.
+          // sehingga trigger pending->paid/partial melihat items lengkap.
           const { data: header, error: headerError } = await supabase
             .from('transactions')
             .insert([{
@@ -1852,6 +1856,10 @@ export const useData = create<DataState>()(
               change: tx.change,
               qris_ref: tx.qrisRef ?? null,
               photo_proof: (tx as any).photoProof ?? null,
+              kind: isPo ? 'preorder' : 'sale',
+              due_date: (tx as Transaction).dueDate ?? null,
+              dp_amount: (tx as Transaction).dpAmount ?? null,
+              dp_method: (tx as Transaction).dpMethod ?? null,
             }])
             .select()
             .single();
@@ -2055,6 +2063,48 @@ export const useData = create<DataState>()(
           }
         } catch (error: any) {
           set({ error: error.message });
+        }
+      },
+
+      // E6: lunasi pre-order (partial -> paid). Stok TIDAK decrement ulang —
+      // sudah direverse saat DP via trigger pending->partial.
+      settlePreorder: async (id, method, _remaining) => {
+        const prev = get().transactions.find((t) => t.id === id);
+        if (!prev) { set({ error: "Transaksi tidak ditemukan." }); return false; }
+        try {
+          if (isSupabaseReady) {
+            const { error } = await supabase
+              .from("transactions")
+              .update({
+                status: "paid",
+                payment_status: "paid",
+                amount_paid: prev.total,
+                payment_method: method,
+              })
+              .eq("id", id);
+            if (error) throw error;
+            set((s) => ({
+              transactions: s.transactions.map((t) =>
+                t.id === id
+                  ? { ...t, status: "paid", paymentStatus: "paid", amountPaid: t.total, paymentMethod: method }
+                  : t
+              ),
+            }));
+            await get().fetchTransactions();
+            return true;
+          }
+          // demo lokal: status partial di FE tidak decrement stok, jadi pelunasan cukup ubah status
+          set((s) => ({
+            transactions: s.transactions.map((t) =>
+              t.id === id
+                ? { ...t, status: "paid", paymentStatus: "paid", amountPaid: t.total, paymentMethod: method }
+                : t
+            ),
+          }));
+          return true;
+        } catch (error: any) {
+          set({ error: error.message });
+          return false;
         }
       },
 
