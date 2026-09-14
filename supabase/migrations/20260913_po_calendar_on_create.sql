@@ -49,6 +49,12 @@ begin
      and new.calendar_event_id is null then
     perform public.queue_po_calendar(new.id);
   end if;
+  -- (20260913_po_calendar_on_cancel) preorder batal/refund & punya event -> fn cabang delete
+  if new.kind = 'preorder' and new.calendar_event_id is not null
+     and old.status not in ('cancelled','refunded')
+     and new.status in ('cancelled','refunded') then
+    perform public.queue_po_calendar(new.id);
+  end if;
   if old.status in ('paid','partial') and new.status in ('cancelled','refunded') then
     perform public.reverse_sale_stock(old.id, new.status = 'refunded');
   end if;

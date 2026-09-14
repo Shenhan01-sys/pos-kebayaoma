@@ -97,6 +97,18 @@ Deno.serve(async (req) => {
       .select("id, number, customer_name, total, amount_paid, due_date, created_at, kind, status, calendar_event_id, transaction_items(name, quantity)")
       .eq("id", body.po_id).maybeSingle();
     if (!t) return jsonOk({ ok: false, error: "po-not-found" });
+    const voided = t.status === "cancelled" || t.status === "refunded";
+    if (voided) {
+      // PO dibatalkan/di-refund → hapus event kalender yatim (bila ada) lalu kosongkan kolom.
+      if (!t.calendar_event_id) return jsonOk({ ok: true, skipped: "tidak-ada-event" });
+      if (!calOn) return jsonOk({ ok: true, skipped: "calendar-off" });
+      try {
+        await calExecute(calKey!, "GOOGLECALENDAR_DELETE_EVENT", calAcc!, calUser!, { event_id: t.calendar_event_id, calendar_id: calId });
+        await supabase.from("transactions").update({ calendar_event_id: null }).eq("id", t.id);
+        log.push(`PO ${t.number} event dihapus (status ${t.status})`);
+        return jsonOk({ ok: true, log });
+      } catch (e) { log.push(`PO ${t.number} delete event FAIL ${String(e)}`); return jsonOk({ ok: false, log }); }
+    }
     if (t.calendar_event_id) return jsonOk({ ok: true, skipped: "event-sudah-ada" });
     if (t.kind !== "preorder" || !t.due_date) return jsonOk({ ok: true, skipped: "bukan-PO-bergelar" });
     const { summary, description: desc } = poEventParts(t);
