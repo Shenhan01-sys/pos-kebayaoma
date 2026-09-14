@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { poStage, rentalStage, normalizePhone, dayProgress, poReminderOffsets } from "./_logic.ts";
+import { poStage, rentalStage, normalizePhone, dayProgress, poReminderOffsets, poEventParts } from "./_logic.ts";
 
 const day = (s: string) => new Date(s + "T12:00:00+07:00");
 
@@ -66,4 +66,28 @@ describe('poReminderOffsets (checkout event 3 popup)', () => {
     offs.forEach((o) => expect(o).toBeLessThanOrEqual(40320));
   });
 });
+
+describe("poEventParts (info PO lengkap di judul+deskripsi)", () => {
+  it("judul: nota + produk pertama + untuk siapa + tempo; deskripsi: items/sisa/3 tahap", () => {
+    const q = poEventParts({
+      number: "PO-20260914-001", customer_name: "Nadya", due_date: "2026-09-20",
+      total: 300000, amount_paid: 100000,
+      transaction_items: [{ name: "Kebaya Nadya", quantity: 1 }, { name: "Selendang", quantity: 2 }],
+    });
+    expect(q.summary).toContain("PO PO-20260914-001");
+    expect(q.summary).toContain("Kebaya Nadya x1");
+    expect(q.summary).toContain("untuk Nadya");
+    expect(q.summary).toContain("tempo 2026-09-20");
+    expect(q.description).toContain("Pelanggan: Nadya");
+    expect(q.description).toContain("Kebaya Nadya x1, Selendang x2");
+    expect(q.description).toContain("Rp 200.000");
+    expect(q.description).toContain("SIAPKAN BARANG");
+  });
+  it("tanpa nama pelanggan -> Umum; tanpa items -> tetap aman", () => {
+    const q = poEventParts({ number: "X", due_date: "2026-09-20" });
+    expect(q.summary).toContain("untuk Umum");
+    expect(q.description).toContain("Isi: -");
+  });
+});
+
 

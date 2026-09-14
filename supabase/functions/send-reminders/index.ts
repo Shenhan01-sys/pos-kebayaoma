@@ -10,7 +10,7 @@
 // verify_jwt=false; otorisasi internal via header x-reminder-secret.
 
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { poStage, rentalStage, normalizePhone, rupiahInt, dayProgress, daysUntil, poReminderOffsets } from "./_logic.ts";
+import { poStage, rentalStage, normalizePhone, rupiahInt, dayProgress, daysUntil, poReminderOffsets, poEventParts } from "./_logic.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -94,18 +94,14 @@ Deno.serve(async (req) => {
   if (body.po_id) {
     if (!calOn) return jsonOk({ ok: true, skipped: "calendar-off", note: "secret kalender belum lengkap; cron tidak bisa membuat event — cek COMPOSIO_* secrets." });
     const { data: t } = await supabase.from("transactions")
-      .select("id, number, customer_name, total, amount_paid, due_date, created_at, kind, status, calendar_event_id")
+      .select("id, number, customer_name, total, amount_paid, due_date, created_at, kind, status, calendar_event_id, transaction_items(name, quantity)")
       .eq("id", body.po_id).maybeSingle();
     if (!t) return jsonOk({ ok: false, error: "po-not-found" });
     if (t.calendar_event_id) return jsonOk({ ok: true, skipped: "event-sudah-ada" });
     if (t.kind !== "preorder" || !t.due_date) return jsonOk({ ok: true, skipped: "bukan-PO-bergelar" });
-    const remaining = Math.max(0, (t.total ?? 0) - (t.amount_paid ?? 0));
-    const who = t.customer_name ?? "pelanggan";
-    const desc = `PO ${t.number} · ${who} · sisa Rp ${rupiahInt(remaining)} · tempo ${t.due_date}. ` +
-      `Reminder otomatis: 50% masa tempo = JANGAN LUPA PROSES PESANAN; 80% = ingatkan pelanggan; ` +
-      `hari-H = SIAPKAN BARANG, pelanggan akan mengambil. — Kebaya Oma`;
+    const { summary, description: desc } = poEventParts(t);
     try {
-      const evId = await createPoEvent(calKey!, calAcc!, calUser!, calId, `PO ${t.number} — ${who} (tempo ${t.due_date})`, t.due_date, desc, t.created_at);
+      const evId = await createPoEvent(calKey!, calAcc!, calUser!, calId, summary, t.due_date, desc, t.created_at);
       if (evId) await supabase.from("transactions").update({ calendar_event_id: evId }).eq("id", t.id);
       log.push(`PO ${t.number} event dibuat${evId ? " + id disimpan" : " (tanpa id)"}`);
       return jsonOk({ ok: true, log, eventId: evId });
@@ -117,18 +113,15 @@ Deno.serve(async (req) => {
 
   // ---- MODE B: cron ----
   const { data: pos } = await supabase.from("transactions")
-    .select("id, number, customer_name, total, amount_paid, due_date, created_at, reminded_at_50, reminded_at_20, calendar_event_id")
+    .select("id, number, customer_name, total, amount_paid, due_date, created_at, reminded_at_50, reminded_at_20, calendar_event_id, transaction_items(name, quantity)")
     .eq("kind", "preorder").eq("status", "partial").not("due_date", "is", null);
 
   for (const t of pos ?? []) {
-    const who = t.customer_name ?? "pelanggan";
-    const remaining = Math.max(0, (t.total ?? 0) - (t.amount_paid ?? 0));
-
-    // B1. catch-up event kalender belum ada -> buat (idempoten)
+    // B1. catch-up event kalender belum ada -> buat (idempoten; info lengkap via poEventParts)
     if (!t.calendar_event_id && calOn) {
-      const desc = `PO ${t.number} · ${who} · sisa Rp ${rupiahInt(remaining)} · tempo ${t.due_date} (catch-up cron). — Kebaya Oma`;
+      const { summary, description: desc } = poEventParts(t);
       try {
-        const evId = await createPoEvent(calKey!, calAcc!, calUser!, calId, `PO ${t.number} — ${who} (tempo ${t.due_date})`, t.due_date, desc, t.created_at);
+        const evId = await createPoEvent(calKey!, calAcc!, calUser!, calId, summary, t.due_date, desc, t.created_at);
         if (evId) await supabase.from("transactions").update({ calendar_event_id: evId }).eq("id", t.id);
         log.push(`PO ${t.number} event catch-up ok`);
       } catch (e) { log.push(`PO ${t.number} catch-up FAIL ${String(e)}`); }
@@ -137,6 +130,8 @@ Deno.serve(async (req) => {
     // B2. WA 50% & 80% (kalender popup sudah menangani push, WA untuk nomor owner/pelanggan)
     const stage = poStage(t, today);
     if (!stage) continue;
+    const who = t.customer_name ?? "pelanggan";
+    const remaining = Math.max(0, (t.total ?? 0) - (t.amount_paid ?? 0));
     const owner = Deno.env.get("FONNTE_OWNER_NUMBER");
     const waConfigured = !!(fonnte && owner);
     if (!waConfigured) continue; // tanpa Fonnte: 0 aksi WA, event kalender popup sudah cukup

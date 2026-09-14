@@ -71,6 +71,42 @@ export function normalizePhone(raw: string): string {
 
 export const rupiahInt = (n: number) => Math.round(n).toLocaleString("id-ID");
 
+// Judul & deskripsi event PO (keputusan user 2026-09-14): info PO lengkap.
+// Google hanya menampilkan SATU judul per event (3 popup sharing satu judul), jadi
+// produk + untuk-siapa masuk judul; rincian (items, sisa bayar, arti tiap tahap) ke
+// description yang muncul saat popup dibuka / event diklik.
+export function poItemsSummary(items: { name?: string | null; quantity?: number | null }[] | null | undefined): string {
+  return (items ?? []).map((i) => `${i.name ?? "?"} x${i.quantity ?? 0}`).join(", ");
+}
+
+export function poEventParts(t: {
+  number: string; customer_name?: string | null; due_date: string;
+  total?: number | null; amount_paid?: number | null;
+  items?: { name?: string | null; quantity?: number | null }[] | null;
+  transaction_items?: { name?: string | null; quantity?: number | null }[] | null;
+}) {
+  const who = t.customer_name?.trim() || "Umum";
+  const items = poItemsSummary(t.transaction_items ?? t.items);
+  const first = items.split(",")[0]?.trim() || "";
+  const prodShort = first ? (first.length > 28 ? first.slice(0, 25) + "…" : first) : "";
+  const summary = `PO ${t.number}${prodShort ? ` · ${prodShort}` : ""} · untuk ${who} (tempo ${t.due_date})`;
+  const remaining = Math.max(0, (t.total ?? 0) - (t.amount_paid ?? 0));
+  const lines = [
+    `Nota: ${t.number}`,
+    `Pelanggan: ${who}`,
+    `Isi: ${items || "-"}`,
+    `Sisa bayar: Rp ${rupiahInt(remaining)}`,
+    `Jatuh tempo: ${t.due_date}`,
+    "",
+    "3 reminder event ini:",
+    "  1) 50% masa tempo — JANGAN LUPA PROSES pesanan.",
+    "  2) 80% masa tempo — INGATKAN PELANGGAN (konfirmasi jadwal ambil).",
+    "  3) Hari-H 08:00 — SIAPKAN BARANG, pelanggan akan mengambil.",
+    "— Kebaya Oma",
+  ];
+  return { summary, description: lines.join("\n") };
+}
+
 // Keputusan user 2026-09-14: SATU event PO dengan 3 reminder popup Google:
 // 50% masa tempo (jangan lupa proses), 80% (ingatkan ulang), hari-H (siapkan barang).
 // Event start = due 08:00+07; offset menit sebelum start, max Google 40320.
