@@ -27,14 +27,20 @@ async function sendWa(token: string, to: string, message: string) {
   return r.json();
 }
 
-async function addCalEvent(apiKey: string, account: string, summary: string, dueISO: string, desc: string) {
-  // Google: all-day event memakai date, end bersifat EXCLUSIVE → end = due + 1 hari.
-  const endISO = new Date(new Date(dueISO + "T00:00:00Z").getTime() + 86_400_000).toISOString().slice(0, 10);
+async function addCalEvent(apiKey: string, account: string, userId: string, calId: string, summary: string, dueISO: string, desc: string) {
+  // Schema TERVERIFIKASI live 2026-09-14 (uji create+delete event sungguhan):
+  //   POST /api/v3.1/tools/execute/GOOGLECALENDAR_CREATE_EVENT, header x-api-key,
+  //   body { arguments: {…datetime…}, connected_account_id, user_id }.
+  // Event timed 08:00–09:00 Asia/Jakarta pada tanggal due (schema tool ini tidak
+  // menerima all-day `date`; datetime + timezone eksplisit = aman lintas TZ runtime).
   const args = {
     summary,
     description: desc,
-    start: { date: dueISO },
-    end: { date: endISO },
+    start_datetime: `${dueISO}T08:00:00+07:00`,
+    end_datetime: `${dueISO}T09:00:00+07:00`,
+    calendar_id: calId,
+    timezone: "Asia/Jakarta",
+    create_meeting_room: false, // default Composio=on; reminder tidak perlu link Meet
     reminders: {
       useDefault: false,
       overrides: [
@@ -43,27 +49,14 @@ async function addCalEvent(apiKey: string, account: string, summary: string, due
       ],
     },
   };
-  // Nama tool persis berbeda antar versi toolkit Composio. Env override = escape hatch
-  // (salin slug asli dari dashboard → Toolkits → Google Calendar). Kalau tidak diset,
-  // coba kandidat umum; error hanya bila SEMUA kandidat gagal (kanal lain tetap jalan).
-  const candidates = (Deno.env.get("COMPOSIO_CAL_TOOL_SLUG") || "")
-    ? [Deno.env.get("COMPOSIO_CAL_TOOL_SLUG")!]
-    : ["GOOGLECALENDAR_CREATE_EVENT", "GOOGLE_CALENDAR_CREATE_EVENT", "GOOGLECALENDAR_EVENT_CREATE", "GOOGLECALENDAR_CREATE_CALENDAR_EVENT"];
-  let lastErr = "no-slug";
-  for (const slug of candidates) {
-    try {
-      const r = await fetch("https://backend.composio.dev/api/v3/tools/execute", {
-        method: "POST",
-        headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ tool_slug: slug, connected_account_id: account, arguments: args }),
-      });
-      if (r.ok) { await r.json(); return; }
-      lastErr = `${slug}: ${r.status}`;
-    } catch (e) {
-      lastErr = `${slug}: ${String(e)}`;
-    }
-  }
-  throw new Error(`composio all-slugs-failed (${lastErr})`);
+  const slug = Deno.env.get("COMPOSIO_CAL_TOOL_SLUG") || "GOOGLECALENDAR_CREATE_EVENT";
+  const r = await fetch(`https://backend.composio.dev/api/v3.1/tools/execute/${slug}`, {
+    method: "POST",
+    headers: { "x-api-key": apiKey, "Content-Type": "application/json" },
+    body: JSON.stringify({ arguments: args, connected_account_id: account, user_id: userId }),
+  });
+  if (!r.ok) throw new Error(`composio ${r.status}: ${(await r.text()).slice(0, 200)}`);
+  await r.json();
 }
 
 Deno.serve(async (req) => {
@@ -87,6 +80,10 @@ Deno.serve(async (req) => {
   const fonnte = Deno.env.get("FONNTE_TOKEN");
   const calKey = Deno.env.get("COMPOSIO_API_KEY");
   const calAcc = Deno.env.get("COMPOSIO_CONNECTED_ACCOUNT_ID");
+  const calUser = Deno.env.get("COMPOSIO_USER_ID");
+  // Kalender target "Preorder Kebaya Oma" (group id; diverifikasi create+delete 2026-09-14).
+  const calId = Deno.env.get("COMPOSIO_CAL_ID") ||
+    "f7368342e38e8f29957efacc2169e60af85e821d9e21abfad1f21313ab49cd03@group.calendar.google.com";
   const today = nowJakarta();
   const log: string[] = [];
 
@@ -119,8 +116,8 @@ Deno.serve(async (req) => {
       log.push(`PO ${t.number}: FONNTE_TOKEN/OWNER belum diset — WA dilewati (tidak ditandai reminded)`);
     }
 
-    if (calKey && calAcc) {
-      try { await addCalEvent(calKey, calAcc, `Lunas PO ${t.number} - ${who}`, t.due_date, msg); log.push(`PO ${t.number} cal ok`); }
+    if (calKey && calAcc && calUser) {
+      try { await addCalEvent(calKey, calAcc, calUser, calId, `Lunas PO ${t.number} - ${who}`, t.due_date, msg); log.push(`PO ${t.number} cal ok`); }
       catch (e) { log.push(`PO ${t.number} cal FAIL ${String(e)}`); }
     }
 
@@ -158,6 +155,10 @@ Deno.serve(async (req) => {
       catch (e) { log.push(`rent ${r.id} WA-${stage} FAIL ${String(e)}`); }
     } else {
       log.push(`rent ${r.id}: no phone/token — WA dilewati`);
+    }
+    if (calKey && calAcc && calUser) {
+      try { await addCalEvent(calKey, calAcc, calUser, calId, `Kembali sewa ${who} (${r.qty} pcs)`, r.due_date, msg); log.push(`rent ${r.id} cal ok`); }
+      catch (e) { log.push(`rent ${r.id} cal FAIL ${String(e)}`); }
     }
     if (waOk) {
       const col = stage === "20" ? "reminded_at_20" : stage === "0" ? "reminded_at_0" : "overdue_reminded_at";
