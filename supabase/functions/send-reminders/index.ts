@@ -28,30 +28,42 @@ async function sendWa(token: string, to: string, message: string) {
 }
 
 async function addCalEvent(apiKey: string, account: string, summary: string, dueISO: string, desc: string) {
-  // Composio v3 tool execute — Google Calendar create event (kalender bersama owner)
-  const r = await fetch("https://backend.composio.dev/api/v3/tools/execute", {
-    method: "POST",
-    headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      tool_slug: "GOOGLE_CALENDAR_CREATE_EVENT",
-      connected_account_id: account,
-      arguments: {
-        summary,
-        description: desc,
-        start: { date: dueISO },
-        end: { date: dueISO },
-        reminders: {
-          useDefault: false,
-          overrides: [
-            { method: "popup", minutes: 1440 },
-            { method: "popup", minutes: 240 },
-          ],
-        },
-      },
-    }),
-  });
-  if (!r.ok) throw new Error(`composio ${r.status}: ${(await r.text()).slice(0, 200)}`);
-  return r.json();
+  // Google: all-day event memakai date, end bersifat EXCLUSIVE → end = due + 1 hari.
+  const endISO = new Date(new Date(dueISO + "T00:00:00Z").getTime() + 86_400_000).toISOString().slice(0, 10);
+  const args = {
+    summary,
+    description: desc,
+    start: { date: dueISO },
+    end: { date: endISO },
+    reminders: {
+      useDefault: false,
+      overrides: [
+        { method: "popup", minutes: 1440 },
+        { method: "popup", minutes: 240 },
+      ],
+    },
+  };
+  // Nama tool persis berbeda antar versi toolkit Composio. Env override = escape hatch
+  // (salin slug asli dari dashboard → Toolkits → Google Calendar). Kalau tidak diset,
+  // coba kandidat umum; error hanya bila SEMUA kandidat gagal (kanal lain tetap jalan).
+  const candidates = (Deno.env.get("COMPOSIO_CAL_TOOL_SLUG") || "")
+    ? [Deno.env.get("COMPOSIO_CAL_TOOL_SLUG")!]
+    : ["GOOGLECALENDAR_CREATE_EVENT", "GOOGLE_CALENDAR_CREATE_EVENT", "GOOGLECALENDAR_EVENT_CREATE", "GOOGLECALENDAR_CREATE_CALENDAR_EVENT"];
+  let lastErr = "no-slug";
+  for (const slug of candidates) {
+    try {
+      const r = await fetch("https://backend.composio.dev/api/v3/tools/execute", {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ tool_slug: slug, connected_account_id: account, arguments: args }),
+      });
+      if (r.ok) { await r.json(); return; }
+      lastErr = `${slug}: ${r.status}`;
+    } catch (e) {
+      lastErr = `${slug}: ${String(e)}`;
+    }
+  }
+  throw new Error(`composio all-slugs-failed (${lastErr})`);
 }
 
 Deno.serve(async (req) => {
