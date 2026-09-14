@@ -70,3 +70,14 @@ export function normalizePhone(raw: string): string {
 }
 
 export const rupiahInt = (n: number) => Math.round(n).toLocaleString("id-ID");
+
+// Keputusan user 2026-09-14: SATU event PO dengan 3 reminder popup Google:
+// 50% masa tempo (jangan lupa proses), 80% (ingatkan ulang), hari-H (siapkan barang).
+// Event start = due 08:00+07; offset menit sebelum start, max Google 40320.
+export function poReminderOffsets(createdISO: string, dueDateISO: string): number[] {
+  const { total } = dayProgress(createdISO, dueDateISO, new Date());
+  const START_MIN = 8 * 60; // 08:00
+  const mk = (elapsed: number) =>
+    Math.min(40320, Math.max(0, (total - elapsed) * 1440 + START_MIN));
+  return [mk(Math.round(total * 0.5)), mk(Math.round(total * 0.8)), mk(total)];
+}

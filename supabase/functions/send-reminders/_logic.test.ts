@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { poStage, rentalStage, normalizePhone, dayProgress } from "./_logic.ts";
+import { poStage, rentalStage, normalizePhone, dayProgress, poReminderOffsets } from "./_logic.ts";
 
 const day = (s: string) => new Date(s + "T12:00:00+07:00");
 
@@ -57,3 +57,13 @@ describe("normalizePhone", () => {
     expect(normalizePhone("628123456")).toBe("628123456");
   });
 });
+
+describe('poReminderOffsets (checkout event 3 popup)', () => {
+  it('due 6 hari: [50%,80%,hari-H] = menit sebelum start 08:00 hari-H; tepat & monotonic', () => {
+    const offs = poReminderOffsets('2026-09-01T08:00:00+07:00', '2026-09-07');
+    expect(offs).toEqual([3 * 1440 + 480, 1 * 1440 + 480, 480]); // 4800, 1920, 480 menit
+    expect(offs[2]).toBe(480);
+    offs.forEach((o) => expect(o).toBeLessThanOrEqual(40320));
+  });
+});
+
