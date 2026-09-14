@@ -108,21 +108,25 @@ Deno.serve(async (req) => {
         : `Reminder: pre-order ${t.number} tinggal H-1 (${elapsed}/${total} hari). Sisa bayar Rp ${rupiahInt(remaining)} jatuh tempo ${t.due_date}. — Kebaya Oma`;
 
     let waOk = false;
+    let calOk = false;
     const owner = Deno.env.get("FONNTE_OWNER_NUMBER");
-    if (fonnte && owner) {
+    const waConfigured = !!(fonnte && owner);
+    if (waConfigured) {
       try { await sendWa(fonnte, normalizePhone(owner), msg); waOk = true; log.push(`PO ${t.number} WA-${stage} ok`); }
       catch (e) { log.push(`PO ${t.number} WA-${stage} FAIL ${String(e)}`); }
     } else {
-      log.push(`PO ${t.number}: FONNTE_TOKEN/OWNER belum diset — WA dilewati (tidak ditandai reminded)`);
+      log.push(`PO ${t.number}: Fonnte belum diset — WA dilewati`);
     }
 
     if (calKey && calAcc && calUser) {
-      try { await addCalEvent(calKey, calAcc, calUser, calId, `Lunas PO ${t.number} - ${who}`, t.due_date, msg); log.push(`PO ${t.number} cal ok`); }
+      try { await addCalEvent(calKey, calAcc, calUser, calId, `Lunas PO ${t.number} - ${who}`, t.due_date, msg); calOk = true; log.push(`PO ${t.number} cal ok`); }
       catch (e) { log.push(`PO ${t.number} cal FAIL ${String(e)}`); }
     }
 
-    // Tandai HANYA bila WA (kanal utama) sukses — kalau token mati, retry ronde berikutnya (AC-E6#6)
-    if (waOk) {
+    // Tandai bila WA (kanal utama) sukses; ATAU bila WA memang tidak dikonfigurasi & kalender
+    // sukses (hindari spam event berulang saat setup kalender-only). Kalau WA dikonfigurasi tapi
+    // GAGAL → jangan tandai; retry ronde berikutnya (AC-E6#6).
+    if (waOk || (!waConfigured && calOk)) {
       const col = stage === "50" ? "reminded_at_50" : "reminded_at_20";
       const { error } = await supabase.from("transactions").update({ [col]: new Date().toISOString() }).eq("id", t.id);
       if (error) log.push(`PO ${t.number} mark FAIL ${error.message}`);
@@ -150,17 +154,19 @@ Deno.serve(async (req) => {
         : `Sewa ${who} (${r.qty} pcs) akan jatuh tempo ${r.due_date} (${daysLeft} hari lagi). — Kebaya Oma`;
 
     let waOk = false;
-    if (fonnte && phone) {
+    let calOk = false;
+    const waConfigured = !!(fonnte && phone);
+    if (waConfigured) {
       try { await sendWa(fonnte, normalizePhone(phone), msg); waOk = true; log.push(`rent ${r.id} WA-${stage} ok`); }
       catch (e) { log.push(`rent ${r.id} WA-${stage} FAIL ${String(e)}`); }
     } else {
       log.push(`rent ${r.id}: no phone/token — WA dilewati`);
     }
     if (calKey && calAcc && calUser) {
-      try { await addCalEvent(calKey, calAcc, calUser, calId, `Kembali sewa ${who} (${r.qty} pcs)`, r.due_date, msg); log.push(`rent ${r.id} cal ok`); }
+      try { await addCalEvent(calKey, calAcc, calUser, calId, `Kembali sewa ${who} (${r.qty} pcs)`, r.due_date, msg); calOk = true; log.push(`rent ${r.id} cal ok`); }
       catch (e) { log.push(`rent ${r.id} cal FAIL ${String(e)}`); }
     }
-    if (waOk) {
+    if (waOk || (!waConfigured && calOk)) {
       const col = stage === "20" ? "reminded_at_20" : stage === "0" ? "reminded_at_0" : "overdue_reminded_at";
       await supabase.from("rentals").update({ [col]: new Date().toISOString() }).eq("id", r.id);
     }
