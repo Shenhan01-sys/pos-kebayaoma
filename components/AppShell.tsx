@@ -24,7 +24,9 @@ const links: { href: string; label: string; icon: IconName }[] = [
   { href: "/settings", label: "Pengaturan", icon: "settings" },
 ];
 
-const STAFF_ALLOWED = ["/", "/pos", "/transactions"];
+// E11: /inventory dibuka utk staff HANYA utk tab Transfer (di halaman dirender tab itu saja);
+// role staff tidak melihat Stok/Adjust/Gabungan/Riwayat.
+const STAFF_ALLOWED = ["/", "/pos", "/transactions", "/inventory"];
 
 function canAccess(href: string, role?: string) {
   if (role === "manager") return true;

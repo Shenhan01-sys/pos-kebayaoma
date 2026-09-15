@@ -19,12 +19,14 @@ export default function InventoryPage() {
   const auth = useAuth();
   const s = useSettings();
   const cashierName = auth.staff?.name ?? s.cashierName;
+  // E11: staff hanya boleh tab Transfer — Stok/Adjust/Riwayat/Gabungan tidak dirender sama sekali.
+  const isStaff = auth.staff?.role === "staff";
   const [stockOpen, setStockOpen] = useState<{ productId: string; productName: string; sku: string; current: number } | null>(null);
   const [mode, setMode] = useState<"in" | "out">("in");
   const [qty, setQty] = useState(1);
   const [reason, setReason] = useState<Reason>("Penyesuaian");
   const [note, setNote] = useState("");
-  const [tab, setTab] = useState<"stock" | "log" | "transfer">("stock");
+  const [tab, setTab] = useState<"stock" | "log" | "transfer">(isStaff ? "transfer" : "stock");
   const [busy, setBusy] = useState(false);
   const [applyError, setApplyError] = useState<string | null>(null);
   const [vendorId, setVendorId] = useState("");
@@ -41,6 +43,9 @@ export default function InventoryPage() {
   const [trFormOpen, setTrFormOpen] = useState(false);
   const [trBusy, setTrBusy] = useState<string | null>(null);
   const [trError, setTrError] = useState<string | null>(null);
+  // E11: katalog toko asal via RPC masked (nama+sku saja — stok toko sebelah tak pernah dikirim ke FE)
+  const [trProducts, setTrProducts] = useState<{ id: string; name: string; sku: string }[]>([]);
+  const transferStoreId = auth.staff?.storeId ?? null; // toko staff (locked)
 
   useEffect(() => {
     useData.getState().fetchProducts();
@@ -133,31 +138,47 @@ export default function InventoryPage() {
   const storePrefix = (id: string) => stores.find((t) => t.id === id)?.prefix ?? "?";
   const combined = groupBySku(products, stores.map((s) => s.id));
 
-  // ===== E1: Transfer =====
+  // ===== E1: Transfer (E11: mode staff = ajukan LINTAS toko ke tokonya sendiri) =====
   const pending = transfers.filter((t) => t.status === "pending");
   const historyTr = transfers.filter((t) => t.status !== "pending");
   function openTransferForm() {
-    setTrFrom(activeStoreId ?? stores[0]?.id ?? "");
-    setTrTo(stores.find((t) => t.id !== (activeStoreId ?? stores[0]?.id))?.id ?? "");
-    const first = products.find((p) => p.stock > 0);
-    setTrProduct(first?.id ?? products[0]?.id ?? "");
+    if (isStaff) {
+      // staff: Ke = tokonya sendiri (terkunci), Dari = dipilih; produk via RPC masked
+      setTrTo(transferStoreId ?? "");
+      setTrFrom("");
+    } else {
+      setTrFrom(activeStoreId ?? stores[0]?.id ?? "");
+      setTrTo(stores.find((t) => t.id !== (activeStoreId ?? stores[0]?.id))?.id ?? "");
+    }
+    setTrProduct("");
+    setTrProducts([]);
     setTrQty(1);
     setTrNote("");
     setTrError(null);
     setTrFormOpen(true);
   }
+  // E11: isi katalog toko asal lewat RPC TERSEMBUNYI-STOK (nama+sku saja) — privasi stok toko sebelah
+  useEffect(() => {
+    if (trFormOpen && trFrom) {
+      useData.getState().transferProducts(trFrom).then(setTrProducts);
+    } else {
+      setTrProducts([]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trFormOpen, trFrom]);
   async function submitTransfer() {
     if (!trFrom || !trTo || trFrom === trTo || !trProduct || trQty <= 0) {
       setTrError("Lengkapi asal/tujuan (berbeda), produk, dan qty > 0.");
       return;
     }
-    const p = products.find((x) => x.id === trProduct);
-    if (p && p.storeId && p.storeId !== trFrom) {
-      // produk pilihan harus milik toko asal
+    // produk harus ada di katalog toko asal (daftar masked dari server)
+    if (!trProducts.some((x) => x.id === trProduct)) {
       setTrError("Produk harus berasal dari toko pengirim.");
       return;
     }
-    // AC-E10#1: tolak langsung di form sebelum submit (pesan standar user)
+    // AC-E10#1: tolak langsung di form HANYA bila stok toko asal diketahui si pengguna
+    // (staff lintas toko tidak tahu & tidak boleh tahu → server validasi saat Kirim).
+    const p = products.find((x) => x.id === trProduct);
     if (p && trQty > p.stock) {
       setTrError(maxTransferMsg(p.stock));
       return;
@@ -189,8 +210,8 @@ export default function InventoryPage() {
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-2xl font-extrabold tracking-tight text-ink">Inventori & Stok</h1>
         <div className="seg">
-          <button onClick={() => setTab("stock")} className={`seg-item ${tab === "stock" ? "seg-item-active" : ""}`}>Stok</button>
-          <button onClick={() => setTab("log")} className={`seg-item ${tab === "log" ? "seg-item-active" : ""}`}>Riwayat</button>
+          {!isStaff && <button onClick={() => setTab("stock")} className={`seg-item ${tab === "stock" ? "seg-item-active" : ""}`}>Stok</button>}
+          {!isStaff && <button onClick={() => setTab("log")} className={`seg-item ${tab === "log" ? "seg-item-active" : ""}`}>Riwayat</button>}
           <button onClick={() => setTab("transfer")} className={`seg-item ${tab === "transfer" ? "seg-item-active" : ""}`}>
             Transfer{pending.length > 0 ? ` (${pending.length})` : ""}
           </button>
@@ -380,12 +401,12 @@ export default function InventoryPage() {
                 <label className="mb-1 block text-sm text-olive">Dari (pengirim)</label>
                 <select value={trFrom} onChange={(e) => { setTrFrom(e.target.value); setTrProduct(""); }} className="input">
                   <option value="">—</option>
-                  {stores.map((t) => <option key={t.id} value={t.id}>{t.prefix} - {t.name}</option>)}
+                  {stores.filter((t) => !isStaff || t.id !== transferStoreId).map((t) => <option key={t.id} value={t.id}>{t.prefix} - {t.name}</option>)}
                 </select>
               </div>
               <div>
                 <label className="mb-1 block text-sm text-olive">Ke (penerima)</label>
-                <select value={trTo} onChange={(e) => setTrTo(e.target.value)} className="input">
+                <select value={trTo} onChange={(e) => setTrTo(e.target.value)} className="input" disabled={isStaff} title={isStaff ? "Terkunci ke tokomu sendiri" : undefined}>
                   <option value="">—</option>
                   {stores.filter((t) => t.id !== trFrom).map((t) => <option key={t.id} value={t.id}>{t.prefix} - {t.name}</option>)}
                 </select>
@@ -394,9 +415,16 @@ export default function InventoryPage() {
             <label className="mb-1 block text-sm text-olive">Produk (dari toko pengirim)</label>
             <select value={trProduct} onChange={(e) => setTrProduct(e.target.value)} className="input mb-3">
               <option value="">— pilih —</option>
-              {products.filter((p) => !trFrom || !p.storeId || p.storeId === trFrom).map((p) => (
-                <option key={p.id} value={p.id}>{p.name} ({p.sku}) · stok {p.stock}</option>
-              ))}
+              {/* E11: stok hanya tampil bila toko asal TERBUKA bagi pengguna (manager);
+                  staff lintas-toko dapat daftar masked tanpa angka dari RPC */}
+              {trProducts.map((p) => {
+                const loc = products.find((x) => x.id === p.id);
+                return (
+                  <option key={p.id} value={p.id}>
+                    {p.name} ({p.sku}){loc ? ` · stok ${loc.stock}` : ""}
+                  </option>
+                );
+              })}
             </select>
             <label className="mb-1 block text-sm text-olive">Jumlah</label>
             <input type="number" min={1} value={trQty} onChange={(e) => setTrQty(Math.max(1, Number(e.target.value) || 1))} className="input mb-3" />

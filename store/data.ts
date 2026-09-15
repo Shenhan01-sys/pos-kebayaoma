@@ -211,6 +211,7 @@ interface DataState {
   // transfers (E1) â€” return true bila tersimpan
   transfers: Transfer[];
   fetchTransfers: () => Promise<void>;
+  transferProducts: (storeId: string) => Promise<{ id: string; name: string; sku: string }[]>; // E11: katalog masked
   requestTransfer: (fromStoreId: string, toStoreId: string, productId: string, qty: number, requestedBy: string, note?: string) => Promise<boolean>;
   sendTransfer: (id: string) => Promise<boolean>;
   cancelTransfer: (id: string) => Promise<boolean>;
@@ -1244,11 +1245,9 @@ export const useData = create<DataState>()(
       fetchTransfers: async () => {
         if (!isSupabaseReady) return;
         try {
-          const { data, error } = await supabase
-            .from("stock_transfers")
-            .select("*, from_product:products!stock_transfers_from_product_fkey(sku,name)")
-            .order("created_at", { ascending: false })
-            .limit(100);
+          // E11: RPC security-definer tersegelong — staff pengaju lintas toko ikut
+          // melihat nama produk (join products terblokir RLS biasa); tanpa angka stok.
+          const { data, error } = await supabase.rpc("list_transfers");
           if (error) throw error;
           set({
             transfers: (data ?? []).map((t: any) => ({
@@ -1257,8 +1256,8 @@ export const useData = create<DataState>()(
               toStore: t.to_store,
               fromProduct: t.from_product,
               toProduct: t.to_product ?? null,
-              productName: t.from_product?.name ?? "â€”",
-              sku: t.from_product?.sku ?? "â€”",
+              productName: t.product_name ?? "—",
+              sku: t.product_sku ?? "—",
               qty: Number(t.qty),
               status: t.status,
               requestedBy: t.requested_by,
@@ -1270,6 +1269,18 @@ export const useData = create<DataState>()(
           });
         } catch (error: any) {
           set({ error: humanizeError(error) });
+        }
+      },
+
+      transferProducts: async (storeId: string): Promise<{ id: string; name: string; sku: string }[]> => {
+        if (!isSupabaseReady) return [];
+        try {
+          const { data, error } = await supabase.rpc("list_transfer_products", { p_store: storeId });
+          if (error) throw error;
+          return (data ?? []).map((r: any) => ({ id: r.id, name: r.name, sku: r.sku }));
+        } catch (error: any) {
+          set({ error: humanizeError(error) });
+          return [];
         }
       },
 
