@@ -31,9 +31,9 @@ describe("canCancelTransfer", () => {
 
 describe("groupBySku (AC-E1b#1)", () => {
   const products = [
-    { sku: "M-01", name: "Anting", stock: 4, storeId: MJL },
-    { sku: "m-01", name: "Anting", stock: 6, storeId: KTB },
-    { sku: "K-02", name: "Kalung", stock: 3, storeId: MJL },
+    { id: "pa", sku: "M-01", name: "Anting", stock: 4, storeId: MJL },
+    { id: "pb", sku: "m-01", name: "Anting", stock: 6, storeId: KTB },
+    { id: "pc", sku: "K-02", name: "Kalung", stock: 3, storeId: MJL },
   ];
   const rows = groupBySku(products, [MJL, KTB]);
 
@@ -50,5 +50,10 @@ describe("groupBySku (AC-E1b#1)", () => {
   });
   it("urut nama", () => {
     expect(rows[0].name.localeCompare(rows[1].name)).toBeLessThan(0);
+  });
+  it("productIds per toko utk aksi adjust Gabungan", () => {
+    const m = rows.find((r) => r.sku === "M-01")!;
+    expect(m.productIds[MJL]).toBe("pa");
+    expect(m.productIds[KTB]).toBe("pb");
   });
 });

@@ -175,7 +175,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <LoadingScreen />
       {/* Sidebar — floating light panel on desktop, drawer on small screens */}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex w-64 flex-col p-3 transition-transform duration-200 md:static md:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-40 flex w-64 flex-col p-3 transition-transform duration-200 md:sticky md:top-0 md:bottom-auto md:h-[100dvh] md:self-start md:translate-x-0 ${
           open ? "translate-x-0" : "-translate-x-full"
         }`}
       >

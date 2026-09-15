@@ -1062,7 +1062,8 @@ export const useData = create<DataState>()(
       adjustStock: async (productId, quantity, type, staff, reason, note, vendorId, unitCost) => {
         const product = get().products.find((p) => p.id === productId);
         if (!product) return false;
-        const sid = get().activeStoreId;
+        // scope "Semua" (null) → fallback ke toko milik produk (view Gabungan bisa adjust per toko)
+        const sid = get().activeStoreId ?? product.storeId;
         if (!sid) {
           set({ error: "Pilih toko operasional (MJL/KTB) dulu." });
           return false;

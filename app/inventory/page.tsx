@@ -194,7 +194,7 @@ export default function InventoryPage() {
       {tab === "stock" && isManagerAll && (
         <>
           <div className="mb-3 flex items-center gap-2 rounded-2xl bg-violet/10 px-3 py-2.5 text-sm font-medium text-violet">
-            <Icon name="box" size={16} /> Tampilan Gabungan semua toko — read-only. Pilih toko di switcher untuk adjust.
+            <Icon name="box" size={16} /> Tampilan Gabungan semua toko — tombol per kolom toko menyesuaikan stok toko itu.
           </div>
           <div className="card overflow-auto">
             <table className="w-full text-sm">
@@ -213,11 +213,28 @@ export default function InventoryPage() {
                   <tr key={row.sku} className="border-t border-black/5 hover:bg-beige/40">
                     <td className="p-3 font-medium text-ink">{row.name}</td>
                     <td className="p-3 text-xs text-gray-600">{row.sku}</td>
-                    {stores.map((t) => (
-                      <td key={t.id} className={`p-3 text-right tnum ${!row.byStore[t.id] ? "text-gray-400" : row.byStore[t.id] <= 5 ? "text-warning font-bold" : ""}`}>
-                        {row.byStore[t.id] ?? "—"}
-                      </td>
-                    ))}
+                    {stores.map((t) => {
+                      const pid = row.productIds[t.id];
+                      return (
+                        <td key={t.id} className="p-3 text-right">
+                          <span className={`tnum ${!row.byStore[t.id] ? "text-gray-400" : row.byStore[t.id] <= 5 ? "text-warning font-bold" : ""}`}>
+                            {row.byStore[t.id] ?? "—"}
+                          </span>
+                          {pid && (
+                            <button
+                              onClick={() => {
+                                const prod = products.find((x) => x.id === pid);
+                                if (prod) openStock(prod.id, prod.name, prod.sku, prod.stock);
+                              }}
+                              className="btn-primary ml-2 px-2 py-0.5 text-[10px]"
+                              title={`Restock / Adjust stok ${t.prefix}`}
+                            >
+                              Adjust
+                            </button>
+                          )}
+                        </td>
+                      );
+                    })}
                     <td className={`p-3 text-right font-extrabold tnum ${row.total === 0 ? "text-danger" : "text-ink"}`}>{row.total}</td>
                   </tr>
                 ))}
