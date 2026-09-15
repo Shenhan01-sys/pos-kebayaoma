@@ -5,6 +5,7 @@ import { formatRupiah } from "@/lib/dummy";
 import { useData } from "@/store/data";
 import { useSettings } from "@/store/settings";
 import { useAuth } from "@/store/auth";
+import { humanizeError } from "@/lib/errors";
 import { Icon } from "@/components/icons";
 
 export default function ShiftsPage() {
@@ -43,7 +44,7 @@ export default function ShiftsPage() {
       setOpenModal(false);
       setStartingCash("");
     } catch (err: any) {
-      setLocalError(err?.message || "Gagal membuka shift");
+      setLocalError(humanizeError(err, { action: "membuka shift" }));
     } finally {
       setBusy(false);
     }
@@ -63,7 +64,7 @@ export default function ShiftsPage() {
       await closeShift(active.id, Number(endingCash) || 0);
       setEndingCash("");
     } catch (err: any) {
-      setLocalError(err?.message || "Gagal menutup shift");
+      setLocalError(humanizeError(err, { action: "menutup shift" }));
     } finally {
       setClosing(false);
     }

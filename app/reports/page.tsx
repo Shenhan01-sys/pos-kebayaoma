@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { transactions as dummyTx, formatRupiah } from "@/lib/dummy";
 import { getAllTransactions } from "@/store/cart";
 import { useData } from "@/store/data";
+import { humanizeError } from "@/lib/errors";
 import { Icon, type IconName } from "@/components/icons";
 import { computeReport } from "@/lib/report-data";
 import { exportPdf, exportXlsx, type ExportMeta } from "@/lib/report-export";
@@ -162,7 +163,7 @@ export default function ReportsPage() {
         chartNodes: { method: methodRef.current ?? undefined, daily: dailyRef.current ?? undefined, products: prodRef.current ?? undefined },
       });
     } catch (e: any) {
-      setExportError(e?.message ?? "Gagal membuat PDF.");
+      setExportError(humanizeError(e, { action: "membuat PDF" }));
     } finally {
       setExporting(null);
     }
@@ -170,7 +171,7 @@ export default function ReportsPage() {
   async function doExportXlsx() {
     setExporting("xlsx"); setExportError(null);
     try { await exportXlsx(report, meta()); }
-    catch (e: any) { setExportError(e?.message ?? "Gagal membuat Excel."); }
+    catch (e: any) { setExportError(humanizeError(e, { action: "membuat Excel" })); }
     finally { setExporting(null); }
   }
 

@@ -7,6 +7,7 @@ import { useSettings } from "@/store/settings";
 import { formatRupiah } from "@/lib/dummy";
 import { encodeVoBarcode } from "@/lib/barcode";
 import { canSendTransfer, canCancelTransfer, groupBySku } from "@/lib/transfer";
+import { maxTransferMsg } from "@/lib/errors";
 import { Icon } from "@/components/icons";
 import PrintBarcodeModal from "@/components/PrintBarcodeModal";
 
@@ -154,6 +155,11 @@ export default function InventoryPage() {
     if (p && p.storeId && p.storeId !== trFrom) {
       // produk pilihan harus milik toko asal
       setTrError("Produk harus berasal dari toko pengirim.");
+      return;
+    }
+    // AC-E10#1: tolak langsung di form sebelum submit (pesan standar user)
+    if (p && trQty > p.stock) {
+      setTrError(maxTransferMsg(p.stock));
       return;
     }
     setTrBusy("form");

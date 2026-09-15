@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useData } from "@/store/data";
 import { getAllTransactions } from "@/store/cart";
 import { transactions as dummyTx, formatRupiah, type Customer } from "@/lib/dummy";
+import { humanizeError } from "@/lib/errors";
 import { Icon } from "@/components/icons";
 
 export default function CustomersPage() {
@@ -48,7 +49,7 @@ export default function CustomersPage() {
       setAdding(false);
       setEditing(null);
     } catch (err: any) {
-      setModalError(err?.message || "Gagal menyimpan");
+      setModalError(humanizeError(err, { action: "menyimpan pelanggan" }));
     } finally {
       setBusy(false);
     }
@@ -59,7 +60,7 @@ export default function CustomersPage() {
     try {
       await deleteCustomer(c.id);
     } catch (err: any) {
-      alert(err?.message || "Gagal menghapus");
+      alert(humanizeError(err, { action: "menghapus pelanggan" }));
     } finally {
       setBusy(false);
     }

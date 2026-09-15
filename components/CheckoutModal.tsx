@@ -14,6 +14,7 @@ import { useData } from "@/store/data";
 import { useAuth } from "@/store/auth";
 import Receipt from "@/components/Receipt";
 import { inclusiveTax } from "@/lib/tax";
+import { humanizeError } from "@/lib/errors";
 import { Icon } from "@/components/icons";
 
 const methodMeta: Record<PaymentMethod, { label: string; icon: "qris" | "cash" | "transfer" | "shopee" }> = {
@@ -141,7 +142,7 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
         }
       })
       .catch((e) => {
-        if (!cancelled) setError(e.message);
+        if (!cancelled) setError(humanizeError(e));
       })
       .finally(() => !cancelled && setQrLoading(false));
     return () => {

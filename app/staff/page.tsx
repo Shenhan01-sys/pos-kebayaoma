@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useData, type Role, type Staff } from "@/store/data";
 import { useAuth } from "@/store/auth";
+import { humanizeError } from "@/lib/errors";
 import { Icon } from "@/components/icons";
 
 export default function StaffPage() {
@@ -75,7 +76,7 @@ export default function StaffPage() {
         setAdding(false);
         setEditing(null);
       } catch (err: any) {
-        setModalError(err?.message || "Gagal menyimpan");
+        setModalError(humanizeError(err, { action: "menyimpan staff" }));
       } finally {
         setBusy(false);
       }
@@ -90,7 +91,7 @@ export default function StaffPage() {
         await addStaff(payload);
         setAdding(false);
       } catch (err: any) {
-        setModalError(err?.message || "Gagal menambah staff");
+        setModalError(humanizeError(err, { action: "menambah staff" }));
       } finally {
         setBusy(false);
       }
@@ -111,7 +112,7 @@ export default function StaffPage() {
     try {
       await deleteStaff(s.id);
     } catch (err: any) {
-      alert(err?.message || "Gagal menghapus staff");
+      alert(humanizeError(err, { action: "menghapus staff" }));
     } finally {
       setBusy(false);
     }

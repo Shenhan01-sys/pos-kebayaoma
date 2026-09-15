@@ -3,6 +3,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { supabase, isSupabaseReady } from "@/lib/supabase";
+import { humanizeError } from "@/lib/errors";
 import { getPowerSyncDb, initPowerSync, isPowerSyncReady } from "@/lib/powersync/client";
 import {
   enqueueTransaction,
@@ -190,7 +191,7 @@ interface DataState {
   updateVariant: (productId: string, variantId: string, patch: Partial<Variant>) => Promise<void>;
   removeVariant: (productId: string, variantId: string) => Promise<void>;
 
-  // stock — return true jika tersimpan. E2: vendorId/unitCost utk lot restock.
+  // stock â€” return true jika tersimpan. E2: vendorId/unitCost utk lot restock.
   adjustStock: (
     productId: string,
     quantity: number,
@@ -207,7 +208,7 @@ interface DataState {
   addVendor: (name: string, phone?: string) => Promise<Vendor | null>;
   fetchMovements: () => Promise<void>;
 
-  // transfers (E1) — return true bila tersimpan
+  // transfers (E1) â€” return true bila tersimpan
   transfers: Transfer[];
   fetchTransfers: () => Promise<void>;
   requestTransfer: (fromStoreId: string, toStoreId: string, productId: string, qty: number, requestedBy: string, note?: string) => Promise<boolean>;
@@ -245,7 +246,7 @@ interface DataState {
 }
 
 // Foto bukti (base64 dataURL) + riwayat tak terbatas meledakkan localStorage
-// (kuota ~5MB) → QuotaExceededError saat saveTransaction → popup stuck.
+// (kuota ~5MB) â†’ QuotaExceededError saat saveTransaction â†’ popup stuck.
 // Solusi: jangan persist photoProof, batasi jumlah tx/movement, dan
 // storage anti-macet (prune + retry, terakhir hapus key agar app tetap jalan).
 const stripTxForPersist = (t: Transaction) => {
@@ -379,7 +380,7 @@ export const useData = create<DataState>()(
             })),
           });
         } catch (error: any) {
-          set({ error: error.message });
+          set({ error: humanizeError(error) });
         }
       },
 
@@ -451,7 +452,7 @@ export const useData = create<DataState>()(
 
           set({ products, loading: false });
         } catch (error: any) {
-          set({ error: error.message, loading: false });
+          set({ error: humanizeError(error), loading: false });
         }
       },
 
@@ -491,7 +492,7 @@ export const useData = create<DataState>()(
 
           set({ categories: data.map(mapCategoryRow), loading: false });
         } catch (error: any) {
-          set({ error: error.message, loading: false });
+          set({ error: humanizeError(error), loading: false });
         }
       },
 
@@ -531,7 +532,7 @@ export const useData = create<DataState>()(
 
           set({ customers: data.map(mapCustomerRow), loading: false });
         } catch (error: any) {
-          set({ error: error.message, loading: false });
+          set({ error: humanizeError(error), loading: false });
         }
       },
 
@@ -572,7 +573,7 @@ export const useData = create<DataState>()(
             categories: [...s.categories, { id: data.id, name: data.name, slug: data.slug }]
           }));
         } catch (error: any) {
-          set({ error: error.message });
+          set({ error: humanizeError(error) });
         }
       },
 
@@ -608,7 +609,7 @@ export const useData = create<DataState>()(
             categories: s.categories.map((c) => (c.id === id ? { ...c, ...patch } : c))
           }));
         } catch (error: any) {
-          set({ error: error.message });
+          set({ error: humanizeError(error) });
         }
       },
 
@@ -639,7 +640,7 @@ export const useData = create<DataState>()(
             categories: s.categories.filter((c) => c.id !== id)
           }));
         } catch (error: any) {
-          set({ error: error.message });
+          set({ error: humanizeError(error) });
         }
       },
 
@@ -748,7 +749,7 @@ export const useData = create<DataState>()(
           // Refresh products
           await get().fetchProducts();
         } catch (error: any) {
-          set({ error: error.message });
+          set({ error: humanizeError(error) });
         }
       },
 
@@ -870,7 +871,7 @@ export const useData = create<DataState>()(
           // Refresh products
           await get().fetchProducts();
         } catch (error: any) {
-          set({ error: error.message });
+          set({ error: humanizeError(error) });
         }
       },
 
@@ -893,7 +894,7 @@ export const useData = create<DataState>()(
             products: s.products.filter((p) => p.id !== id)
           }));
         } catch (error: any) {
-          set({ error: error.message });
+          set({ error: humanizeError(error) });
         }
       },
 
@@ -917,7 +918,7 @@ export const useData = create<DataState>()(
           // Refresh products
           await get().fetchProducts();
         } catch (error: any) {
-          set({ error: error.message });
+          set({ error: humanizeError(error) });
         }
       },
 
@@ -958,7 +959,7 @@ export const useData = create<DataState>()(
             )
           }));
         } catch (error: any) {
-          set({ error: error.message });
+          set({ error: humanizeError(error) });
         }
       },
 
@@ -989,7 +990,7 @@ export const useData = create<DataState>()(
             )
           }));
         } catch (error: any) {
-          set({ error: error.message });
+          set({ error: humanizeError(error) });
         }
       },
 
@@ -1033,7 +1034,7 @@ export const useData = create<DataState>()(
             ),
           }));
         } catch (error: any) {
-          set({ error: error.message });
+          set({ error: humanizeError(error) });
         }
       },
 
@@ -1062,14 +1063,14 @@ export const useData = create<DataState>()(
       adjustStock: async (productId, quantity, type, staff, reason, note, vendorId, unitCost) => {
         const product = get().products.find((p) => p.id === productId);
         if (!product) return false;
-        // scope "Semua" (null) → fallback ke toko milik produk (view Gabungan bisa adjust per toko)
+        // scope "Semua" (null) â†’ fallback ke toko milik produk (view Gabungan bisa adjust per toko)
         const sid = get().activeStoreId ?? product.storeId;
         if (!sid) {
           set({ error: "Pilih toko operasional (MJL/KTB) dulu." });
           return false;
         }
 
-        // E2 FIX: jalur online memakai RPC atomik server (adjust_stock) —
+        // E2 FIX: jalur online memakai RPC atomik server (adjust_stock) â€”
         // stok dihitung server (baris di-lock), movement = delta NYATA, error tak lagi ditelan.
         if (isSupabaseReady) {
           try {
@@ -1094,7 +1095,7 @@ export const useData = create<DataState>()(
             await get().fetchMovements();
             return true;
           } catch (error: any) {
-            set({ error: error.message });
+            set({ error: humanizeError(error, { stock: product.stock, action: "menyesuaikan stok" }) });
             return false;
           }
         }
@@ -1157,7 +1158,7 @@ export const useData = create<DataState>()(
             })),
           });
         } catch (error: any) {
-          set({ error: error.message });
+          set({ error: humanizeError(error) });
         }
       },
 
@@ -1181,7 +1182,7 @@ export const useData = create<DataState>()(
             .select()
             .single();
           if (error) {
-            // 23505 = vendor sudah ada (beda kapital) → pakai yang ada (auto-insert idempoten)
+            // 23505 = vendor sudah ada (beda kapital) â†’ pakai yang ada (auto-insert idempoten)
             if (error.code === "23505") {
               const { data: existing } = await supabase
                 .from("vendors")
@@ -1202,7 +1203,7 @@ export const useData = create<DataState>()(
           set((s) => ({ vendors: [...s.vendors, v] }));
           return v;
         } catch (error: any) {
-          set({ error: error.message });
+          set({ error: humanizeError(error) });
           return null;
         }
       },
@@ -1236,7 +1237,7 @@ export const useData = create<DataState>()(
             })),
           });
         } catch (error: any) {
-          set({ error: error.message });
+          set({ error: humanizeError(error) });
         }
       },
 
@@ -1256,8 +1257,8 @@ export const useData = create<DataState>()(
               toStore: t.to_store,
               fromProduct: t.from_product,
               toProduct: t.to_product ?? null,
-              productName: t.from_product?.name ?? "—",
-              sku: t.from_product?.sku ?? "—",
+              productName: t.from_product?.name ?? "â€”",
+              sku: t.from_product?.sku ?? "â€”",
               qty: Number(t.qty),
               status: t.status,
               requestedBy: t.requested_by,
@@ -1268,7 +1269,7 @@ export const useData = create<DataState>()(
             })),
           });
         } catch (error: any) {
-          set({ error: error.message });
+          set({ error: humanizeError(error) });
         }
       },
 
@@ -1290,7 +1291,7 @@ export const useData = create<DataState>()(
           await get().fetchTransfers();
           return true;
         } catch (error: any) {
-          set({ error: error.message });
+          set({ error: humanizeError(error) });
           return false;
         }
       },
@@ -1303,7 +1304,9 @@ export const useData = create<DataState>()(
           await Promise.all([get().fetchTransfers(), get().fetchProducts(), get().fetchMovements()]);
           return true;
         } catch (error: any) {
-          set({ error: error.message });
+          const tr = get().transfers.find((t) => t.id === id);
+          const stockNow = tr ? get().products.find((p) => p.id === tr.fromProduct)?.stock : undefined;
+          set({ error: humanizeError(error, { stock: stockNow, action: "mengirim transfer" }) });
           return false;
         }
       },
@@ -1316,7 +1319,7 @@ export const useData = create<DataState>()(
           await get().fetchTransfers();
           return true;
         } catch (error: any) {
-          set({ error: error.message });
+          set({ error: humanizeError(error) });
           return false;
         }
       },
@@ -1337,9 +1340,9 @@ export const useData = create<DataState>()(
               .map((r: any) => ({
               id: r.id,
               transactionId: r.transaction_id,
-              txNumber: r.transactions?.number ?? "—",
+              txNumber: r.transactions?.number ?? "â€”",
               productId: r.product_id,
-              productName: r.products?.name ?? "—",
+              productName: r.products?.name ?? "â€”",
               customerName: r.customers?.name ?? null,
               customerPhone: r.customers?.phone ?? null,
               qty: Number(r.qty),
@@ -1351,7 +1354,7 @@ export const useData = create<DataState>()(
             })),
           });
         } catch (error: any) {
-          set({ error: error.message });
+          set({ error: humanizeError(error) });
         }
       },
 
@@ -1376,7 +1379,7 @@ export const useData = create<DataState>()(
           await Promise.all([get().fetchProducts(), get().fetchRentals(), get().fetchTransactions(), get().fetchCustomers()]);
           return (data as string) ?? null;
         } catch (error: any) {
-          set({ error: error.message });
+          set({ error: humanizeError(error) });
           return null;
         }
       },
@@ -1389,7 +1392,7 @@ export const useData = create<DataState>()(
           await Promise.all([get().fetchProducts(), get().fetchRentals(), get().fetchMovements()]);
           return true;
         } catch (error: any) {
-          set({ error: error.message });
+          set({ error: humanizeError(error) });
           return false;
         }
       },
@@ -1460,7 +1463,7 @@ export const useData = create<DataState>()(
             }]
           }));
         } catch (error: any) {
-          set({ error: error.message });
+          set({ error: humanizeError(error) });
         }
       },
 
@@ -1507,7 +1510,7 @@ export const useData = create<DataState>()(
             customers: s.customers.map((c) => (c.id === id ? { ...c, ...fields } : c))
           }));
         } catch (error: any) {
-          set({ error: error.message });
+          set({ error: humanizeError(error) });
         }
       },
 
@@ -1538,7 +1541,7 @@ export const useData = create<DataState>()(
             customers: s.customers.filter((c) => c.id !== id)
           }));
         } catch (error: any) {
-          set({ error: error.message });
+          set({ error: humanizeError(error) });
         }
       },
 
@@ -1579,7 +1582,7 @@ export const useData = create<DataState>()(
 
           set({ staff: data.map(mapStaffRow), loading: false });
         } catch (error: any) {
-          set({ error: error.message, loading: false });
+          set({ error: humanizeError(error), loading: false });
         }
       },
 
@@ -1635,7 +1638,7 @@ export const useData = create<DataState>()(
 
           set({ transactions, loading: false });
         } catch (error: any) {
-          set({ error: error.message, loading: false });
+          set({ error: humanizeError(error), loading: false });
         }
       },
 
@@ -1676,7 +1679,7 @@ export const useData = create<DataState>()(
 
           set({ shifts: data.map(mapShiftRow), loading: false });
         } catch (error: any) {
-          set({ error: error.message, loading: false });
+          set({ error: humanizeError(error), loading: false });
         }
       },
 
@@ -1750,7 +1753,7 @@ export const useData = create<DataState>()(
             ],
           }));
         } catch (error: any) {
-          set({ error: error.message });
+          set({ error: humanizeError(error) });
         }
       },
 
@@ -1849,7 +1852,7 @@ export const useData = create<DataState>()(
             ),
           }));
         } catch (error: any) {
-          set({ error: error.message });
+          set({ error: humanizeError(error) });
         }
       },
 
@@ -1870,7 +1873,7 @@ export const useData = create<DataState>()(
             ? get().customers.find((c) => c.name === tx.customerName)
             : undefined;
 
-          // OFFLINE PATH — simpan ke local state + IndexedDB queue, flush saat online
+          // OFFLINE PATH â€” simpan ke local state + IndexedDB queue, flush saat online
           if (typeof navigator !== "undefined" && !navigator.onLine) {
             const localId = generateLocalId();
             const saved: Transaction = {
@@ -1911,7 +1914,7 @@ export const useData = create<DataState>()(
               }
             const saved: Transaction = { ...tx, id, storeId: sid, customerId: customer?.id, createdAt: new Date().toISOString() };
             set((s) => ({ transactions: [saved, ...s.transactions] }));
-            // PowerSync lokal tanpa trigger DB — efek stok dikerjakan di client
+            // PowerSync lokal tanpa trigger DB â€” efek stok dikerjakan di client
             if (saved.status === "paid") {
               await get().applySaleSideEffects(saved);
             }
@@ -1935,7 +1938,7 @@ export const useData = create<DataState>()(
             return saved;
           }
 
-          // Nomor nota atomik dari server — aman untuk multi-kasir.
+          // Nomor nota atomik dari server â€” aman untuk multi-kasir.
           // Preorder memakai prefix khusus PO- (E6).
           const isPo = (tx as Transaction).kind === "preorder";
           const { data: serverNumber, error: numberError } = await supabase.rpc(
@@ -1998,7 +2001,7 @@ export const useData = create<DataState>()(
 
           if (itemsError) throw itemsError;
 
-          // Terapkan status final — trigger pending->paid jalan di sini (items sudah ada)
+          // Terapkan status final â€” trigger pending->paid jalan di sini (items sudah ada)
           let finalStatus: Transaction["status"] = "pending";
           let finalPaymentStatus: Transaction["paymentStatus"] = "pending";
           if (tx.status !== "pending" || tx.paymentStatus !== "pending") {
@@ -2043,7 +2046,7 @@ export const useData = create<DataState>()(
 
           return saved;
         } catch (error: any) {
-          set({ error: error.message });
+          set({ error: humanizeError(error) });
           return null;
         }
       },
@@ -2174,11 +2177,11 @@ export const useData = create<DataState>()(
             }
           }
         } catch (error: any) {
-          set({ error: error.message });
+          set({ error: humanizeError(error) });
         }
       },
 
-      // E6: lunasi pre-order (partial -> paid). Stok TIDAK decrement ulang —
+      // E6: lunasi pre-order (partial -> paid). Stok TIDAK decrement ulang â€”
       // sudah direverse saat DP via trigger pending->partial.
       settlePreorder: async (id, method, _remaining) => {
         const prev = get().transactions.find((t) => t.id === id);
@@ -2215,7 +2218,7 @@ export const useData = create<DataState>()(
           }));
           return true;
         } catch (error: any) {
-          set({ error: error.message });
+          set({ error: humanizeError(error) });
           return false;
         }
       },
@@ -2224,7 +2227,7 @@ export const useData = create<DataState>()(
         if (typeof navigator !== "undefined" && !navigator.onLine) return;
         const pending = await getPendingTransactions();
         if (pending.length === 0) return;
-        console.info(`[offline-queue] Flushing ${pending.length} pending transactions…`);
+        console.info(`[offline-queue] Flushing ${pending.length} pending transactionsâ€¦`);
         let flushed = 0;
         for (const q of pending) {
           try {
@@ -2241,7 +2244,7 @@ export const useData = create<DataState>()(
           }
         }
         if (flushed > 0) {
-          console.info(`[offline-queue] Flushed ${flushed}/${pending.length}. Refreshing state…`);
+          console.info(`[offline-queue] Flushed ${flushed}/${pending.length}. Refreshing stateâ€¦`);
           await get().fetchTransactions();
         }
       },
@@ -2266,7 +2269,7 @@ export const useData = create<DataState>()(
           if (!res.ok) throw new Error((await res.json()).error ?? "Gagal menambah staff");
           await get().fetchStaff();
         } catch (error: any) {
-          set({ error: error.message });
+          set({ error: humanizeError(error) });
           throw error;
         }
       },
@@ -2291,7 +2294,7 @@ export const useData = create<DataState>()(
           if (!res.ok) throw new Error((await res.json()).error ?? "Gagal memperbarui staff");
           await get().fetchStaff();
         } catch (error: any) {
-          set({ error: error.message });
+          set({ error: humanizeError(error) });
           throw error;
         }
       },
@@ -2316,7 +2319,7 @@ export const useData = create<DataState>()(
           if (!res.ok) throw new Error((await res.json()).error ?? "Gagal menghapus staff");
           await get().fetchStaff();
         } catch (error: any) {
-          set({ error: error.message });
+          set({ error: humanizeError(error) });
           throw error;
         }
       },

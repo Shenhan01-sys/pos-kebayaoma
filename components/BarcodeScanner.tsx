@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Html5Qrcode } from "html5-qrcode";
+import { humanizeError } from "@/lib/errors";
 import { Icon } from "@/components/icons";
 
 export default function BarcodeScanner({
@@ -44,7 +45,7 @@ export default function BarcodeScanner({
         if (mounted) setActive(true);
       } catch (e: any) {
         if (mounted) {
-          setError(e?.message || "Kamera tidak dapat diakses");
+          setError(e?.message ? humanizeError(e) : "Kamera tidak dapat diakses");
         }
       }
     };
