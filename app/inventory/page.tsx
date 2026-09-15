@@ -326,7 +326,7 @@ export default function InventoryPage() {
             <div className="text-sm text-gray-600">Ajukan pengiriman antar toko, lalu pihak pengirim menekan Kirim (stok keluar saat dikirim).</div>
             <button onClick={openTransferForm} className="btn-violet shrink-0 px-3 py-1.5 text-xs">+ Ajukan Transfer</button>
           </div>
-          {trError && (
+          {trError && !trFormOpen && (
             <p className="mb-3 rounded-xl bg-danger/10 px-3 py-2 text-sm font-medium text-danger">{trError}</p>
           )}
 
@@ -400,6 +400,9 @@ export default function InventoryPage() {
             </select>
             <label className="mb-1 block text-sm text-olive">Jumlah</label>
             <input type="number" min={1} value={trQty} onChange={(e) => setTrQty(Math.max(1, Number(e.target.value) || 1))} className="input mb-3" />
+            {trError && (
+              <p className="mb-3 rounded-xl bg-danger/10 px-3 py-2 text-sm font-medium text-danger">{trError}</p>
+            )}
             <label className="mb-1 block text-sm text-olive">Catatan</label>
             <input value={trNote} onChange={(e) => setTrNote(e.target.value)} className="input mb-4" placeholder="opsional" />
             <div className="flex gap-2">
