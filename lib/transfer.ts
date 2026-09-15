@@ -22,6 +22,11 @@ export function canCancelTransfer(t: TransferLike, activeStoreId: string | null,
   return activeStoreId === t.fromStore || activeStoreId === t.toStore;
 }
 
+// E11: riwayat transfer di /transactions — filter baris yang melibatkan sebuah toko.
+export function involvesStore(t: Pick<TransferLike, "fromStore" | "toStore">, storeId: string): boolean {
+  return t.fromStore === storeId || t.toStore === storeId;
+}
+
 export interface SkuRow {
   sku: string;
   name: string;

@@ -20,6 +20,7 @@ import { useAuth } from "@/store/auth";
 import { useData } from "@/store/data";
 import { Icon } from "@/components/icons";
 import RentalPanel from "@/components/RentalPanel";
+import TransferPanel from "@/components/TransferPanel";
 
 const METHOD_LABELS: Record<PaymentMethod, string> = {
   qris: "QRIS",
@@ -212,6 +213,7 @@ export default function TransactionsPage() {
       </div>
 
       <RentalPanel />
+      <TransferPanel />
 
       <div className="flex flex-col gap-4 lg:flex-row">
         {/* Buku besar table B–K */}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canSendTransfer, canCancelTransfer, groupBySku } from "./transfer";
+import { canSendTransfer, canCancelTransfer, groupBySku, involvesStore } from "./transfer";
 
 const MJL = "store-mjl";
 const KTB = "store-ktb";
@@ -55,5 +55,14 @@ describe("groupBySku (AC-E1b#1)", () => {
     const m = rows.find((r) => r.sku === "M-01")!;
     expect(m.productIds[MJL]).toBe("pa");
     expect(m.productIds[KTB]).toBe("pb");
+  });
+});
+
+describe("involvesStore (E11 riwayat transfer /transactions)", () => {
+  it("kedua pihak terlibat terhitung, pihak ketiga tidak", () => {
+    const t = { fromStore: MJL, toStore: KTB };
+    expect(involvesStore(t, MJL)).toBe(true);
+    expect(involvesStore(t, KTB)).toBe(true);
+    expect(involvesStore(t, "store-x")).toBe(false);
   });
 });

@@ -26,7 +26,7 @@ export default function InventoryPage() {
   const [qty, setQty] = useState(1);
   const [reason, setReason] = useState<Reason>("Penyesuaian");
   const [note, setNote] = useState("");
-  const [tab, setTab] = useState<"stock" | "log" | "transfer">(isStaff ? "transfer" : "stock");
+  const [tab, setTab] = useState<"stock" | "log" | "transfer">("stock");
   const [busy, setBusy] = useState(false);
   const [applyError, setApplyError] = useState<string | null>(null);
   const [vendorId, setVendorId] = useState("");
@@ -210,7 +210,7 @@ export default function InventoryPage() {
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-2xl font-extrabold tracking-tight text-ink">Inventori & Stok</h1>
         <div className="seg">
-          {!isStaff && <button onClick={() => setTab("stock")} className={`seg-item ${tab === "stock" ? "seg-item-active" : ""}`}>Stok</button>}
+          <button onClick={() => setTab("stock")} className={`seg-item ${tab === "stock" ? "seg-item-active" : ""}`}>Stok</button>
           {!isStaff && <button onClick={() => setTab("log")} className={`seg-item ${tab === "log" ? "seg-item-active" : ""}`}>Riwayat</button>}
           <button onClick={() => setTab("transfer")} className={`seg-item ${tab === "transfer" ? "seg-item-active" : ""}`}>
             Transfer{pending.length > 0 ? ` (${pending.length})` : ""}
@@ -276,6 +276,11 @@ export default function InventoryPage() {
           <div className="mb-3 flex items-center gap-2 rounded-2xl bg-warning/10 px-3 py-2.5 text-sm font-medium text-warning">
             <Icon name="alert" size={16} /> {low.length} produk stok menipis (≤5)
           </div>
+          {isStaff && (
+            <div className="mb-3 flex items-center gap-2 rounded-2xl bg-violet/10 px-3 py-2.5 text-sm font-medium text-violet">
+              <Icon name="box" size={16} /> Stok tokomu — lihat & ajukan lewat tab Transfer; penyesuaian stok (restock/adjust) wewenang manager.
+            </div>
+          )}
           <div className="card overflow-auto">
             <table className="w-full text-sm">
               <thead className="bg-beige/70 text-left text-olive">
@@ -283,7 +288,7 @@ export default function InventoryPage() {
                   <th className="p-3 font-semibold">Produk</th>
                   <th className="p-3 text-center font-semibold">Series</th>
                   <th className="p-3 text-right font-semibold">Stok</th>
-                  <th className="p-3 font-semibold">Aksi</th>
+                  {!isStaff && <th className="p-3 font-semibold">Aksi</th>}
                 </tr>
               </thead>
               <tbody>
@@ -292,11 +297,13 @@ export default function InventoryPage() {
                     <td className="p-3 font-medium text-ink">{p.name}</td>
                     <td className="p-3 text-center text-xs text-gray-600">{p.variants.length}</td>
                     <td className={`p-3 text-right font-bold tnum ${p.stock === 0 ? "text-danger" : p.stock <= 5 ? "text-warning" : ""}`}>{p.stock}</td>
-                    <td className="p-3">
-                      <button onClick={() => openStock(p.id, p.name, p.sku, p.stock)} className="btn-primary px-2.5 py-1 text-xs">
-                        Restock / Adjust
-                      </button>
-                    </td>
+                    {!isStaff && (
+                      <td className="p-3">
+                        <button onClick={() => openStock(p.id, p.name, p.sku, p.stock)} className="btn-primary px-2.5 py-1 text-xs">
+                          Restock / Adjust
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
