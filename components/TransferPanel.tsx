@@ -18,7 +18,7 @@ export default function TransferPanel() {
 
   const prefix = (id: string) => stores.find((t) => t.id === id)?.prefix ?? "?";
   const list = (isManagerAll ? transfers : transfers.filter((t) => activeStoreId && involvesStore(t, activeStoreId)))
-    .slice(0, 8);
+    .slice(0, 20);
 
   if (list.length === 0) return null;
 
@@ -28,7 +28,8 @@ export default function TransferPanel() {
         <Icon name="inventory" size={16} /> Transfer
         <span className="text-xs font-medium text-olive">{list.length} terbaru</span>
       </h2>
-      <div className="space-y-1.5">
+      {/* E11: >4 baris tidak memanjangkan card — scroll internal (permintaan user 2026-09-16) */}
+      <div className="max-h-[168px] space-y-1.5 overflow-y-auto pretty-scroll pr-1">
         {list.map((t) => (
           <div key={t.id} className="flex flex-wrap items-center gap-2 text-sm">
             <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${t.status === "sent" ? "bg-success/10 text-success" : t.status === "cancelled" ? "bg-danger/10 text-danger" : "bg-warning/15 text-warning"}`}>
