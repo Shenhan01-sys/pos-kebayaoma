@@ -1,0 +1,60 @@
+query 1 :
+[
+  {
+    "conname": "staff_pkey",
+    "pg_get_constraintdef": "PRIMARY KEY (id)"
+  },
+  {
+    "conname": "staff_role_check",
+    "pg_get_constraintdef": "CHECK ((role = ANY (ARRAY['manager'::text, 'staff'::text])))"
+  },
+  {
+    "conname": "staff_store_id_fkey",
+    "pg_get_constraintdef": "FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE"
+  },
+  {
+    "conname": "staff_user_id_fkey",
+    "pg_get_constraintdef": "FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE SET NULL"
+  }
+]
+
+
+Query 2 :
+[
+  {
+    "conname": "transactions_customer_id_fkey",
+    "pg_get_constraintdef": "FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL"
+  },
+  {
+    "conname": "transactions_payment_method_check",
+    "pg_get_constraintdef": "CHECK ((payment_method = ANY (ARRAY['qris'::text, 'cash'::text, 'transfer'::text, 'shopee'::text])))"
+  },
+  {
+    "conname": "transactions_payment_status_check",
+    "pg_get_constraintdef": "CHECK ((payment_status = ANY (ARRAY['pending'::text, 'paid'::text, 'failed'::text, 'expired'::text])))"
+  },
+  {
+    "conname": "transactions_pkey",
+    "pg_get_constraintdef": "PRIMARY KEY (id)"
+  },
+  {
+    "conname": "transactions_status_check",
+    "pg_get_constraintdef": "CHECK ((status = ANY (ARRAY['pending'::text, 'paid'::text, 'cancelled'::text, 'refunded'::text])))"
+  },
+  {
+    "conname": "transactions_store_id_fkey",
+    "pg_get_constraintdef": "FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE"
+  },
+  {
+    "conname": "transactions_store_id_number_key",
+    "pg_get_constraintdef": "UNIQUE (store_id, number)"
+  }
+]
+
+
+Query 3 :
+[
+  {
+    "pg_get_functiondef": "CREATE OR REPLACE FUNCTION public.is_store_admin()\n RETURNS boolean\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\r\n  select exists (\r\n    select 1 from public.staff s\r\n    where s.user_id = auth.uid()\r\n      and s.store_id = app.current_store_id()\r\n      and s.role = 'manager'\r\n      and s.active\r\n  );\r\n$function$\n"
+  }
+]

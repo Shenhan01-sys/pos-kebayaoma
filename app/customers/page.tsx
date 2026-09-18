@@ -9,6 +9,8 @@ import { Icon } from "@/components/icons";
 
 export default function CustomersPage() {
   const { customers, addCustomer, updateCustomer, deleteCustomer } = useData();
+  const activeStoreId = useData((s) => s.activeStoreId);
+  const stores = useData((s) => s.stores);
   const [editing, setEditing] = useState<Customer | null>(null);
   const [adding, setAdding] = useState(false);
   const [history, setHistory] = useState<Customer | null>(null);
@@ -97,6 +99,25 @@ export default function CustomersPage() {
           <Icon name="plus" size={16} /> Pelanggan
         </button>
       </div>
+
+      {/* FIX bug create-customer (2026-09-18): scope "Semua" tidak punya toko tujuan —
+          minta pilih toko dulu, sama seperti /pos. */}
+      {activeStoreId === null && stores.length > 0 && (
+        <div className="mb-3 rounded-2xl bg-violet/10 px-3 py-2.5 text-sm font-medium text-violet">
+          <div className="mb-1.5">Pilih toko operasional dulu — pelanggan baru akan tercatat ke toko ini:</div>
+          <div className="flex gap-2">
+            {stores.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => useData.getState().setActiveStore(t.id)}
+                className="btn-violet flex-1 py-2 text-sm"
+              >
+                {t.prefix} · {t.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {customers.length === 0 ? (
         <div className="card card-pad py-12 text-center">

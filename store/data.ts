@@ -1414,8 +1414,9 @@ export const useData = create<DataState>()(
       addCustomer: async (c) => {
         const sid = get().activeStoreId;
         if (!sid) {
-          set({ error: "Pilih toko operasional (MJL/KTB) dulu." });
-          return;
+          const msg = "Pilih toko operasional (MJL/KTB) dulu — pelanggan tercatat ke toko aktif.";
+          set({ error: msg });
+          throw new Error(msg);
         }
         const psDb = getPowerSyncDb();
         if (psDb) {
@@ -1477,7 +1478,11 @@ export const useData = create<DataState>()(
             }]
           }));
         } catch (error: any) {
-          set({ error: humanizeError(error) });
+          // FIX bug create-customer (2026-09-18): jangan telan error — caller (modal)
+          // harus tahu gagal, bukan menutup modal seolah sukses.
+          const msg = humanizeError(error);
+          set({ error: msg });
+          throw new Error(msg);
         }
       },
 
