@@ -144,9 +144,34 @@ export default function PosPage() {
       query
         ? p.name.toLowerCase().includes(query.toLowerCase()) ||
           p.sku.toLowerCase().includes(query.toLowerCase()) ||
-          p.tags.some((t) => t.toLowerCase().includes(query.toLowerCase()))
+          p.tags.some((t) => t.toLowerCase().includes(query.toLowerCase())) ||
+          // FIX uji tablet 2026-09-18: scanner mengetik SKU VARIAN (mis. ANTING-ANTING)
+          // ke search bar — filter lama hanya cek SKU produk → produk tak muncul.
+          p.variants.some(
+            (v) =>
+              v.sku.toLowerCase().includes(query.toLowerCase()) ||
+              (v.barcode ?? "").toLowerCase() === query.toLowerCase()
+          )
         : true
     );
+
+  // Enter di search bar: barcode/SKU varian persis-match → langsung masuk keranjang
+  // (flow HID scanner yang mengetik ke search bar tetap bekerja tanpa pilih manual).
+  function onSearchKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key !== "Enter") return;
+    const code = query.trim();
+    if (!code) return;
+    for (const p of products) {
+      for (const v of p.variants) {
+        if (v.barcode === code || v.sku === code) {
+          addVariant(p, v);
+          setQuery("");
+          flashScanMsg(`${p.name} · ${v.name || v.sku} masuk keranjang`, "info");
+          return;
+        }
+      }
+    }
+  }
 
   return (
     <div className="flex flex-col gap-4 lg:h-[calc(100vh-2.5rem)] lg:flex-row" onClick={focusScan}>
@@ -189,6 +214,7 @@ export default function PosPage() {
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={onSearchKeyDown}
               placeholder="Cari nama / SKU / tag…"
               className="input pl-10"
             />
