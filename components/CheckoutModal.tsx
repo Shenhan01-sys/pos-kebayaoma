@@ -13,6 +13,8 @@ import { useSettings } from "@/store/settings";
 import { useData } from "@/store/data";
 import { useAuth } from "@/store/auth";
 import { canSeeProfit } from "@/lib/roles";
+import { printHtmlViaIframe } from "@/lib/print";
+import { buildThermalReceiptHtml } from "@/lib/thermal-receipt";
 import Receipt from "@/components/Receipt";
 import { inclusiveTax } from "@/lib/tax";
 import { humanizeError } from "@/lib/errors";
@@ -349,6 +351,15 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
     setPendingId(null);
   }
 
+  // E-print (2026-09-18): struk thermal 58mm via hidden iframe — bukan window.print()
+  // (yang mencetak A4 nonstop di printer portable RPP02N). QR diambil dari preview.
+  function printThermal() {
+    if (!paid) return;
+    const qrSvg = document.querySelector("#print-area svg")?.outerHTML;
+    const html = buildThermalReceiptHtml(paid, { storeName: s.storeName, address: s.address, phone: s.phone }, qrSvg);
+    printHtmlViaIframe(html);
+  }
+
   if (paid) {
     return (
       <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 backdrop-blur-sm sm:items-center sm:p-4">
@@ -401,7 +412,7 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
           )}
 
           <div className="mt-4 flex gap-2">
-            <button onClick={() => window.print()} className="btn-violet flex-1">
+            <button onClick={printThermal} className="btn-violet flex-1">
               <Icon name="printer" size={16} /> Print Nota
             </button>
             <button

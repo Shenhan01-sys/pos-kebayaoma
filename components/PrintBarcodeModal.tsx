@@ -23,7 +23,9 @@ export default function PrintBarcodeModal({
 }: PrintBarcodeModalProps) {
   const { products } = useData();
   const [selectedVariants, setSelectedVariants] = useState<Record<string, number>>({});
-  const [labelSize, setLabelSize] = useState<"60x30" | "50x25" | "40x20">("60x30");
+  // E13: default 40x20 — pas untuk RPP02N (kertas 58mm, area cetak ~48mm, feed max 20mm).
+  // 60x30/50x25 terlalu lebar/tinggi → printer feed nonstop mencari gap sensor.
+  const [labelSize, setLabelSize] = useState<"60x30" | "50x25" | "40x20">("40x20");
 
   // Get products to print
   const productsToPrint = productId === "all" 
@@ -97,6 +99,17 @@ export default function PrintBarcodeModal({
     });
 
     if (labels.length === 0) return;
+
+    // E13: guard printer portable — RPP02N area cetak ~48mm; lebar lebih → feed nonstop.
+    if (labelWidth > 48) {
+      const ok = confirm(
+        `Label ${labelWidth}mm lebih lebar dari area cetak RPP02N (~48mm).\n` +
+          `Hasil bisa terpotong / feed tidak berhenti.\n` +
+          `Disarankan pakai label 40x20. Tetap lanjut print?`
+      );
+      if (!ok) return;
+    }
+    if (!confirm(`Print ${labels.length} label (${labelWidth}x${labelHeight}mm) via printer?`)) return;
 
     // Generate barcode SVGs
     const labelHTML = labels.map((label) => {

@@ -51,8 +51,9 @@ export async function printReceipt(html: string): Promise<boolean> {
       <html>
         <head>
           <style>
-            @page { size: 80mm auto; margin: 0; }
-            body { font-family: monospace; font-size: 12px; width: 80mm; }
+            /* E13: RPP02N = kertas 58mm, area cetak ~48mm (bukan 80mm) */
+            @page { size: 58mm auto; margin: 3mm; }
+            body { font-family: monospace; font-size: 11px; width: 48mm; }
           </style>
         </head>
         <body>${html}</body>
