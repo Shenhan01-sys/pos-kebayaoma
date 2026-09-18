@@ -20,6 +20,20 @@ async function stores() {
   return { mjl: data.find((s) => s.receipt_prefix === "MJL").id, ktb: data.find((s) => s.receipt_prefix === "KTB").id };
 }
 
+async function fixlink() {
+  // email auth HARUS staff-<staffId>@kebayaoma.local (derive app) + staff.user_id terisi
+  const { data } = await sb_auth(); const users = data.users?.users || data.users || [];
+  const { data: staff } = await supabase.from("staff").select("id,name,user_id").ilike("name", "TES%");
+  for (const s of staff) {
+    const u = users.find((x) => (x.email || "").endsWith("-e2e-20260916@kebayaoma.test") || x.email === `staff-${s.id}@kebayaoma.local`);
+    if (!u) { console.log("no auth for", s.name); continue; }
+    if (u.email !== `staff-${s.id}@kebayaoma.local`) await supabase.auth.admin.updateUserById(u.id, { email: `staff-${s.id}@kebayaoma.local` });
+    if (s.user_id !== u.id) await supabase.from("staff").update({ user_id: u.id }).eq("id", s.id);
+    console.log(s.name, "linked");
+  }
+}
+async function sb_auth() { return supabase.auth.admin.listUsers(); }
+
 async function setup() {
   const { mjl, ktb } = await stores();
   const out = {};
@@ -33,7 +47,7 @@ async function setup() {
       email: `${k}-e2e-20260916@kebayaoma.test`, password: PINS[k], email_confirm: true,
     });
     if (error) throw error;
-    ids[k] = data.id;
+    ids[k] = data.user?.id ?? data.id;
     out[`auth_${k}`] = data.id;
   }
   // 2) staff rows
@@ -98,16 +112,26 @@ async function status(label = "") {
 }
 
 async function teardown() {
-  // 1) transactions TES (cascade items): PO dari UI (nomor 20260916), nota TES, customer TES
-  const { data: txs } = await supabase.from("transactions").select("id,calendar_event_id").or("number.like.TES*,number.like.PO-20260916*,customer_name.like.TES*");
+  // rental + transaksinya lebih dulu (FK produk)
+  const { data: prodsDel } = await supabase.from("products").select("id").in("sku", [SKU, "TESX2"]);
+  const pids = (prodsDel ?? []).map((p) => p.id);
+  if (pids.length) {
+    const { error: er0 } = await supabase.from("rentals").delete().in("product_id", pids);
+    if (er0) throw er0;
+  }
+  const { data: txs } = await supabase.from("transactions").select("id,calendar_event_id").or("number.ilike.tes*,customer_name.ilike.tes*,cashier.ilike.tes%");
   const events = (txs ?? []).map((t) => t.calendar_event_id).filter(Boolean);
-  let { error } = await supabase.from("transactions").delete().or("number.ilike.tes*,number.ilike.PO-20260916*,customer_name.ilike.tes*");
+  let { error } = await supabase.from("transactions").delete().or("number.ilike.tes*,customer_name.ilike.tes*,cashier.ilike.tes%");
   if (error) throw error;
   ({ error } = await supabase.from("stock_transfers").delete().or("requested_by.ilike.tes*,sent_by.ilike.tes*,note.ilike.tes%"));
   if (error) throw error;
   ({ error } = await supabase.from("stock_movements").delete().or("note.ilike.tes*,staff.ilike.tes*,sku.ilike.tesX%"));
   if (error) throw error;
-  ({ error } = await supabase.from("products").delete().eq("sku", SKU)); // cascade variants
+  ({ error } = await supabase.from("vendors").delete().ilike("name", "tes%"));
+  if (error) throw error;
+  ({ error } = await supabase.from("shifts").delete().ilike("staff_name", "tes%"));
+  if (error) throw error;
+  ({ error } = await supabase.from("products").delete().in("sku", [SKU, "TESX2"]));
   if (error) throw error;
   ({ error } = await supabase.from("customers").delete().ilike("name", "TES%"));
   if (error) throw error;
@@ -123,7 +147,8 @@ async function teardown() {
 
 const cmd = process.argv[2];
 try {
-  if (cmd === "setup") await setup();
+  if (cmd === "setup") { await setup(); await fixlink(); }
+  else if (cmd === "fixlink") await fixlink();
   else if (cmd === "status") await status(process.argv[3] ?? "");
   else if (cmd === "teardown") await teardown();
   else console.log("usage: setup|status [label]|teardown");
