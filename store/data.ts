@@ -1453,7 +1453,8 @@ export const useData = create<DataState>()(
               phone: c.phone,
               email: c.email ?? null,
               address: c.address ?? null,
-              birthday: c.birthday ?? null,
+              // FIX #30: form mengirim string kosong → Postgres menolak date "" (invalid input syntax)
+              birthday: c.birthday ? c.birthday : null,
               notes: c.notes ?? null,
               tags: c.tags ?? [],
               store_id: sid
@@ -1513,7 +1514,7 @@ export const useData = create<DataState>()(
             ...(patch.phone !== undefined && { phone: patch.phone }),
             ...(patch.email !== undefined && { email: patch.email ?? null }),
             ...(patch.address !== undefined && { address: patch.address ?? null }),
-            ...(patch.birthday !== undefined && { birthday: patch.birthday ?? null }),
+            ...(patch.birthday !== undefined && { birthday: patch.birthday ? patch.birthday : null }),
             ...(patch.notes !== undefined && { notes: patch.notes ?? null }),
             ...(patch.tags !== undefined && { tags: patch.tags ?? [] }),
           };
@@ -1529,7 +1530,10 @@ export const useData = create<DataState>()(
             customers: s.customers.map((c) => (c.id === id ? { ...c, ...fields } : c))
           }));
         } catch (error: any) {
-          set({ error: humanizeError(error) });
+          // FIX #30: sama dgn addCustomer — jangan telan error update customer.
+          const msg = humanizeError(error);
+          set({ error: msg });
+          throw new Error(msg);
         }
       },
 
