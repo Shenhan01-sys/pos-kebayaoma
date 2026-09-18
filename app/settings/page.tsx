@@ -10,8 +10,8 @@ export default function SettingsPage() {
   const role = useAuth((a) => a.staff?.role);
   const [saved, setSaved] = useState(false);
 
-  // AC-E4#3: hanya manager yang bisa mengubah % pajak (fail-closed).
-  const canEditTax = role === "manager";
+  // E12: hanya superadmin yang bisa mengubah % pajak (fail-closed).
+  const canEditTax = role === "superadmin";
 
   function save() {
     setSaved(true);

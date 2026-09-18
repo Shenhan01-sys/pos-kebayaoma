@@ -7,6 +7,7 @@
 import { useData } from "@/store/data";
 import { useAuth } from "@/store/auth";
 import { involvesStore } from "@/lib/transfer";
+import { isAllStoreRole } from "@/lib/roles";
 import { Icon } from "@/components/icons";
 
 export default function TransferPanel() {
@@ -14,7 +15,7 @@ export default function TransferPanel() {
   const stores = useData((s) => s.stores);
   const activeStoreId = useData((s) => s.activeStoreId);
   const auth = useAuth();
-  const isManagerAll = auth.staff?.role === "manager" && activeStoreId === null;
+  const isManagerAll = isAllStoreRole(auth.staff?.role as never) && activeStoreId === null;
 
   const prefix = (id: string) => stores.find((t) => t.id === id)?.prefix ?? "?";
   const list = (isManagerAll ? transfers : transfers.filter((t) => activeStoreId && involvesStore(t, activeStoreId)))

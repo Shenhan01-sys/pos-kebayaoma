@@ -12,6 +12,7 @@ import { useCart, addTransaction, nextTxNumber } from "@/store/cart";
 import { useSettings } from "@/store/settings";
 import { useData } from "@/store/data";
 import { useAuth } from "@/store/auth";
+import { canSeeProfit } from "@/lib/roles";
 import Receipt from "@/components/Receipt";
 import { inclusiveTax } from "@/lib/tax";
 import { humanizeError } from "@/lib/errors";
@@ -571,11 +572,13 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
                           className="input pl-9 text-right text-sm font-semibold tnum"
                         />
                       </div>
- <span className={`text-xs font-bold ${isBonus ? "text-violet" : atCost ? "text-danger" : margin === null ? "text-gray-500" : margin < 20 ? "text-warning" : "text-success"}`}>
- {isBonus ? "🎁 Bonus" : atCost ? "⚠ Modal pas-pasan" : margin === null ? "Tanpa modal" : `Untung ${margin}% dr modal`}
- </span>
+  {isBonus || atCost || canSeeProfit(auth.staff?.role) ? (
+    <span className={`text-xs font-bold ${isBonus ? "text-violet" : atCost ? "text-danger" : margin === null ? "text-gray-500" : margin < 20 ? "text-warning" : "text-success"}`}>
+    {isBonus ? "🎁 Bonus" : atCost ? "⚠ Modal pas-pasan" : margin === null ? "Tanpa modal" : `Untung ${margin}% dr modal`}
+    </span>
+  ) : null}
                     </div>
-                    {atCost && l.costPrice > 0 && (
+                    {atCost && l.costPrice > 0 && canSeeProfit(auth.staff?.role) && (
                       <div className="mt-1.5 flex items-center gap-1.5 text-xs text-danger">
                         <Icon name="alert" size={12} /> Harga tidak boleh di bawah modal
                       </div>

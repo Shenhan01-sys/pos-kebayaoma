@@ -50,7 +50,7 @@ if (typeof window !== "undefined") {
   initPowerSync().catch(() => {});
 }
 
-export type Role = "manager" | "staff";
+export type Role = "superadmin" | "manager" | "admin" | "kasir";
 
 export interface Staff {
   id: string;
@@ -396,7 +396,7 @@ export const useData = create<DataState>()(
           shifts: dummyShifts,
           staff: [
             { id: "demo-manager", name: "Demo Manager", role: "manager", active: true, storeId: null },
-            { id: "demo-staff", name: "Demo Staff", role: "staff", active: true, storeId: null },
+            { id: "demo-staff", name: "Demo Kasir", role: "kasir", active: true, storeId: null },
           ],
         });
       },

@@ -9,21 +9,21 @@ import { Icon } from "@/components/icons";
 export default function StaffPage() {
   const { staff, stores, addStaff, updateStaff, deleteStaff } = useData();
   const auth = useAuth();
-  const isManager = auth.staff?.role === "manager";
-  // Manager lintas-toko (storeId null) boleh assign ke toko mana pun / semua.
-  const canAssignAll = isManager && (auth.staff?.storeId === null || auth.staff?.storeId === undefined);
+  // E12: kelola staff = superadmin saja (paritas guard DB is_store_admin + route /api/staff).
+  const isManager = auth.staff?.role === "superadmin";
+  const canAssignAll = isManager;
   const ownStoreId = auth.staff?.storeId ?? "";
   const [editing, setEditing] = useState<Staff | null>(null);
   const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [form, setForm] = useState({ name: "", pin: "", role: "staff" as Role, phone: "", active: true, storeId: "" });
+  const [form, setForm] = useState({ name: "", pin: "", role: "kasir" as Role, phone: "", active: true, storeId: "" });
   const [pinError, setPinError] = useState<string | null>(null);
   const [modalError, setModalError] = useState<string | null>(null);
   const storePrefixOf = (id: string | null) =>
     id === null ? "Semua" : stores.find((t) => t.id === id)?.prefix ?? "…";
 
   function openAdd() {
-    setForm({ name: "", pin: "", role: "staff", phone: "", active: true, storeId: canAssignAll ? "" : ownStoreId });
+    setForm({ name: "", pin: "", role: "kasir", phone: "", active: true, storeId: canAssignAll ? "" : ownStoreId });
     setAdding(true);
     setEditing(null);
     setPinError(null);
@@ -47,7 +47,7 @@ export default function StaffPage() {
     if (!form.name) return;
     setModalError(null);
     const targetStore: string | null = form.storeId === "" ? null : form.storeId;
-    if (form.role === "staff" && !targetStore) {
+    if (form.role === "kasir" && !targetStore) {
       setModalError("Kasir wajib assigned ke toko (MJL/KTB).");
       return;
     }
@@ -62,6 +62,10 @@ export default function StaffPage() {
 
       if (editing.role === "manager" && editing.active && (form.role !== "manager" || !form.active) && managerCountFor(editing.storeId, editing.id) <= 0) {
         setModalError("Tidak ada manager lain yang meng-cover tokonya. Tidak bisa menonaktifkan/menurunkan manager terakhir.");
+        return;
+      }
+      if (editing.role === "superadmin" && editing.active && (form.role !== "superadmin" || !form.active) && staff.filter((x) => x.role === "superadmin" && x.active && x.id !== editing.id).length <= 0) {
+        setModalError("Minimal harus ada satu superadmin aktif.");
         return;
       }
 
@@ -107,6 +111,10 @@ export default function StaffPage() {
       alert("Tidak bisa menghapus manager terakhir yang meng-cover tokonya. Tambahkan manager lain dulu.");
       return;
     }
+    if (s.role === "superadmin" && staff.filter((x) => x.role === "superadmin" && x.active && x.id !== s.id).length <= 0) {
+      alert("Minimal harus ada satu superadmin aktif. Buat superadmin lain dulu.");
+      return;
+    }
     if (!confirm(`Hapus ${s.name}? Akun login staff ini juga akan dihapus.`)) return;
     setBusy(true);
     try {
@@ -134,10 +142,12 @@ export default function StaffPage() {
     return () => window.removeEventListener("keydown", onKey);
   }, [adding, editing]);
 
-  const roleLabel: Record<Role, string> = { manager: "Manager", staff: "Staff" };
+    const roleLabel: Record<Role, string> = { superadmin: "Superadmin", manager: "Manager", admin: "Admin", kasir: "Kasir" };
   const rolePill: Record<Role, string> = {
+    superadmin: "pill-violet",
     manager: "pill-violet",
-    staff: "pill-muted",
+    admin: "pill-apricot",
+    kasir: "pill-muted",
   };
   const initials = (n: string) =>
     n.split(" ").filter(Boolean).map((w) => w[0] ?? "").slice(0, 2).join("").toUpperCase();
@@ -225,18 +235,20 @@ export default function StaffPage() {
                     ...form,
                     role,
                     // Kasir wajib toko konkret: default ke toko pertama bila masih "Semua".
-                    storeId: role === "staff" && form.storeId === "" ? stores[0]?.id ?? "" : form.storeId,
+                    storeId: role === "kasir" && form.storeId === "" ? stores[0]?.id ?? "" : form.storeId,
                   });
                 }}>
-                  <option value="manager">Manager</option>
-                  <option value="staff">Staff</option>
+                  <option value="superadmin">Superadmin (keuangan & laba)</option>
+                  <option value="manager">Manager (barang & transaksi)</option>
+                  <option value="admin">Admin (petty cash)</option>
+                  <option value="kasir">Kasir (customer)</option>
                 </select>
               </label>
               <label className="block">
                 <span className="mb-1 block text-xs font-medium text-gray-600">Toko</span>
                 {canAssignAll ? (
                   <select className="input" value={form.storeId} onChange={(e) => setForm({ ...form, storeId: e.target.value })}>
-                    {form.role === "manager" && <option value="">Semua toko (lintas-toko)</option>}
+                    {form.role !== "kasir" && <option value="">Semua toko (lintas-toko)</option>}
                     {stores.map((t) => (
                       <option key={t.id} value={t.id}>
                         {t.prefix} · {t.name}

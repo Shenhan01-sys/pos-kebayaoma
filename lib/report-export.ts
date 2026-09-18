@@ -43,9 +43,11 @@ export interface PdfOptions {
   meta: ExportMeta;
   /** elemen chart yang sudah dirender (metode & harian & produk) — opsional */
   chartNodes?: { method?: HTMLElement; daily?: HTMLElement; products?: HTMLElement };
+  /** E12: laba/HPP/harga modal hanya utk superadmin (default true utk kompatibilitas) */
+  includeProfit?: boolean;
 }
 
-export async function exportPdf({ report, meta, chartNodes }: PdfOptions): Promise<string> {
+export async function exportPdf({ report, meta, chartNodes, includeProfit = true }: PdfOptions): Promise<string> {
   const { jsPDF } = await import("jspdf");
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const W = doc.internal.pageSize.getWidth();
@@ -61,28 +63,30 @@ export async function exportPdf({ report, meta, chartNodes }: PdfOptions): Promi
   doc.setDrawColor(PALETTE.apricot).setLineWidth(0.6);
   doc.line(M, y, W - M, y); y += 8;
 
-  // ---- Ringkasan P&L ----
-  doc.setFont("helvetica", "bold").setFontSize(12).setTextColor(PALETTE.ink);
-  doc.text("Ringkasan", M, y); y += 6;
-  const money: [string, number, string?][] = [
-    ["Omzet (bersih penjualan)", report.sales],
-    ["HPP (harga pokok penjualan)", report.hpp],
-    ["Pengeluaran", report.expenses, "belum termasuk (modul expenses menyusul)"],
-  ];
-  doc.setFontSize(10);
-  for (const [label, val, note] of money) {
-    doc.setFont("helvetica", "normal").setTextColor(PALETTE.ink);
-    doc.text(label, M, y);
-    doc.setFont("helvetica", "bold");
-    doc.text(rupiah(val), W - M, y, { align: "right" });
-    if (note) { doc.setFont("helvetica", "italic").setFontSize(7.5).setTextColor(PALETTE.gray); doc.text(note, M + 2, y + 3.5); doc.setFontSize(10); }
-    y += note ? 8 : 6;
+  // ---- Ringkasan P&L (hanya superadmin — E12) ----
+  if (includeProfit) {
+    doc.setFont("helvetica", "bold").setFontSize(12).setTextColor(PALETTE.ink);
+    doc.text("Ringkasan", M, y); y += 6;
+    const money: [string, number, string?][] = [
+      ["Omzet (bersih penjualan)", report.sales],
+      ["HPP (harga pokok penjualan)", report.hpp],
+      ["Pengeluaran", report.expenses, "belum termasuk (modul expenses menyusul)"],
+    ];
+    doc.setFontSize(10);
+    for (const [label, val, note] of money) {
+      doc.setFont("helvetica", "normal").setTextColor(PALETTE.ink);
+      doc.text(label, M, y);
+      doc.setFont("helvetica", "bold");
+      doc.text(rupiah(val), W - M, y, { align: "right" });
+      if (note) { doc.setFont("helvetica", "italic").setFontSize(7.5).setTextColor(PALETTE.gray); doc.text(note, M + 2, y + 3.5); doc.setFontSize(10); }
+      y += note ? 8 : 6;
+    }
+    doc.setDrawColor(PALETTE.ink).line(M, y - 2, W - M, y - 2);
+    doc.setFont("helvetica", "bold").setFontSize(11).setTextColor(PALETTE.success);
+    doc.text("Keuntungan Bersih", M, y + 4);
+    doc.text(rupiah(report.bersih), W - M, y + 4, { align: "right" });
+    y += 12;
   }
-  doc.setDrawColor(PALETTE.ink).line(M, y - 2, W - M, y - 2);
-  doc.setFont("helvetica", "bold").setFontSize(11).setTextColor(PALETTE.success);
-  doc.text("Keuntungan Bersih", M, y + 4);
-  doc.text(rupiah(report.bersih), W - M, y + 4, { align: "right" });
-  y += 12;
 
   doc.setFont("helvetica", "normal").setFontSize(9).setTextColor(PALETTE.gray);
   doc.text(`Jumlah nota: ${report.count} · Rata-rata/nota: ${rupiah(report.avg)} · Diskon: ${rupiah(report.discount)} · PPN tersirat: ${rupiah(report.tax)}`, M, y);
@@ -161,27 +165,29 @@ export async function exportPdf({ report, meta, chartNodes }: PdfOptions): Promi
   doc.text("YTD periode ini", cols[0], y + 2);
   doc.text(nf.format(running), cols[6], y + 2, { align: "right" });
 
-  // ---- Lampiran: harga acuan (HPP per produk) ----
-  doc.addPage();
-  y = 18;
-  doc.setFont("helvetica", "bold").setFontSize(12).setTextColor(PALETTE.ink);
-  doc.text("Lampiran — Harga Acuan (HPP per Produk)", M, y); y += 5;
-  doc.setFont("helvetica", "italic").setFontSize(8).setTextColor(PALETTE.gray);
-  doc.text("*) = tanpa data modal (dihitung dari rata-rata movement bila tersedia; sementara 0)", M, y); y += 6;
-  const costByProd: Record<string, { sum: number; qty: number; n: number }> = {};
-  report.lines.forEach((l) => {
-    if (l.unitCost != null) {
-      const c = (costByProd[l.product] ??= { sum: 0, qty: 0, n: 0 });
-      c.sum += l.unitCost * l.qty; c.qty += l.qty; c.n += 1;
-    }
-  });
-  doc.setFont("helvetica", "normal").setFontSize(8.5).setTextColor(PALETTE.ink);
-  Object.entries(costByProd).forEach(([name, c]) => {
-    doc.text(name, M, y);
-    doc.text(`HPP rata-rata: ${rupiah(c.sum / c.qty)}`, W - M, y, { align: "right" });
-    y += 5;
-    if (y > 282) { doc.addPage(); y = 18; }
-  });
+  // ---- Lampiran: harga acuan (HPP per produk) — superadmin saja (E12) ----
+  if (includeProfit) {
+    doc.addPage();
+    y = 18;
+    doc.setFont("helvetica", "bold").setFontSize(12).setTextColor(PALETTE.ink);
+    doc.text("Lampiran — Harga Acuan (HPP per Produk)", M, y); y += 5;
+    doc.setFont("helvetica", "italic").setFontSize(8).setTextColor(PALETTE.gray);
+    doc.text("*) = tanpa data modal (dihitung dari rata-rata movement bila tersedia; sementara 0)", M, y); y += 6;
+    const costByProd: Record<string, { sum: number; qty: number; n: number }> = {};
+    report.lines.forEach((l) => {
+      if (l.unitCost != null) {
+        const c = (costByProd[l.product] ??= { sum: 0, qty: 0, n: 0 });
+        c.sum += l.unitCost * l.qty; c.qty += l.qty; c.n += 1;
+      }
+    });
+    doc.setFont("helvetica", "normal").setFontSize(8.5).setTextColor(PALETTE.ink);
+    Object.entries(costByProd).forEach(([name, c]) => {
+      doc.text(name, M, y);
+      doc.text(`HPP rata-rata: ${rupiah(c.sum / c.qty)}`, W - M, y, { align: "right" });
+      y += 5;
+      if (y > 282) { doc.addPage(); y = 18; }
+    });
+  }
 
   doc.save(`${fileBase(meta)}.pdf`);
   return `${fileBase(meta)}.pdf`;
@@ -191,22 +197,31 @@ export function reportTitle(m: ExportMeta): string {
   return `Laporan Penjualan ${m.storeName ?? "KebayaOma"}`;
 }
 
-/** Sheet data (untuk PDF-headless maupun xlsx). Angka = number riil. */
-export function buildSheets(report: Report, meta: ExportMeta) {
+/** Sheet data (untuk PDF-headless maupun xlsx). Angka = number riil.
+ *  E12: includeProfit=false menyembunyikan HPP/Pengeluaran/Bersih, HPP rata-rata, Modal & Margin (non-superadmin). */
+export function buildSheets(report: Report, meta: ExportMeta, includeProfit = true) {
   const summary: (string | number)[][] = [
     ["Laporan", reportTitle(meta)],
     ["Periode", `${meta.from || "semua"} s.d ${meta.to || "-"}`],
     ["Outlet", meta.storeLabel],
     [],
     ["Omzet", report.sales],
-    ["HPP", report.hpp],
-    ["Pengeluaran (v1=0)", report.expenses],
-    ["Keuntungan Bersih", report.bersih],
+  ];
+  if (includeProfit) {
+    summary.push(
+      ["HPP", report.hpp],
+      ["Pengeluaran (v1=0)", report.expenses],
+      ["Keuntungan Bersih", report.bersih],
+    );
+  }
+  summary.push(
     ["Jumlah Nota", report.count],
     ["Rata-rata/Nota", report.avg],
     ["Diskon", report.discount],
     ["PPN tersirat", report.tax],
-    ["Baris tanpa modal (qty)", report.unknownQty],
+  );
+  if (includeProfit) summary.push(["Baris tanpa modal (qty)", report.unknownQty]);
+  summary.push(
     [],
     ["Metode", "Jumlah"],
     ...Object.entries(report.byMethod).map(([k, v]) => [k, v] as (string | number)[]),
@@ -214,43 +229,69 @@ export function buildSheets(report: Report, meta: ExportMeta) {
     ["Tanggal", "Penjualan"],
     ...report.byDay.map(([k, v]) => [k, v] as (string | number)[]),
     [],
-    ["Produk", "Qty", "Revenue", "HPP rata-rata"],
-  ];
+  );
+  if (includeProfit) {
+    summary.push(["Produk", "Qty", "Revenue", "HPP rata-rata"]);
+  } else {
+    summary.push(["Produk", "Qty", "Revenue"]);
+  }
   const costByProd: Record<string, { sum: number; qty: number }> = {};
   report.lines.forEach((l) => {
     if (l.unitCost != null) { const c = (costByProd[l.product] ??= { sum: 0, qty: 0 }); c.sum += l.unitCost * l.qty; c.qty += l.qty; }
   });
   report.topProducts.forEach(([name, v]) => {
-    const c = costByProd[name];
-    summary.push([name, v.qty, v.rev, c ? Math.round(c.sum / c.qty) : 0]);
+    if (includeProfit) {
+      const c = costByProd[name];
+      summary.push([name, v.qty, v.rev, c ? Math.round(c.sum / c.qty) : 0]);
+    } else {
+      summary.push([name, v.qty, v.rev]);
+    }
   });
 
-  const detail: (string | number | null)[][] = [[
-    "Nota", "Tanggal", "Kasir", "Metode", "Produk", "SKU", "Qty",
-    "Harga Unit", "Modal Unit", "Diskon", "Subtotal Baris", "Margin", "Keterangan",
-  ]];
-  report.lines.forEach((l) => {
-    detail.push([
-      l.number, l.date.slice(0, 10), l.cashier, l.method, l.product, l.sku, l.qty,
-      l.unitPrice, l.unitCost, l.lineDiscount, l.lineTotal, l.margin,
-      l.hasCost ? "" : "Tanpa modal",
-    ]);
-  });
+  let detail: (string | number | null)[][];
+  if (includeProfit) {
+    detail = [[
+      "Nota", "Tanggal", "Kasir", "Metode", "Produk", "SKU", "Qty",
+      "Harga Unit", "Modal Unit", "Diskon", "Subtotal Baris", "Margin", "Keterangan",
+    ]];
+    report.lines.forEach((l) => {
+      detail.push([
+        l.number, l.date.slice(0, 10), l.cashier, l.method, l.product, l.sku, l.qty,
+        l.unitPrice, l.unitCost, l.lineDiscount, l.lineTotal, l.margin,
+        l.hasCost ? "" : "Tanpa modal",
+      ]);
+    });
+  } else {
+    detail = [[
+      "Nota", "Tanggal", "Kasir", "Metode", "Produk", "SKU", "Qty",
+      "Harga Unit", "Diskon", "Subtotal Baris", "Keterangan",
+    ]];
+    report.lines.forEach((l) => {
+      detail.push([
+        l.number, l.date.slice(0, 10), l.cashier, l.method, l.product, l.sku, l.qty,
+        l.unitPrice, l.lineDiscount, l.lineTotal,
+        "",
+      ]);
+    });
+  }
   return { summary, detail };
 }
 
-export async function exportXlsx(report: Report, meta: ExportMeta): Promise<string> {
+export async function exportXlsx(report: Report, meta: ExportMeta, includeProfit = true): Promise<string> {
   const XLSX = await import("xlsx");
-  const { summary, detail } = buildSheets(report, meta);
+  const { summary, detail } = buildSheets(report, meta, includeProfit);
   const wb = XLSX.utils.book_new();
   const wsSum = XLSX.utils.aoa_to_sheet(summary);
   const wsDet = XLSX.utils.aoa_to_sheet(detail);
   wsSum["!cols"] = [{ wch: 26 }, { wch: 18 }];
-  wsDet["!cols"] = [{ wch: 16 }, { wch: 12 }, { wch: 10 }, { wch: 9 }, { wch: 18 }, { wch: 12 }, { wch: 6 }, { wch: 12 }, { wch: 12 }, { wch: 9 }, { wch: 13 }, { wch: 12 }, { wch: 12 }];
+  wsDet["!cols"] = includeProfit
+    ? [{ wch: 16 }, { wch: 12 }, { wch: 10 }, { wch: 9 }, { wch: 18 }, { wch: 12 }, { wch: 6 }, { wch: 12 }, { wch: 12 }, { wch: 9 }, { wch: 13 }, { wch: 12 }, { wch: 12 }]
+    : [{ wch: 16 }, { wch: 12 }, { wch: 10 }, { wch: 9 }, { wch: 18 }, { wch: 12 }, { wch: 6 }, { wch: 12 }, { wch: 9 }, { wch: 13 }, { wch: 12 }];
   // format angka riil utk kolom numerik di Detail
   const rng = XLSX.utils.decode_range(wsDet["!ref"] ?? "A1");
+  const numCols = includeProfit ? [6, 7, 8, 9, 10, 11] : [6, 7, 8, 9];
   for (let r = rng.s.r + 1; r <= rng.e.r; r++) {
-    for (const col of [6, 7, 8, 9, 10, 11]) {
+    for (const col of numCols) {
       const cell = wsDet[XLSX.utils.encode_cell({ r, c: col })];
       if (cell && typeof cell.v === "number") { cell.t = "n"; cell.z = "#,##0"; }
     }

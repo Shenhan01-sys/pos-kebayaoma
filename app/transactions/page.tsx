@@ -18,6 +18,7 @@ import {
 } from "@/store/cart";
 import { useAuth } from "@/store/auth";
 import { useData } from "@/store/data";
+import { canManageTransactions } from "@/lib/roles";
 import { Icon } from "@/components/icons";
 import RentalPanel from "@/components/RentalPanel";
 import TransferPanel from "@/components/TransferPanel";
@@ -47,8 +48,9 @@ function todayStr() {
 
 export default function TransactionsPage() {
   const auth = useAuth();
-  const isStaff = auth.staff?.role === "staff";
-  const canManage = auth.staff?.role === "manager";
+  // E12: kasir & admin read-only; batal/refund = superadmin + manager.
+  const isStaff = auth.staff?.role === "kasir" || auth.staff?.role === "admin";
+  const canManage = canManageTransactions(auth.staff?.role);
   const [all, setAll] = useState<Transaction[]>([]);
   const [dateFilter, setDateFilter] = useState<string>(todayStr());
   const [methodFilter, setMethodFilter] = useState<PaymentMethod | "all">("all");

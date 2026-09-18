@@ -9,13 +9,17 @@ import { useAuth } from "@/store/auth";
 import { Icon } from "@/components/icons";
 
 const roleLabel: Record<Role, string> = {
+  superadmin: "Superadmin",
   manager: "Manager",
-  staff: "Staff",
+  admin: "Admin",
+  kasir: "Kasir",
 };
 
 const rolePill: Record<Role, string> = {
+  superadmin: "pill-violet",
   manager: "pill-violet",
-  staff: "pill-muted",
+  admin: "pill-apricot",
+  kasir: "pill-muted",
 };
 
 const initials = (n: string) =>

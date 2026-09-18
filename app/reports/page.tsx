@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { transactions as dummyTx, formatRupiah } from "@/lib/dummy";
 import { getAllTransactions } from "@/store/cart";
 import { useData } from "@/store/data";
+import { useAuth } from "@/store/auth";
+import { canSeeProfit } from "@/lib/roles";
 import { humanizeError } from "@/lib/errors";
 import { Icon, type IconName } from "@/components/icons";
 import { computeReport } from "@/lib/report-data";
@@ -38,6 +40,10 @@ export default function ReportsPage() {
   const methodRef = useRef<HTMLDivElement>(null);
   const dailyRef = useRef<HTMLDivElement>(null);
   const prodRef = useRef<HTMLDivElement>(null);
+  const auth = useAuth();
+
+  // E12: laba/HPP hanya superadmin (FE-only v1; DB-level = plan U2).
+  const canSeeProfitData = canSeeProfit(auth.staff?.role);
 
   const all = getAllTransactions(dummyTx).filter((t) => t.status === "paid");
   const inRangeTxs = useMemo(
@@ -141,10 +147,15 @@ export default function ReportsPage() {
     ],
   };
 
+  // E12: laba/HPP hanya superadmin (FE-only v1; DB-level = plan U2).
   const kpis: { label: string; value: string; icon: IconName; bg: string }[] = [
     { label: "Omzet", value: formatRupiah(sales), icon: "wallet", bg: "bg-violet" },
-    { label: "HPP", value: formatRupiah(hpp), icon: "box", bg: "bg-olive" },
-    { label: "Bersih", value: formatRupiah(bersih), icon: "spark", bg: "bg-success" },
+    ...(canSeeProfitData
+      ? [
+          { label: "HPP", value: formatRupiah(hpp), icon: "box", bg: "bg-olive" },
+          { label: "Bersih", value: formatRupiah(bersih), icon: "spark", bg: "bg-success" },
+        ]
+      : []),
     { label: "Transaksi", value: String(count), icon: "receipt", bg: "bg-apricot" },
     { label: "Rata-rata", value: formatRupiah(avg), icon: "shifts", bg: "bg-violet" },
   ];
@@ -161,6 +172,7 @@ export default function ReportsPage() {
       await exportPdf({
         report, meta: meta(),
         chartNodes: { method: methodRef.current ?? undefined, daily: dailyRef.current ?? undefined, products: prodRef.current ?? undefined },
+        includeProfit: canSeeProfitData,
       });
     } catch (e: any) {
       setExportError(humanizeError(e, { action: "membuat PDF" }));
@@ -170,7 +182,7 @@ export default function ReportsPage() {
   }
   async function doExportXlsx() {
     setExporting("xlsx"); setExportError(null);
-    try { await exportXlsx(report, meta()); }
+    try { await exportXlsx(report, meta(), canSeeProfitData); }
     catch (e: any) { setExportError(humanizeError(e, { action: "membuat Excel" })); }
     finally { setExporting(null); }
   }
@@ -239,18 +251,20 @@ export default function ReportsPage() {
           ))}
         </div>
 
-        {/* P&L ringkas — sama persis dgn PDF/xlsx (sumber: computeReport) */}
-        <div className="card card-pad mt-4 text-sm">
-          <div className="flex flex-wrap items-center gap-x-6 gap-y-1">
-            <span><span className="text-gray-600">Omzet</span> <b className="tnum text-ink">{formatRupiah(sales)}</b></span>
-            <span>− <span className="text-gray-600">HPP</span> <b className="tnum text-ink">{formatRupiah(hpp)}</b></span>
-            <span>− <span className="text-gray-600">Pengeluaran</span> <b className="tnum text-ink">{formatRupiah(report.expenses)}</b> <span className="text-xs text-gray-500">(belum termasuk)</span></span>
-            <span>= <span className="text-gray-600">Keuntungan Bersih</span> <b className="tnum text-success">{formatRupiah(bersih)}</b></span>
+        {/* P&L ringkas — superadmin saja (E12); sama persis dgn PDF/xlsx (sumber: computeReport) */}
+        {canSeeProfitData && (
+          <div className="card card-pad mt-4 text-sm">
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-1">
+              <span><span className="text-gray-600">Omzet</span> <b className="tnum text-ink">{formatRupiah(sales)}</b></span>
+              <span>− <span className="text-gray-600">HPP</span> <b className="tnum text-ink">{formatRupiah(hpp)}</b></span>
+              <span>− <span className="text-gray-600">Pengeluaran</span> <b className="tnum text-ink">{formatRupiah(report.expenses)}</b> <span className="text-xs text-gray-500">(belum termasuk)</span></span>
+              <span>= <span className="text-gray-600">Keuntungan Bersih</span> <b className="tnum text-success">{formatRupiah(bersih)}</b></span>
+            </div>
+            {unknownQty > 0 && (
+              <p className="mt-1 text-xs text-warning">{unknownQty} unit tanpa data modal — HPP belum mencakupnya.</p>
+            )}
           </div>
-          {unknownQty > 0 && (
-            <p className="mt-1 text-xs text-warning">{unknownQty} unit tanpa data modal — HPP belum mencakupnya.</p>
-          )}
-        </div>
+        )}
 
         {/* Bento charts */}
         <div className="mt-6 grid gap-4 lg:grid-cols-3">

@@ -24,14 +24,11 @@ const links: { href: string; label: string; icon: IconName }[] = [
   { href: "/settings", label: "Pengaturan", icon: "settings" },
 ];
 
-// E11: /inventory dibuka utk staff HANYA utk tab Transfer (di halaman dirender tab itu saja);
-// role staff tidak melihat Stok/Adjust/Gabungan/Riwayat.
-const STAFF_ALLOWED = ["/", "/pos", "/transactions", "/inventory"];
+// E12: RBAC 4 role — halaman per role dari lib/roles.ts (fail-closed).
+import { canAccessPage, isAllStoreRole } from "@/lib/roles";
 
 function canAccess(href: string, role?: string) {
-  if (role === "manager") return true;
-  if (role === "staff") return STAFF_ALLOWED.includes(href);
-  return false; // role tak dikenal / belum termuat = tidak ada akses (fail-closed)
+  return canAccessPage(role as never, href);
 }
 
 const PUBLIC_PREFIXES = ["/product/"];
@@ -51,7 +48,7 @@ function StoreSwitcher() {
   const staff = useAuth((a) => a.staff);
   const stores = useData((s) => s.stores);
   const activeStoreId = useData((s) => s.activeStoreId);
-  if (staff?.role !== "manager" || staff?.storeId !== null) return null;
+  if (!isAllStoreRole(staff?.role as never) || staff?.storeId !== null) return null;
   if (stores.length === 0) return null;
   const set = (id: string | null) => useData.getState().setActiveStore(id);
   const btn = (label: string, id: string | null, isActive: boolean) => (
@@ -87,10 +84,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   const isPublic = PUBLIC_PREFIXES.some((p) => pathname.startsWith(p));
 
-  // RBAC: redirect cashiers away from restricted pages
+  // RBAC E12: redirect semua role dari halaman yang tidak diizinkan (fail-closed)
   useEffect(() => {
-    if (auth.staff?.role === "staff" && !isPublic && !canAccess(pathname, auth.staff.role)) {
-      router.replace("/pos");
+    const role = auth.staff?.role;
+    if (role && !isPublic && !canAccess(pathname, role)) {
+      router.replace(canAccessPage(role as never, "/pos") ? "/pos" : "/");
     }
   }, [auth.staff?.role, pathname, isPublic, router]);
 

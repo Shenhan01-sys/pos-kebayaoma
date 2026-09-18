@@ -19,8 +19,8 @@ export default function InventoryPage() {
   const auth = useAuth();
   const s = useSettings();
   const cashierName = auth.staff?.name ?? s.cashierName;
-  // E11: staff hanya boleh tab Transfer — Stok/Adjust/Riwayat/Gabungan tidak dirender sama sekali.
-  const isStaff = auth.staff?.role === "staff";
+  // E11+E12: kasir hanya boleh tab Transfer — Stok/Adjust/Riwayat/Gabungan tidak dirender sama sekali.
+  const isStaff = auth.staff?.role === "kasir";
   const [stockOpen, setStockOpen] = useState<{ productId: string; productName: string; sku: string; current: number } | null>(null);
   const [mode, setMode] = useState<"in" | "out">("in");
   const [qty, setQty] = useState(1);

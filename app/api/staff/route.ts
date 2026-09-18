@@ -10,7 +10,9 @@ const admin = createClient(url, serviceRoleKey, {
 
 const staffEmail = (staffId: string) => `staff-${staffId}@kebayaoma.local`;
 
-const ROLE_RE = /^(manager|staff)$/;
+const ROLE_RE = /^(superadmin|manager|admin|kasir)$/;
+// Role lintas-toko (store_id NULL) — E12.
+const ALL_STORE_ROLES = ["superadmin", "manager", "admin"];
 const PIN_RE = /^\d{6}$/; // Supabase Auth menolak password < 6 karakter
 
 interface Caller {
@@ -32,8 +34,8 @@ async function requireAdmin(req: NextRequest): Promise<{ ok: true; caller: Calle
     .eq("user_id", data.user.id)
     .maybeSingle();
 
-  if (!staff || !staff.active || staff.role !== "manager") {
-    return { ok: false, res: NextResponse.json({ error: "Hanya manager yang bisa mengelola staff" }, { status: 403 }) };
+  if (!staff || !staff.active || staff.role !== "superadmin") {
+    return { ok: false, res: NextResponse.json({ error: "Hanya superadmin yang bisa mengelola staff" }, { status: 403 }) };
   }
 
   const storeId = (staff.store_id as string | null) ?? null;
@@ -62,18 +64,16 @@ function resolveTargetStore(
     requested === undefined || requested === null || requested === ""
       ? null
       : String(requested);
-  if (role !== "manager" && !storeId) {
-    // Kasir wajib terikat 1 toko; default ikut toko manager pembuat.
+  if (!ALL_STORE_ROLES.includes(role) && !storeId) {
+    // Kasir wajib terikat 1 toko; default ikut toko pembuat (bila ada).
     if (!caller.isAll && caller.store_id) return { ok: true, storeId: caller.store_id };
     return { ok: false, res: NextResponse.json({ error: "Kasir wajib assigned ke toko (MJL/KTB)" }, { status: 400 }) };
   }
   if (!caller.isAll && storeId !== caller.store_id) {
-    // Manager toko tidak bisa membuat/memindah staff ke toko lain.
     return { ok: false, res: NextResponse.json({ error: "Hanya bisa mengelola staff toko sendiri" }, { status: 403 }) };
   }
-  if (role === "manager" && !storeId && !caller.isAll) {
-    // Manager toko tidak bisa mengangkat manager lintas-toko.
-    return { ok: false, res: NextResponse.json({ error: "Hanya manager lintas-toko yang bisa membuat manager lintas-toko" }, { status: 403 }) };
+  if (ALL_STORE_ROLES.includes(role) && !storeId && !caller.isAll) {
+    return { ok: false, res: NextResponse.json({ error: "Hanya role lintas-toko yang bisa membuat akun lintas-toko" }, { status: 403 }) };
   }
   return { ok: true, storeId };
 }
@@ -133,7 +133,7 @@ export async function POST(req: NextRequest) {
 
       const demoteSelf =
         existing.id === auth.caller.id &&
-        ((role !== undefined && role !== "manager") || active === false);
+        ((role !== undefined && role !== "superadmin") || active === false);
       if (demoteSelf) {
         return NextResponse.json({ error: "Tidak bisa menurunkan/menonaktifkan akun sendiri" }, { status: 400 });
       }
