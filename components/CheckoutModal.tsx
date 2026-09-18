@@ -351,8 +351,8 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
     setPendingId(null);
   }
 
-  // E-print (2026-09-18): struk thermal 58mm via hidden iframe — bukan window.print()
-  // (yang mencetak A4 nonstop di printer portable RPP02N). QR diambil dari preview.
+  // E-print (2026-09-18, revisi 80mm): struk thermal via hidden iframe — bukan window.print()
+  // (yang mencetak A4 nonstop di printer portable Rongta). QR diambil dari preview.
   function printThermal() {
     if (!paid) return;
     const qrSvg = document.querySelector("#print-area svg")?.outerHTML;

@@ -1,6 +1,8 @@
-// lib/thermal-receipt.ts — HTML struk thermal untuk printer portable RPP02N
-// (kertas 58mm, area cetak ~48mm). Dipakai via printHtmlViaIframe() — @page
-// `58mm auto` membuat dialog print berhenti di akhir konten (bukan A4 nonstop).
+// lib/thermal-receipt.ts — HTML struk thermal untuk printer portable Rongta.
+// Kertas 80mm (area cetak ~72mm) — revisi user 2026-09-18: print dialog Windows
+// menampilkan "Rongta 80mm" & layout 58mm lama tercetak kecil + nempel kiri.
+// Dipakai via printHtmlViaIframe() — @page `80mm auto` membuat dialog print
+// berhenti di akhir konten (bukan A4 nonstop).
 
 import { formatRupiah, type Transaction } from "@/lib/dummy";
 
@@ -44,28 +46,30 @@ export function buildThermalReceiptHtml(
 <meta charset="utf-8">
 <title>${esc(tx.number)}</title>
 <style>
-  @page { size: 58mm auto; margin: 3mm; }
+  @page { size: 80mm auto; margin: 3mm; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { width: 52mm; font-family: "Courier New", monospace; font-size: 10px; line-height: 1.35; color: #000; }
-  table { width: 100%; border-collapse: collapse; }
+  body { width: 74mm; margin: 0 auto; font-family: "Courier New", monospace; font-size: 13px; line-height: 1.45; color: #000; text-align: center; }
+  table { width: 100%; border-collapse: collapse; text-align: left; }
   td { vertical-align: top; padding: 0; }
   .c { text-align: center; }
   .r { text-align: right; white-space: nowrap; }
   .b { font-weight: bold; }
-  .dim { color: #444; font-size: 9px; }
-  .name { font-weight: bold; }
-  hr { border: none; border-top: 1px dashed #000; margin: 4px 0; }
-  .total { font-size: 13px; font-weight: bold; }
-  .qr { width: 30mm; height: 30mm; margin: 4px auto 2px; display: block; }
-  .small { font-size: 9px; color: #444; }
+  .dim { color: #444; font-size: 11.5px; }
+  .name { font-weight: bold; font-size: 13.5px; }
+  hr { border: none; border-top: 1px dashed #000; margin: 5px 0; }
+  .store { font-size: 17px; font-weight: bold; letter-spacing: 0.5px; }
+  .meta { font-size: 12px; }
+  .total { font-size: 17px; font-weight: bold; }
+  .qr { width: 34mm; height: 34mm; margin: 5px auto 2px; display: block; }
+  .small { font-size: 11.5px; color: #444; }
 </style>
 </head>
 <body>
-  <div class="c b" style="font-size:12px">${esc(s.storeName.toUpperCase())}</div>
+  <div class="c b store">${esc(s.storeName.toUpperCase())}</div>
   <div class="c small">${esc(s.address)}</div>
   <div class="c small">Telp: ${esc(s.phone)}</div>
   <hr>
-  <table>
+  <table class="meta">
     <tr><td>${esc(tx.number)}</td><td class="r">${new Date(tx.createdAt).toLocaleString("id-ID")}</td></tr>
     <tr><td colspan="2">Kasir: ${esc(tx.cashier)}${tx.customerName ? " · Pelanggan: " + esc(tx.customerName) : ""}</td></tr>
   </table>
