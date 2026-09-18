@@ -33,10 +33,15 @@ export default function BarcodeScanner({
           { facingMode: "environment" },
           { fps: 10, qrbox: { width: 220, height: 220 } },
           (decodedText) => {
-            scanner
-              .stop()
-              .then(() => mounted && setActive(false))
-              .catch(() => {});
+            // html5-qrcode stop() throw SINKRON bila belum running — try/catch
+            // wajib, kalau tidak jadi "Uncaught Error: Cannot stop, scanner is
+            // not running or paused" & mematikan modal (temuan uji tablet).
+            try {
+              scanner
+                .stop()
+                .then(() => mounted && setActive(false))
+                .catch(() => {});
+            } catch {}
             onScan(decodedText);
           },
           () => {}
@@ -56,10 +61,14 @@ export default function BarcodeScanner({
       mounted = false;
       const scanner = scannerRef.current;
       if (scanner) {
-        scanner
-          .stop()
-          .then(() => scanner.clear())
-          .catch(() => {});
+        // Guard sinkron sama: stop() saat scanner belum start (start masih
+        // pending / gagal karena izin kamera) melempar sebelum return promise.
+        try {
+          scanner
+            .stop()
+            .then(() => scanner.clear())
+            .catch(() => {});
+        } catch {}
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
