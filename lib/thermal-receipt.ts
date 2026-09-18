@@ -54,7 +54,7 @@ export function buildThermalReceiptHtml(
 <style>
   @page { size: 80mm auto; margin: 0; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { width: 80mm; padding: 10mm 3mm; font-family: "Courier New", monospace; font-size: 13px; line-height: 1.45; color: #000; text-align: center; }
+  body { width: 80mm; margin: 0 auto; padding: 10mm 3mm; font-family: "Courier New", monospace; font-size: 13px; line-height: 1.45; color: #000; text-align: center; }
   table { width: 100%; border-collapse: collapse; text-align: left; }
   td { vertical-align: top; padding: 0; }
   .c { text-align: center; }
