@@ -733,9 +733,12 @@ export const useData = create<DataState>()(
 
           if (variantsError) throw variantsError;
 
-          // Seed stok awal tercatat di ledger (restock, vendor + unit cost bila diisi)
+          // Seed stok awal tercatat di ledger (restock, vendor + unit cost bila diisi).
+          // FIX U7 (2026-09-18): produk baru belum ada di state FE → adjustStock tidak menemukannya
+          // dan seed gagal diam-diam (stock 0, tanpa movement). Fetch dulu, baru seed via RPC.
           if (seedQty > 0) {
-            await get().adjustStock(
+            await get().fetchProducts();
+            const seeded = await get().adjustStock(
               product.id,
               seedQty,
               "restock",
@@ -745,10 +748,10 @@ export const useData = create<DataState>()(
               vendorId ?? null,
               unitCost ?? null
             );
+            if (!seeded) throw new Error(useData.getState().error ?? "Gagal seed stok awal (katalog).");
+          } else {
+            await get().fetchProducts();
           }
-
-          // Refresh products
-          await get().fetchProducts();
         } catch (error: any) {
           set({ error: humanizeError(error) });
         }
