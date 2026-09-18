@@ -351,12 +351,40 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
     setPendingId(null);
   }
 
-  // E-print (2026-09-18, revisi 80mm): struk thermal via hidden iframe — bukan window.print()
-  // (yang mencetak A4 nonstop di printer portable Rongta). QR diambil dari preview.
-  function printThermal() {
+  // E-print (2026-09-18, revisi 2): struk thermal via hidden iframe — bukan window.print()
+  // (yang mencetak A4 nonstop di printer portable Rongta). QR dari preview di-
+  // RASTERISASI ke PNG: sebagian driver thermal mencetak SVG vektor sebagai
+  // karakter acak (temuan uji fisik user) — bitmap aman di semua driver.
+  async function printThermal() {
     if (!paid) return;
-    const qrSvg = document.querySelector("#print-area svg")?.outerHTML;
-    const html = buildThermalReceiptHtml(paid, { storeName: s.storeName, address: s.address, phone: s.phone }, qrSvg);
+    let qrPng = "";
+    const svgEl = document.querySelector("#print-area svg") as SVGSVGElement | null;
+    if (svgEl) {
+      try {
+        const xml = new XMLSerializer().serializeToString(svgEl);
+        const svgUrl = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(xml);
+        const img = new Image();
+        await new Promise<void>((res) => {
+          img.onload = () => res();
+          img.onerror = () => res();
+          img.src = svgUrl;
+        });
+        const size = 340; // ~34mm @ 254dpi — QR tajam di thermal
+        const c = document.createElement("canvas");
+        c.width = size;
+        c.height = size;
+        const ctx = c.getContext("2d");
+        if (ctx && img.width) {
+          ctx.fillStyle = "#fff";
+          ctx.fillRect(0, 0, size, size);
+          ctx.drawImage(img, 0, 0, size, size);
+          qrPng = c.toDataURL("image/png");
+        }
+      } catch {
+        qrPng = ""; // fallback aman: struk tanpa QR
+      }
+    }
+    const html = buildThermalReceiptHtml(paid, { storeName: s.storeName, address: s.address, phone: s.phone }, qrPng || undefined);
     printHtmlViaIframe(html);
   }
 
