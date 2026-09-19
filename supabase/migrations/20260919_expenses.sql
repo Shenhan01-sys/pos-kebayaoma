@@ -7,6 +7,7 @@
 --   + RLS: admin (Mama/Ci Lanny) + superadmin (Glori) saja — direct tanpa approval (E12 matriks)
 -- Kategori TIDAK jadi kolom: derivasi FE dari `description` (lihat lib/expenses.ts).
 
+alter table public.expenses alter column store_id drop not null; -- tabel existing = NOT NULL; desain E8 butuh null = umum/gabungan
 alter table public.expenses add column if not exists photo_url text;
 alter table public.expenses add column if not exists created_by uuid references auth.users(id) on delete set null;
 
