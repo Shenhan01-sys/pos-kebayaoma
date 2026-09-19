@@ -31,11 +31,12 @@ function fileBase(m: ExportMeta) {
   return `laporan-${m.storeLabel}-${d}..${s}`;
 }
 
-/** Render node (mis. chart ECharts hasil html2canvas) → gambar PNG base64 utk PDF. */
-async function snap(el: HTMLElement, scale = 2): Promise<string> {
+/** Render node (mis. chart ECharts hasil html2canvas) → gambar base64 utk PDF.
+ *  Kompresi: JPEG 0.8 + scale 1.5 (PNG scale 2 dulu = PDF 11+ MB). */
+async function snap(el: HTMLElement, scale = 1.5): Promise<string> {
   const { default: html2canvas } = await import("html2canvas");
   const canvas = await html2canvas(el, { scale, backgroundColor: "#ffffff", logging: false });
-  return canvas.toDataURL("image/png");
+  return canvas.toDataURL("image/jpeg", 0.8);
 }
 
 export interface PdfOptions {
@@ -98,10 +99,10 @@ export async function exportPdf({ report, meta, chartNodes, includeProfit = true
     const w = W - 2 * M;
     doc.setFont("helvetica", "bold").setFontSize(10).setTextColor(PALETTE.ink);
     doc.text("Metode Pembayaran", M, y); y += 2;
-    doc.addImage(img, "PNG", M, y, w * 0.48, (w * 0.48) / 1.6);
+    doc.addImage(img, "JPEG", M, y, w * 0.48, (w * 0.48) / 1.6);
     if (chartNodes.daily) {
       const img2 = await snap(chartNodes.daily);
-      doc.addImage(img2, "PNG", M + w * 0.52, y, w * 0.48, (w * 0.48) / 1.6);
+      doc.addImage(img2, "JPEG", M + w * 0.52, y, w * 0.48, (w * 0.48) / 1.6);
     }
     y += (w * 0.48) / 1.6 + 6;
   }
@@ -110,7 +111,7 @@ export async function exportPdf({ report, meta, chartNodes, includeProfit = true
     const w = W - 2 * M;
     doc.setFont("helvetica", "bold").setFontSize(10).setTextColor(PALETTE.ink);
     doc.text("Produk Teratas", M, y); y += 2;
-    doc.addImage(img, "PNG", M, y, w, w / 2.6);
+    doc.addImage(img, "JPEG", M, y, w, w / 2.6);
     y += w / 2.6 + 4;
   }
 
@@ -256,7 +257,7 @@ export function buildSheets(report: Report, meta: ExportMeta, includeProfit = tr
     }
   });
 
-  let detail: (string | number | null)[][];
+  let detail: (string | number | Date | null)[][];
   if (includeProfit) {
     detail = [[
       "Nota", "Tanggal", "Kasir", "Metode", "Produk", "SKU", "Qty",
@@ -264,7 +265,7 @@ export function buildSheets(report: Report, meta: ExportMeta, includeProfit = tr
     ]];
     report.lines.forEach((l) => {
       detail.push([
-        l.number, l.date.slice(0, 10), l.cashier, l.method, l.product, l.sku, l.qty,
+        l.number, new Date(l.date.length === 10 ? l.date + "T00:00:00" : l.date), l.cashier, l.method, l.product, l.sku, l.qty,
         l.unitPrice, l.unitCost, l.lineDiscount, l.lineTotal, l.margin,
         l.hasCost ? "" : "Tanpa modal",
       ]);
@@ -276,7 +277,7 @@ export function buildSheets(report: Report, meta: ExportMeta, includeProfit = tr
     ]];
     report.lines.forEach((l) => {
       detail.push([
-        l.number, l.date.slice(0, 10), l.cashier, l.method, l.product, l.sku, l.qty,
+        l.number, new Date(l.date.length === 10 ? l.date + "T00:00:00" : l.date), l.cashier, l.method, l.product, l.sku, l.qty,
         l.unitPrice, l.lineDiscount, l.lineTotal,
         "",
       ]);
@@ -290,7 +291,21 @@ export async function exportXlsx(report: Report, meta: ExportMeta, includeProfit
   const { summary, detail } = buildSheets(report, meta, includeProfit);
   const wb = XLSX.utils.book_new();
   const wsSum = XLSX.utils.aoa_to_sheet(summary);
-  const wsDet = XLSX.utils.aoa_to_sheet(detail);
+  const wsDet = XLSX.utils.aoa_to_sheet(detail, { cellDates: true });
+  // Layout: angka riil berformat ribuan (nilai tetap number — tidak mengubah hitungan)
+  const rngSum = XLSX.utils.decode_range(wsSum["!ref"] ?? "A1");
+  for (let r = 0; r <= rngSum.e.r; r++) {
+    for (let c = 0; c <= rngSum.e.c; c++) {
+      const cell = wsSum[XLSX.utils.encode_cell({ r, c })];
+      if (cell && typeof cell.v === "number") { cell.t = "n"; cell.z = "#,##0"; }
+    }
+  }
+  // Tanggal detail = tipe date Excel (bisa difilter/group per bulan), format yyyy-mm-dd
+  const rngDet = XLSX.utils.decode_range(wsDet["!ref"] ?? "A1");
+  for (let r = 1; r <= rngDet.e.r; r++) {
+    const cell = wsDet[XLSX.utils.encode_cell({ r, c: 1 })];
+    if (cell && (cell.t === "d" || cell.t === "n")) cell.z = "yyyy-mm-dd";
+  }
   wsSum["!cols"] = [{ wch: 26 }, { wch: 18 }];
   wsDet["!cols"] = includeProfit
     ? [{ wch: 16 }, { wch: 12 }, { wch: 10 }, { wch: 9 }, { wch: 18 }, { wch: 12 }, { wch: 6 }, { wch: 12 }, { wch: 12 }, { wch: 9 }, { wch: 13 }, { wch: 12 }, { wch: 12 }]
