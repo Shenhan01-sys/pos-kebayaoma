@@ -70,7 +70,7 @@ export async function exportPdf({ report, meta, chartNodes, includeProfit = true
     const money: [string, number, string?][] = [
       ["Omzet (bersih penjualan)", report.sales],
       ["HPP (harga pokok penjualan)", report.hpp],
-      ["Pengeluaran", report.expenses, "belum termasuk (modul expenses menyusul)"],
+      ["Pengeluaran", report.expenses],
     ];
     doc.setFontSize(10);
     for (const [label, val, note] of money) {
@@ -210,7 +210,7 @@ export function buildSheets(report: Report, meta: ExportMeta, includeProfit = tr
   if (includeProfit) {
     summary.push(
       ["HPP", report.hpp],
-      ["Pengeluaran (v1=0)", report.expenses],
+      ["Pengeluaran", report.expenses],
       ["Keuntungan Bersih", report.bersih],
     );
   }
@@ -230,6 +230,14 @@ export function buildSheets(report: Report, meta: ExportMeta, includeProfit = tr
     ...report.byDay.map(([k, v]) => [k, v] as (string | number)[]),
     [],
   );
+  // E8: rekap pengeluaran per kategori (ikut export, sesuai laporan keuangan)
+  if (report.byCategory.length > 0) {
+    summary.push(
+      ["Kategori Pengeluaran", "Jumlah"],
+      ...report.byCategory.map(([k, v]) => [k, v] as (string | number)[]),
+      [],
+    );
+  }
   if (includeProfit) {
     summary.push(["Produk", "Qty", "Revenue", "HPP rata-rata"]);
   } else {

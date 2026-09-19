@@ -28,6 +28,7 @@ import {
   type PaymentMethod,
   type Shift,
 } from "@/lib/dummy";
+import type { Expense } from "@/lib/expenses";
 import {
   mapVariantRow,
   mapProductRow,
@@ -226,6 +227,15 @@ interface DataState {
   }) => Promise<string | null>;
   returnRental: (id: string, qty: number, staff: string) => Promise<boolean>;
 
+  // expenses (E8 — petty cash, admin + superadmin)
+  expenses: Expense[];
+  fetchExpenses: () => Promise<void>;
+  addExpense: (input: {
+    storeId: string | null; date: string; description: string;
+    amount: number; pic: string; photoUrl?: string;
+  }) => Promise<Expense | null>;
+  deleteExpense: (id: string) => Promise<boolean>;
+
   // customers
   addCustomer: (c: Omit<Customer, "id">) => Promise<void>;
   updateCustomer: (id: string, patch: Partial<Customer>) => Promise<void>;
@@ -324,6 +334,7 @@ export const useData = create<DataState>()(
       vendors: [],
       transfers: [],
       rentals: [],
+      expenses: [],
       transactions: [],
       shifts: [],
       loading: false,
@@ -1406,6 +1417,87 @@ export const useData = create<DataState>()(
           const { error } = await supabase.rpc("return_rental", { p_rental: id, p_qty: qty, p_staff: staff });
           if (error) throw error;
           await Promise.all([get().fetchProducts(), get().fetchRentals(), get().fetchMovements()]);
+          return true;
+        } catch (error: any) {
+          set({ error: humanizeError(error) });
+          return false;
+        }
+      },
+
+      // E8: petty cash — admin + superadmin (RLS DB menegakkan; FE hanya UX)
+      fetchExpenses: async () => {
+        if (!isSupabaseReady) return;
+        try {
+          const { data, error } = await supabase
+            .from("expenses")
+            .select("*")
+            .order("date", { ascending: false })
+            .order("created_at", { ascending: false })
+            .limit(500);
+          if (error) throw error;
+          const expenses: Expense[] = (data ?? []).map((r: any) => ({
+            id: r.id,
+            storeId: r.store_id ?? null,
+            date: r.date,
+            description: r.description ?? "",
+            amount: Number(r.amount),
+            pic: r.pic ?? "",
+            photoUrl: r.photo_url ?? undefined,
+            createdBy: r.created_by ?? null,
+            createdAt: r.created_at,
+          }));
+          set({ expenses });
+        } catch (error: any) {
+          set({ error: humanizeError(error) });
+        }
+      },
+
+      addExpense: async (input) => {
+        if (!isSupabaseReady) {
+          set({ error: "Pengeluaran butuh koneksi ke server." });
+          return null;
+        }
+        try {
+          const { data: auth } = await supabase.auth.getUser();
+          const { data, error } = await supabase
+            .from("expenses")
+            .insert([{
+              store_id: input.storeId,
+              date: input.date,
+              description: input.description,
+              amount: input.amount,
+              pic: input.pic,
+              photo_url: input.photoUrl ?? null,
+              created_by: auth?.user?.id ?? null,
+            }])
+            .select()
+            .single();
+          if (error) throw error;
+          const row: Expense = {
+            id: data.id,
+            storeId: data.store_id ?? null,
+            date: data.date,
+            description: data.description ?? "",
+            amount: Number(data.amount),
+            pic: data.pic ?? "",
+            photoUrl: data.photo_url ?? undefined,
+            createdBy: data.created_by ?? null,
+            createdAt: data.created_at,
+          };
+          set({ expenses: [row, ...get().expenses] });
+          return row;
+        } catch (error: any) {
+          set({ error: humanizeError(error) });
+          return null;
+        }
+      },
+
+      deleteExpense: async (id) => {
+        if (!isSupabaseReady) return false;
+        try {
+          const { error } = await supabase.from("expenses").delete().eq("id", id);
+          if (error) throw error;
+          set({ expenses: get().expenses.filter((e) => e.id !== id) });
           return true;
         } catch (error: any) {
           set({ error: humanizeError(error) });

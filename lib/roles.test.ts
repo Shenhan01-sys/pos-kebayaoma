@@ -14,7 +14,7 @@ describe("E12 RBAC roles", () => {
     expect(pagesForRole("superadmin")).toContain("/settings");
     expect(pagesForRole("superadmin")).toContain("/staff");
     expect(pagesForRole("superadmin")).toContain("/reports");
-    expect(pagesForRole("superadmin").length).toBe(10);
+    expect(pagesForRole("superadmin").length).toBe(11); // E8: +/expenses
   });
 
   it("pagesForRole: manager tanpa /staff & /settings, dengan /reports & /inventory", () => {
@@ -25,8 +25,8 @@ describe("E12 RBAC roles", () => {
     expect(p).not.toContain("/settings");
   });
 
-  it("pagesForRole: admin = Dashboard/Transaksi/Laporan saja", () => {
-    expect(pagesForRole("admin")).toEqual(["/", "/transactions", "/reports"]);
+  it("pagesForRole: admin = Dashboard/Transaksi/PettyCash/Laporan (E8)", () => {
+    expect(pagesForRole("admin")).toEqual(["/", "/transactions", "/expenses", "/reports"]);
   });
 
   it("pagesForRole: kasir = POS/Inventori/Transaksi, tanpa Produk/Laporan", () => {

@@ -46,6 +46,11 @@ export default function ReportsPage() {
   const canSeeProfitData = canSeeProfit(auth.staff?.role);
 
   const all = getAllTransactions(dummyTx).filter((t) => t.status === "paid");
+  // E8: pengeluaran petty cash — /reports hanya diakses admin+superadmin, aman fetch.
+  const expenses = useData((s) => s.expenses);
+  useEffect(() => {
+    useData.getState().fetchExpenses();
+  }, []);
   const inRangeTxs = useMemo(
     () => getAllTransactions(dummyTx).filter((t) => {
       const d = new Date(t.createdAt);
@@ -56,9 +61,9 @@ export default function ReportsPage() {
     [from, to]
   );
   const report = useMemo(
-    () => computeReport(inRangeTxs, storeSel === "semua" ? null : storeSel, from, to),
+    () => computeReport(inRangeTxs, storeSel === "semua" ? null : storeSel, from, to, expenses),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [storeSel, from, to, all.length]
+    [storeSel, from, to, all.length, expenses]
   );
   const { sales, count, avg, discount, tax, hpp, bersih, unknownQty } = report;
   const inRange = { length: count };
@@ -257,9 +262,17 @@ export default function ReportsPage() {
             <div className="flex flex-wrap items-center gap-x-6 gap-y-1">
               <span><span className="text-gray-600">Omzet</span> <b className="tnum text-ink">{formatRupiah(sales)}</b></span>
               <span>− <span className="text-gray-600">HPP</span> <b className="tnum text-ink">{formatRupiah(hpp)}</b></span>
-              <span>− <span className="text-gray-600">Pengeluaran</span> <b className="tnum text-ink">{formatRupiah(report.expenses)}</b> <span className="text-xs text-gray-500">(belum termasuk)</span></span>
+              <span>− <span className="text-gray-600">Pengeluaran</span> <b className="tnum text-ink">{formatRupiah(report.expenses)}</b></span>
               <span>= <span className="text-gray-600">Keuntungan Bersih</span> <b className="tnum text-success">{formatRupiah(bersih)}</b></span>
             </div>
+            {/* E8: rekap pengeluaran per kategori */}
+            {report.byCategory.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-gray-600">
+                {report.byCategory.map(([cat, v]) => (
+                  <span key={cat}>{cat}: <b className="tnum text-ink">{formatRupiah(v)}</b></span>
+                ))}
+              </div>
+            )}
             {unknownQty > 0 && (
               <p className="mt-1 text-xs text-warning">{unknownQty} unit tanpa data modal — HPP belum mencakupnya.</p>
             )}

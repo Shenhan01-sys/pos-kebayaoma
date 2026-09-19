@@ -11,6 +11,7 @@ export const ALL_PAGES = [
   "/products",
   "/inventory",
   "/customers",
+  "/expenses",
   "/staff",
   "/transactions",
   "/shifts",
@@ -20,7 +21,8 @@ export const ALL_PAGES = [
 
 const SUPERADMIN_PAGES: string[] = [...ALL_PAGES];
 const MANAGER_PAGES = ["/", "/pos", "/products", "/inventory", "/customers", "/transactions", "/shifts", "/reports"];
-const ADMIN_PAGES = ["/", "/transactions", "/reports"];
+// E8: petty cash = admin + superadmin (matriks E12) — manager/kasir tidak.
+const ADMIN_PAGES = ["/", "/transactions", "/expenses", "/reports"];
 const KASIR_PAGES = ["/", "/pos", "/inventory", "/customers", "/transactions", "/shifts"];
 
 export function pagesForRole(role: Role | undefined | null): string[] {

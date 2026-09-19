@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { computeReport } from "./report-data";
+import { categorizeExpense, type Expense } from "./expenses";
 import type { Transaction } from "@/lib/dummy";
 
 const mk = (over: Partial<Transaction>): Transaction => ({
@@ -86,5 +87,49 @@ describe("computeReport (E3)", () => {
     expect(typeof (detail[1] as any)[7]).toBe("number");
     expect(typeof (detail[1] as any)[11]).toBe("number");
     void numCols;
+  });
+});
+
+describe("computeReport expenses (E8)", () => {
+  const txs: Transaction[] = [
+    mk({ number: "N1", total: 100000, storeId: "MJL",
+      items: [item("Anting", 2, 50000, 40000, 100000)] }),
+  ];
+  const exp = (over: Partial<Expense>): Expense => ({
+    id: Math.random().toString(36),
+    storeId: "MJL",
+    date: "2026-09-05",
+    description: "listrik",
+    amount: 20000,
+    pic: "mama",
+    createdAt: "2026-09-05T00:00:00Z",
+    ...over,
+  });
+  const list: Expense[] = [
+    exp({}), // MJL, dalam periode
+    exp({ id: "e2", description: "g0send", amount: 15000, storeId: "KTB" }), // toko lain → tak masuk scope MJL
+    exp({ id: "e3", description: "ongkir", amount: 8000, date: "2026-08-01" }), // luar periode
+    exp({ id: "e4", description: "aqua", amount: 5000, storeId: null }), // umum → hanya scope "semua"
+  ];
+
+  it("pengeluaran dihitung dalam scope toko + periode; bersih = omzet − HPP − pengeluaran", () => {
+    const r = computeReport(txs, "MJL", "2026-09-01", "2026-09-30", list);
+    expect(r.expenses).toBe(20000);
+    expect(r.bersih).toBe(100000 - 80000 - 20000);
+    expect(r.byCategory).toEqual([["Listrik", 20000]]);
+  });
+
+  it("expense umum (store_id null) hanya dihitung di scope 'semua' — anti dobel-hitung", () => {
+    const rMjl = computeReport(txs, "MJL", "2026-09-01", "2026-09-30", list);
+    const rAll = computeReport(txs, null, "2026-09-01", "2026-09-30", list);
+    expect(rMjl.expenses).toBe(20000);
+    expect(rAll.expenses).toBe(40000); // scope semua = MJL 20rb + KTB 15rb + umum 5rb
+  });
+
+  it("kategori: typo 'g0send' & variasi case tetap terpetakan (derivation dari description)", () => {
+    expect(categorizeExpense("G0SEND paket")).toBe("Gosend");
+    expect(categorizeExpense("Alfamart beli amplop")).toBe("Alfamart");
+    expect(categorizeExpense("Ongkir dan reparasi")).toBe("Ongkir");
+    expect(categorizeExpense("bakmi kopyok")).toBe("Lainnya");
   });
 });

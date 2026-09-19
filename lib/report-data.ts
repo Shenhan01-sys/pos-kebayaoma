@@ -4,6 +4,7 @@
 
 import { toLocalDayKey } from "@/lib/dummy";
 import type { Transaction } from "@/lib/dummy";
+import { expenseInScope, expensesByCategory, type Expense } from "@/lib/expenses";
 
 export interface ReportLine {
   number: string;
@@ -31,8 +32,9 @@ export interface Report {
   hpp: number; // hanya dari baris ber-modal
   unknownQty: number; // qty baris tanpa modal
   unknownRev: number; // revenue baris tanpa modal
-  expenses: number; // v1: 0 (belum ada modul expenses E8)
+  expenses: number; // E8: Σ pengeluaran petty cash dalam scope+periode
   bersih: number;
+  byCategory: [string, number][]; // E8: rekap pengeluaran per kategori
   byMethod: Record<string, number>;
   byDay: [string, number][];
   topProducts: [string, { qty: number; rev: number }][];
@@ -45,7 +47,8 @@ export function computeReport(
   txs: Transaction[],
   storeId: string | null,
   from?: string,
-  to?: string
+  to?: string,
+  expenses: Expense[] = []
 ): Report {
   const scope = txs.filter((t) => {
     if (t.status !== "paid") return false;
@@ -99,10 +102,20 @@ export function computeReport(
     }
   }
 
-  const expenses = 0; // E8 hold
-  const bersih = sales - hpp - expenses;
+  // E8: pengeluaran petty cash — scope toko sama dengan transaksi + rentang tanggal sama.
+  // expense.storeId null = umum/gabungan → hanya dihitung di scope "semua toko".
+  const scopedExpenses = expenses.filter((e) => {
+    if (!expenseInScope(e, storeId)) return false;
+    const d = new Date(e.date + "T00:00:00");
+    if (from && d < new Date(from + "T00:00:00")) return false;
+    if (to && d > new Date(to + "T23:59:59")) return false;
+    return true;
+  });
+  const expensesTotal = scopedExpenses.reduce((s, e) => s + e.amount, 0);
+  const byCategory = expensesByCategory(scopedExpenses);
+  const bersih = sales - hpp - expensesTotal;
   const byDay = Object.entries(byDayMap).sort((a, b) => a[0].localeCompare(b[0]));
   const topProducts = Object.entries(prodMap).sort((a, b) => b[1].rev - a[1].rev);
 
-  return { sales, count, avg, discount, tax, hpp, unknownQty, unknownRev, expenses, bersih, byMethod, byDay, topProducts, lines };
+  return { sales, count, avg, discount, tax, hpp, unknownQty, unknownRev, expenses: expensesTotal, bersih, byCategory, byMethod, byDay, topProducts, lines };
 }
