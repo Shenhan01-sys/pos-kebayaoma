@@ -59,6 +59,8 @@ export default function RentalModal({
       setErr(useData.getState().error ?? "Gagal menyimpan sewa.");
       return;
     }
+    // E14: transactions tidak lagi di-load saat boot — fetch dulu agar nomor nota sewa terisi.
+    await useData.getState().fetchTransactions();
     const tx = useData.getState().transactions.find((t) => t.id === txId);
     setDone(tx?.number ?? "Tersimpan");
   }

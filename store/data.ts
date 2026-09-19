@@ -334,12 +334,13 @@ export const useData = create<DataState>()(
       setActiveStore: async (id) => {
         if (get().activeStoreId === id) return;
         set({ activeStoreId: id });
+        // E14: fetchTransactions tidak di sini — halaman pemakai (/transactions,
+        // dashboard) fetch sendiri saat activeStoreId berubah.
         await Promise.all([
           get().fetchProducts(),
           get().fetchCategories(),
           get().fetchCustomers(),
           get().fetchStaff(),
-          get().fetchTransactions(),
           get().fetchShifts(),
           get().fetchVendors(),
           get().fetchMovements(),
@@ -351,6 +352,8 @@ export const useData = create<DataState>()(
       syncStoreScope: async (storeId) => {
         // Dipanggil auth setelah profil termuat: staff terkunci -> storeId terisi,
         // manager-all -> null (semua toko). Lalu refetch dengan scope baru.
+        // E14: fetchTransactions dikeluarkan dari boot (payload 500 tx + items
+        // paling berat, tidak dibutuhkan POS) — halaman pemakai fetch sendiri.
         set({ activeStoreId: storeId });
         await Promise.all([
           get().fetchStores(),
@@ -358,7 +361,6 @@ export const useData = create<DataState>()(
           get().fetchCategories(),
           get().fetchCustomers(),
           get().fetchStaff(),
-          get().fetchTransactions(),
           get().fetchShifts(),
           get().fetchVendors(),
           get().fetchMovements(),
@@ -1617,8 +1619,8 @@ export const useData = create<DataState>()(
         if (psDb) {
           try {
             const rows = await psDb.getAll(
-              sid ? `SELECT * FROM transactions WHERE store_id = ? ORDER BY created_at DESC LIMIT 500`
-                  : `SELECT * FROM transactions ORDER BY created_at DESC LIMIT 500`,
+              sid ? `SELECT * FROM transactions WHERE store_id = ? ORDER BY created_at DESC LIMIT 200`
+                  : `SELECT * FROM transactions ORDER BY created_at DESC LIMIT 200`,
               sid ? [sid] : []
             ) as Record<string, any>[];
             const transactions: Transaction[] = [];
@@ -1649,7 +1651,7 @@ export const useData = create<DataState>()(
               transaction_items (*)
             `)
             .order('created_at', { ascending: false })
-            .limit(500);
+            .limit(200);
           if (sid) query = query.eq('store_id', sid);
           const { data, error } = await query;
 

@@ -41,11 +41,17 @@ export default function DashboardPage() {
   const s = useSettings();
   const auth = useAuth();
   const { products } = useData();
+  const activeStoreId = useData((st) => st.activeStoreId);
   useEffect(() => {
     const sync = () => setLive(getAllTransactions(dummyTx));
     sync();
     return subscribeTransactions(sync);
   }, []);
+  // E14: transaksi tidak lagi di-fetch saat boot — dashboard memuat sendiri
+  // (lazy) saat mount dan saat scope toko berubah.
+  useEffect(() => {
+    useData.getState().fetchTransactions().then(() => setLive(getAllTransactions(dummyTx)));
+  }, [activeStoreId]);
 
   const all = live;
   const sales = all.reduce((sum, t) => sum + (t.status === "paid" ? t.total : 0), 0);

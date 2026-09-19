@@ -97,23 +97,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     useAuth.getState().init();
   }, []);
 
-  // Load data from Supabase once on app start
+  // E14: JANGAN fetch data di sini — auth.init() -> syncStoreScope() sudah mem-fetch
+  // semua koleksi SEKALI dengan scope toko yang benar. Fetch manual di mount duluan
+  // menyebabkan semua query berjalan dobel (lihat FE6 #33 / backlog E14).
   useEffect(() => {
     if (!isSupabaseReady) {
       useData.getState().loadFallback();
-      return;
     }
-    useData.getState().fetchStores();
-    useData.getState().fetchProducts();
-    useData.getState().fetchCategories();
-    useData.getState().fetchCustomers();
-    useData.getState().fetchStaff();
-    useData.getState().fetchTransactions();
-    useData.getState().fetchShifts();
-    useData.getState().fetchVendors();
-    useData.getState().fetchMovements();
-    useData.getState().fetchTransfers();
-    useData.getState().fetchRentals();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Re-subscribe realtime saat scope toko berubah (filter store_id per toko).

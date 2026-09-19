@@ -87,6 +87,12 @@ export default function TransactionsPage() {
     sync();
     return subscribeTransactions(sync);
   }, []);
+  // E14: transaksi tidak lagi di-fetch saat boot — halaman ini memuat sendiri
+  // (lazy) saat mount dan saat scope toko berubah.
+  const activeStoreId = useData((st) => st.activeStoreId);
+  useEffect(() => {
+    useData.getState().fetchTransactions().then(() => setAll(getAllTransactions(dummyTx)));
+  }, [activeStoreId]);
 
   const dayTx = useMemo(() => {
     const effectiveDate = isStaff ? todayStr() : dateFilter;
