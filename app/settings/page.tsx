@@ -2,6 +2,9 @@
 
 import { useSettings } from "@/store/settings";
 import { useAuth } from "@/store/auth";
+import { useData } from "@/store/data";
+import { supabase } from "@/lib/supabase";
+import { getPosition } from "@/lib/geo";
 import { useState } from "react";
 import { Icon } from "@/components/icons";
 
@@ -9,6 +12,13 @@ export default function SettingsPage() {
   const s = useSettings();
   const role = useAuth((a) => a.staff?.role);
   const [saved, setSaved] = useState(false);
+  const stores = useData((st) => st.stores);
+  const activeStoreId = useData((st) => st.activeStoreId);
+  const [geoStoreId, setGeoStoreId] = useState<string>("");
+  const [geoLat, setGeoLat] = useState<string>("");
+  const [geoLng, setGeoLng] = useState<string>("");
+  const [geoMsg, setGeoMsg] = useState<string | null>(null);
+  const [geoBusy, setGeoBusy] = useState(false);
 
   // E12: hanya superadmin yang bisa mengubah % pajak (fail-closed).
   const canEditTax = role === "superadmin";
@@ -16,6 +26,39 @@ export default function SettingsPage() {
   function save() {
     setSaved(true);
     setTimeout(() => setSaved(false), 1500);
+  }
+
+  // E9: koordinat toko (DB-backed, superadmin) — dipakai geofence login 25 m.
+  function pickGeoStore(id: string) {
+    setGeoStoreId(id);
+    setGeoMsg(null);
+    const st = stores.find((t) => t.id === id);
+    setGeoLat(st?.lat != null ? String(st.lat) : "");
+    setGeoLng(st?.lng != null ? String(st.lng) : "");
+  }
+  async function captureGps() {
+    setGeoMsg(null);
+    setGeoBusy(true);
+    try {
+      const p = await getPosition();
+      setGeoLat(p.lat.toFixed(6));
+      setGeoLng(p.lng.toFixed(6));
+      setGeoMsg("Lokasi terdeteksi — cek angkanya lalu simpan.");
+    } catch (e: any) {
+      setGeoMsg(e?.message ?? "Gagal mengambil GPS.");
+    }
+    setGeoBusy(false);
+  }
+  async function saveGeo() {
+    setGeoMsg(null);
+    if (!geoStoreId) return setGeoMsg("Pilih toko dulu.");
+    const lat = parseFloat(geoLat);
+    const lng = parseFloat(geoLng);
+    if (Number.isNaN(lat) || Number.isNaN(lng)) return setGeoMsg("Lat/Lng tidak valid.");
+    setGeoBusy(true);
+    const { error } = await supabase.from("stores").update({ lat, lng }).eq("id", geoStoreId);
+    setGeoBusy(false);
+    setGeoMsg(error ? `Gagal: ${error.message}` : "Koordinat toko tersimpan ✓");
   }
 
   return (
@@ -70,6 +113,39 @@ export default function SettingsPage() {
           Disimpan di browser (localStorage). Nanti dipindah ke Supabase.
         </p>
       </div>
+
+      {/* E9: koordinat GPS toko — geofence login 25 m (superadmin saja, DB-backed) */}
+      {role === "superadmin" && (
+        <div className="card card-pad mt-4 space-y-3">
+          <h2 className="text-sm font-bold text-ink">Lokasi Toko (GPS — geofence login 25 m)</h2>
+          <Field label="Toko">
+            <select value={geoStoreId || activeStoreId || ""} onChange={(e) => pickGeoStore(e.target.value)} className="input">
+              <option value="">— Pilih toko —</option>
+              {stores.map((t) => (
+                <option key={t.id} value={t.id}>{t.name}</option>
+              ))}
+            </select>
+          </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Latitude">
+              <input value={geoLat} onChange={(e) => setGeoLat(e.target.value)} className="input tnum" placeholder="-7.000000" />
+            </Field>
+            <Field label="Longitude">
+              <input value={geoLng} onChange={(e) => setGeoLng(e.target.value)} className="input tnum" placeholder="112.000000" />
+            </Field>
+          </div>
+          <button onClick={captureGps} disabled={geoBusy} className="btn-ghost w-full">
+            <Icon name="camera" size={14} /> {geoBusy ? "Mendeteksi…" : "Ambil lokasi sekarang (berdiri di toko)"}
+          </button>
+          <button onClick={saveGeo} disabled={geoBusy} className="btn-primary w-full">
+            Simpan Koordinat
+          </button>
+          {geoMsg && <p className="text-xs font-semibold text-ink">{geoMsg}</p>}
+          <p className="text-xs text-gray-600">
+            Aktif saat koordinat tersimpan: kasir/admin harus berada di radius 25 m dari toko saat login; superadmin/manager di luar radius tetap masuk global.
+          </p>
+        </div>
+      )}
     </div>
   );
 }

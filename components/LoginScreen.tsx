@@ -6,6 +6,7 @@ import { supabase, isSupabaseReady } from "@/lib/supabase";
 import type { Role, Staff } from "@/store/data";
 import { useData } from "@/store/data";
 import { useAuth } from "@/store/auth";
+import { evaluateGeofence, getPosition } from "@/lib/geo";
 import { Icon } from "@/components/icons";
 
 const roleLabel: Record<Role, string> = {
@@ -29,7 +30,7 @@ const PAD: (string | "back")[] = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { login } = useAuth();
+  const { login, logout } = useAuth();
   const [staffList, setStaffList] = useState<Staff[]>([]);
   const [username, setUsername] = useState("");
   const [selected, setSelected] = useState<Staff | null>(null);
@@ -93,12 +94,54 @@ export default function LoginScreen() {
     setBusy(true);
     setError(null);
     const err = await login(selected.id, value);
-    setBusy(false);
     if (err) {
+      setBusy(false);
       setError(err);
       setPin("");
       return;
     }
+    // E9: geofence login — kasir/admin wajib dalam radius 25 m toko; superadmin/manager
+    // di luar radius → global. Fail-open bila belum ada toko ber-koordinat.
+    try {
+      const stores = useData.getState().stores.map((s) => ({
+        id: s.id, name: s.name, lat: s.lat ?? null, lng: s.lng ?? null,
+      }));
+      let configured = stores.filter((s) => s.lat != null && s.lng != null);
+      if (configured.length === 0) {
+        // state belum termuat (E14: fetch pasca-login) — ambil langsung dari DB
+        const { supabase } = await import("@/lib/supabase");
+        const { data } = await supabase
+          .from("stores")
+          .select("id, name, lat, lng")
+          .not("lat", "is", null);
+        configured = (data ?? []) as typeof configured;
+      }
+      if (configured.length > 0) {
+        const pos = await getPosition();
+        const res = evaluateGeofence(selected.role, configured, pos);
+        if (res.kind === "blocked") {
+          await logout();
+          setBusy(false);
+          setError(res.message);
+          setPin("");
+          return;
+        }
+        if (res.kind === "ok" && res.storeId) {
+          useData.getState().setActiveStore(res.storeId);
+        }
+      }
+    } catch (e: any) {
+      // GPS gagal: role toko → tolak (aturan user); superadmin/manager → lanjut global
+      const needsPresence = selected.role === "kasir" || selected.role === "admin";
+      if (needsPresence) {
+        await logout();
+        setBusy(false);
+        setError(e?.message ?? "Gagal mendeteksi lokasi.");
+        setPin("");
+        return;
+      }
+    }
+    setBusy(false);
     router.replace("/");
   };
 

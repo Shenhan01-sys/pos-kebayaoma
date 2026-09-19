@@ -69,6 +69,8 @@ export interface StoreInfo {
   id: string;
   name: string;
   prefix: string; // MJL / KTB / TRX-
+  lat?: number | null; // E9: geofence login (null = belum dipasang)
+  lng?: number | null;
 }
 
 export type MovementType =
@@ -391,6 +393,8 @@ export const useData = create<DataState>()(
               id: r.id,
               name: r.name,
               prefix: r.receipt_prefix && String(r.receipt_prefix).trim() !== "" ? r.receipt_prefix : "TRX-",
+              lat: r.lat ?? null,
+              lng: r.lng ?? null,
             })),
           });
         } catch (error: any) {
