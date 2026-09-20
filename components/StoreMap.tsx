@@ -1,14 +1,20 @@
 "use client";
 
 // E9: peta pilih titik toko — Leaflet + OpenStreetMap (gratis, tanpa API key).
-// Klik peta → koordinat terisi; marker ikut saat GPS tombol dipakai juga.
+// Search lokasi via Nominatim (OSM geocoder, gratis) + klik peta langsung.
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 interface StoreMapProps {
   lat: number | null;
   lng: number | null;
   onPick: (lat: number, lng: number) => void;
+}
+
+interface NominatimResult {
+  display_name: string;
+  lat: string;
+  lon: string;
 }
 
 export default function StoreMap({ lat, lng, onPick }: StoreMapProps) {
@@ -19,6 +25,11 @@ export default function StoreMap({ lat, lng, onPick }: StoreMapProps) {
   const markerRef = useRef<any>(null);
   const onPickRef = useRef(onPick);
   onPickRef.current = onPick;
+
+  const [q, setQ] = useState("");
+  const [results, setResults] = useState<NominatimResult[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [searchErr, setSearchErr] = useState<string | null>(null);
 
   // init sekali
   useEffect(() => {
@@ -55,7 +66,7 @@ export default function StoreMap({ lat, lng, onPick }: StoreMapProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // sinkron saat lat/lng berubah dari luar (tombol GPS / pilih toko)
+  // sinkron saat lat/lng berubah dari luar (tombol GPS / pilih toko / pilih hasil search)
   useEffect(() => {
     const map = mapRef.current;
     const marker = markerRef.current;
@@ -64,11 +75,68 @@ export default function StoreMap({ lat, lng, onPick }: StoreMapProps) {
     map.setView([lat, lng], Math.max(map.getZoom(), 17));
   }, [lat, lng]);
 
+  // search Nominatim (debounce 700 ms — patuh usage policy 1 req/detik)
+  useEffect(() => {
+    const query = q.trim();
+    if (query.length < 3) { setResults([]); setSearchErr(null); return; }
+    let cancelled = false;
+    setSearching(true);
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=5&countrycodes=id`,
+          { headers: { "Accept-Language": "id" } }
+        );
+        const data = (await res.json()) as NominatimResult[];
+        if (cancelled) return;
+        setResults(data);
+        setSearchErr(data.length === 0 ? "Tidak ada hasil — coba kata kunci lain." : null);
+      } catch {
+        if (!cancelled) setSearchErr("Gagal mencari — cek koneksi.");
+      }
+      if (!cancelled) setSearching(false);
+    }, 700);
+    return () => { cancelled = true; clearTimeout(t); setSearching(false); };
+  }, [q]);
+
+  function pickResult(r: NominatimResult) {
+    const la = parseFloat(r.lat);
+    const ln = parseFloat(r.lon);
+    setResults([]);
+    setQ("");
+    onPickRef.current(la, ln); // marker + view via effect [lat,lng]
+  }
+
   return (
-    <div
-      ref={divRef}
-      className="h-72 w-full overflow-hidden rounded-2xl border border-black/10"
-      aria-label="Peta pilih lokasi toko — klik untuk menandai titik"
-    />
+    <div>
+      <div className="mb-2">
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Cari lokasi… (cth: Madiun / nama jalan toko)"
+          className="input"
+        />
+        {searching && <p className="mt-1 text-xs text-gray-600">Mencari…</p>}
+        {searchErr && <p className="mt-1 text-xs text-warning">{searchErr}</p>}
+        {results.length > 0 && (
+          <div className="mt-1 max-h-48 overflow-y-auto rounded-2xl border border-black/10 bg-white">
+            {results.map((r, i) => (
+              <button
+                key={i}
+                onClick={() => pickResult(r)}
+                className="block w-full border-b border-black/5 px-3 py-2 text-left text-xs text-ink last:border-0 hover:bg-beige/60"
+              >
+                {r.display_name}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      <div
+        ref={divRef}
+        className="h-72 w-full overflow-hidden rounded-2xl border border-black/10"
+        aria-label="Peta pilih lokasi toko — cari atau klik untuk menandai titik"
+      />
+    </div>
   );
 }
