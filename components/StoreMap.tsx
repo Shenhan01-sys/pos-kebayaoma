@@ -76,8 +76,20 @@ export default function StoreMap({ lat, lng, onPick }: StoreMapProps) {
   }, [lat, lng]);
 
   // search Nominatim (debounce 700 ms — patuh usage policy 1 req/detik)
+  // + deteksi paste koordinat "lat, lng" (dari Google Maps long-press → copy)
   useEffect(() => {
     const query = q.trim();
+    const coordMatch = query.match(/^(-?\d{1,3}(?:\.\d+)?)\s*[, ]\s*(-?\d{1,3}(?:\.\d+)?)$/);
+    if (coordMatch) {
+      const la = parseFloat(coordMatch[1]);
+      const ln = parseFloat(coordMatch[2]);
+      if (Math.abs(la) <= 90 && Math.abs(ln) <= 180) {
+        setResults([]);
+        setSearchErr(null);
+        onPickRef.current(la, ln); // marker + view via effect [lat,lng]
+        return;
+      }
+    }
     if (query.length < 3) { setResults([]); setSearchErr(null); return; }
     let cancelled = false;
     setSearching(true);
