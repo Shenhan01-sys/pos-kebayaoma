@@ -40,6 +40,11 @@ const [showGeoNotice, setShowGeoNotice] = useState(false);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
+    // E9: popup penjelasan geofence ditampilkan ulang setelah login ditolak (remount)
+    if (sessionStorage.getItem("geo_notice") === "1") {
+      sessionStorage.removeItem("geo_notice");
+      setShowGeoNotice(true);
+    }
     if (!isSupabaseReady) {
       const dataStaff = useData.getState().staff;
       if (dataStaff.length > 0) {
@@ -123,6 +128,8 @@ const [showGeoNotice, setShowGeoNotice] = useState(false);
         const pos = await getPosition();
         const res = evaluateGeofence(selected.role, configured, pos);
         if (res.kind === "blocked") {
+          // flag → LoginScreen yang di-remount pasca logout tetap menampilkan popup penjelasan
+          sessionStorage.setItem("geo_notice", "1");
           await logout();
           setBusy(false);
           setError(res.message);
@@ -137,6 +144,7 @@ const [showGeoNotice, setShowGeoNotice] = useState(false);
       // GPS gagal: role toko → tolak (aturan user); superadmin/manager → lanjut global
       const needsPresence = selected.role === "kasir" || selected.role === "admin";
       if (needsPresence) {
+        sessionStorage.setItem("geo_notice", "1");
         await logout();
         setBusy(false);
         setError(e?.message ?? "Gagal mendeteksi lokasi.");
