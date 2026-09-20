@@ -33,8 +33,9 @@ export default function LoginScreen() {
   const { login, logout } = useAuth();
   const [staffList, setStaffList] = useState<Staff[]>([]);
   const [username, setUsername] = useState("");
-  const [selected, setSelected] = useState<Staff | null>(null);
-  const [pin, setPin] = useState("");
+const [selected, setSelected] = useState<Staff | null>(null);
+const [pin, setPin] = useState("");
+const [showGeoNotice, setShowGeoNotice] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -87,6 +88,8 @@ export default function LoginScreen() {
     }
     setSelected(match);
     setPin("");
+    // E9: popup informasi geofence — kasir/admin wajib di radius 25 m toko saat login
+    if (match.role === "kasir" || match.role === "admin") setShowGeoNotice(true);
   }
 
   const submit = async (value: string) => {
@@ -154,6 +157,26 @@ export default function LoginScreen() {
   if (selected) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-grad-cream p-6">
+        {/* E9: popup info geofence — tampil utk kasir/admin sebelum PIN */}
+        {showGeoNotice && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-6 backdrop-blur-sm">
+            <div className="card w-full max-w-[340px] p-5 text-center">
+              <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-apricot/20 text-2xl">📍</div>
+              <div className="mb-1 text-base font-extrabold text-ink">Login harus di dalam toko</div>
+              <p className="text-sm text-gray-600">
+                Akun <b className="text-ink">{roleLabel[selected.role]}</b> hanya bisa login saat berada di
+                radius <b className="text-ink">25 m</b> dari outlet ({useData.getState().stores.map((t) => t.name).join(" / ") || "outlet"}).
+                Pastikan <b className="text-ink">GPS aktif</b> dan izin lokasi browser diizinkan.
+              </p>
+              <button
+                onClick={() => setShowGeoNotice(false)}
+                className="btn-primary mt-4 w-full"
+              >
+                Oke, mengerti
+              </button>
+            </div>
+          </div>
+        )}
         <div className="w-full max-w-[340px]">
           <button
             onClick={() => { setSelected(null); setPin(""); setError(null); setUsername(""); }}
