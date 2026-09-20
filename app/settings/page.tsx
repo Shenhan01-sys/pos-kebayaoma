@@ -6,7 +6,14 @@ import { useData } from "@/store/data";
 import { supabase } from "@/lib/supabase";
 import { getPosition } from "@/lib/geo";
 import { useState } from "react";
+import dynamic from "next/dynamic";
 import { Icon } from "@/components/icons";
+
+// E9: peta Leaflet — dynamic import (SSR off), bundle halaman tetap ramping.
+const StoreMap = dynamic(() => import("@/components/StoreMap"), {
+  ssr: false,
+  loading: () => <div className="h-72 w-full animate-pulse rounded-2xl bg-beige" />,
+});
 
 export default function SettingsPage() {
   const s = useSettings();
@@ -19,6 +26,7 @@ export default function SettingsPage() {
   const [geoLng, setGeoLng] = useState<string>("");
   const [geoMsg, setGeoMsg] = useState<string | null>(null);
   const [geoBusy, setGeoBusy] = useState(false);
+  const [mapOpen, setMapOpen] = useState(false);
 
   // E12: hanya superadmin yang bisa mengubah % pajak (fail-closed).
   const canEditTax = role === "superadmin";
@@ -137,6 +145,26 @@ export default function SettingsPage() {
           <button onClick={captureGps} disabled={geoBusy} className="btn-ghost w-full">
             <Icon name="camera" size={14} /> {geoBusy ? "Mendeteksi…" : "Ambil lokasi sekarang (berdiri di toko)"}
           </button>
+          <button
+            onClick={() => setMapOpen((v) => !v)}
+            className="btn-ghost w-full"
+          >
+            {mapOpen ? "Tutup peta" : "Pilih titik di peta"}
+          </button>
+          {mapOpen && (
+            <div className="dynamic-import">
+              <StoreMap
+                lat={geoLat !== "" ? parseFloat(geoLat) : null}
+                lng={geoLng !== "" ? parseFloat(geoLng) : null}
+                onPick={(la, ln) => {
+                  setGeoLat(la.toFixed(6));
+                  setGeoLng(ln.toFixed(6));
+                  setGeoMsg("Titik dipilih di peta — tekan Simpan Koordinat.");
+                }}
+              />
+              <p className="mt-1 text-xs text-gray-600">Klik peta untuk menandai titik lokasi toko.</p>
+            </div>
+          )}
           <button onClick={saveGeo} disabled={geoBusy} className="btn-primary w-full">
             Simpan Koordinat
           </button>
