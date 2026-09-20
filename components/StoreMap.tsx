@@ -40,10 +40,16 @@ export default function StoreMap({ lat, lng, onPick }: StoreMapProps) {
       if (cancelled || !divRef.current || mapRef.current) return;
       const start: [number, number] = lat != null && lng != null ? [lat, lng] : [-2.5, 118]; // Indonesia
       const map = L.map(divRef.current, { zoomControl: true }).setView(start, lat != null ? 17 : 5);
-      L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      const osm = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
         attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
         maxZoom: 19,
       }).addTo(map);
+      // satelit Esri World Imagery — citra lebih baru, gang/bangunan terlihat nyata (gratis, tanpa key)
+      const sat = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+        attribution: "Esri, Maxar, Earthstar Geographics",
+        maxZoom: 19,
+      });
+      L.control.layers({ "Jalan (OSM)": osm, "Satelit (Esri)": sat }, undefined, { position: "topleft" }).addTo(map);
       // circleMarker = tidak butuh asset icon (anti masalah bundler)
       const marker = L.circleMarker(start, {
         radius: 12, color: "#290024", weight: 2, fillColor: "#D4954D", fillOpacity: 0.8,
