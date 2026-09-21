@@ -93,8 +93,7 @@ const [showGeoNotice, setShowGeoNotice] = useState(false);
     }
     setSelected(match);
     setPin("");
-    // E9: popup informasi geofence — kasir/admin wajib di radius 25 m toko saat login
-    if (match.role === "kasir" || match.role === "admin") setShowGeoNotice(true);
+    // E9: popup geofence muncul SETELAH PIN diperiksa (saat lokasi di luar radius) — bukan di sini
   }
 
   const submit = async (value: string) => {
