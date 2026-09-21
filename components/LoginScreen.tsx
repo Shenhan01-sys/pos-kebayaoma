@@ -161,29 +161,32 @@ const [showGeoNotice, setShowGeoNotice] = useState(false);
     else setPin((p) => (p.length >= 6 ? p : p + k));
   };
 
+  // E9: popup geofence — render di KEDUA layar (username & PIN) supaya tetap tampil
+  // setelah login ditolak dan LoginScreen balik ke pilih nama.
+  const geoNoticeEl = showGeoNotice ? (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-6 backdrop-blur-sm">
+      <div className="card w-full max-w-[340px] p-5 text-center">
+        <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-apricot/20 text-2xl">📍</div>
+        <div className="mb-1 text-base font-extrabold text-ink">Login harus di dalam toko</div>
+        <p className="text-sm text-gray-600">
+          Akun <b className="text-ink">Kasir/Admin</b> hanya bisa login saat berada di
+          radius <b className="text-ink">25 m</b> dari outlet ({useData.getState().stores.map((t) => t.name).join(" / ") || "outlet"}).
+          Pastikan <b className="text-ink">GPS aktif</b> dan izin lokasi browser diizinkan.
+        </p>
+        <button
+          onClick={() => setShowGeoNotice(false)}
+          className="btn-primary mt-4 w-full"
+        >
+          Oke, mengerti
+        </button>
+      </div>
+    </div>
+  ) : null;
+
   if (selected) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-grad-cream p-6">
-        {/* E9: popup info geofence — tampil utk kasir/admin sebelum PIN */}
-        {showGeoNotice && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-6 backdrop-blur-sm">
-            <div className="card w-full max-w-[340px] p-5 text-center">
-              <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-apricot/20 text-2xl">📍</div>
-              <div className="mb-1 text-base font-extrabold text-ink">Login harus di dalam toko</div>
-              <p className="text-sm text-gray-600">
-                Akun <b className="text-ink">{roleLabel[selected.role]}</b> hanya bisa login saat berada di
-                radius <b className="text-ink">25 m</b> dari outlet ({useData.getState().stores.map((t) => t.name).join(" / ") || "outlet"}).
-                Pastikan <b className="text-ink">GPS aktif</b> dan izin lokasi browser diizinkan.
-              </p>
-              <button
-                onClick={() => setShowGeoNotice(false)}
-                className="btn-primary mt-4 w-full"
-              >
-                Oke, mengerti
-              </button>
-            </div>
-          </div>
-        )}
+        {geoNoticeEl}
         <div className="w-full max-w-[340px]">
           <button
             onClick={() => { setSelected(null); setPin(""); setError(null); setUsername(""); }}
@@ -251,6 +254,7 @@ const [showGeoNotice, setShowGeoNotice] = useState(false);
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-grad-cream p-6">
+      {geoNoticeEl}
       <div className="text-center">
         <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-3xl bg-violet text-2xl shadow-soft-lg">
           🪡
