@@ -140,7 +140,7 @@ export default function PrintBarcodeModal({
     )) return;
 
     // Generate barcode SVGs
-    const barcodeImgFor = (barcode: string, small = false) => {
+    const barcodeImgFor = (barcode: string, small = false, rotate = false) => {
       const canvas = document.createElement("canvas");
       JsBarcode(canvas, barcode, {
         format: "CODE128",
@@ -150,32 +150,32 @@ export default function PrintBarcodeModal({
         fontSize: small ? 7 : 10,
         margin: 0,
       });
-      return canvas.toDataURL("image/png");
+      if (!rotate) return canvas.toDataURL("image/png");
+      // putar 90° CW — panjang barcode mengikuti sisi TINGGI sel (sub-label portrait)
+      const rot = document.createElement("canvas");
+      rot.width = canvas.height;
+      rot.height = canvas.width;
+      const ctx = rot.getContext("2d")!;
+      ctx.translate(rot.width, 0);
+      ctx.rotate(Math.PI / 2);
+      ctx.drawImage(canvas, 0, 0);
+      return rot.toDataURL("image/png");
     };
 
     let labelHTML: string;
     // E15: satu "sub-label" = barcode + info (dipakai mode single maupun sel grid).
     // Portrait (h >= w) → barcode di atas, info di bawah (pas utk 25x45 / sel grid).
     const subLabelHTML = (label: (typeof labels)[0], w: number, h: number, small: boolean) => {
-      const img = barcodeImgFor(label.barcode, small);
-      if (h >= w) {
-        return `
-        <div class="sub portrait" style="width:${w}mm;height:${h}mm;">
-          <img src="${img}" style="max-width:92%;max-height:36%;" />
-          <div class="sub-info">
-            <div class="label-name">${label.name}</div>
-            ${label.color ? `<div class="label-color">${label.color}</div>` : ""}
-            <div class="label-size">${label.size}</div>
-            <div class="label-price">Rp ${label.price.toLocaleString("id-ID")}</div>
-          </div>
-        </div>`;
-      }
+      const img = barcodeImgFor(label.barcode, small, true);
+      // portrait: barcode DIPUTAR 90° — strip vertikal di kiri (panjang = tinggi sel),
+      // info horizontal di kanan (tetap terbaca normal)
       return `
-      <div class="sub" style="width:${w}mm;height:${h}mm;">
-        <div class="label-barcode"><img src="${img}" style="max-width:100%;max-height:${h * 0.6}mm;" /></div>
-        <div class="label-info">
+      <div class="sub portrait" style="width:${w}mm;height:${h}mm;">
+        <img class="rot" src="${img}" />
+        <div class="sub-info">
           <div class="label-name">${label.name}</div>
-          <div class="label-size">Size: ${label.size}</div>
+          ${label.color ? `<div class="label-color">${label.color}</div>` : ""}
+          <div class="label-size">${label.size}</div>
           <div class="label-price">Rp ${label.price.toLocaleString("id-ID")}</div>
         </div>
       </div>`;
@@ -250,13 +250,19 @@ export default function PrintBarcodeModal({
     overflow: hidden;
   }
   .sub.portrait {
-    flex-direction: column;
-    justify-content: center;
-    text-align: center;
+    flex-direction: row;
+    gap: 0.6mm;
   }
-  .sub.portrait img {
-    display: block;
-    margin: 0 auto 0.6mm;
+  .sub.portrait img.rot {
+    height: 97%;
+    width: auto;
+    max-width: 45%;
+    object-fit: contain;
+  }
+  .sub.portrait .sub-info {
+    flex: 1;
+    min-width: 0;
+    text-align: left;
   }
   .sub.portrait .label-name,
   .sub.portrait .label-size,
@@ -340,6 +346,7 @@ ${labelHTML}
       vendor?: string;
       image: string;
       ratio: number;
+      rotImage: string;
     }[] = [];
 
     allVariants.forEach(({ product, variant }) => {
@@ -357,6 +364,15 @@ ${labelHTML}
       });
       const image = canvas.toDataURL("image/png");
       const ratio = canvas.height / canvas.width; // aspect utk grid cells (anti gepeng)
+      // versi rotasi 90° CW utk sel portrait (panjang barcode = tinggi sel)
+      const rot = document.createElement("canvas");
+      rot.width = canvas.height;
+      rot.height = canvas.width;
+      const rctx = rot.getContext("2d")!;
+      rctx.translate(rot.width, 0);
+      rctx.rotate(Math.PI / 2);
+      rctx.drawImage(canvas, 0, 0);
+      const rotImage = rot.toDataURL("image/png");
 
       for (let c = 0; c < count; c++) {
         labels.push({
@@ -368,6 +384,7 @@ ${labelHTML}
           vendor: vendorFor(variant.id),
           image,
           ratio,
+          rotImage,
         });
       }
     });
@@ -397,20 +414,29 @@ ${labelHTML}
 
         const portrait = cellH >= cellW;
         if (portrait) {
-          // barcode di atas (penuh lebar sel, aspect terjaga), info di bawah
-          const bw = cellW - 4;
-          const bh = Math.min(bw / label.ratio, cellH * 0.42);
-          doc.addImage(label.image, "PNG", cx + (cellW - bw) / 2, cy + 2, bw, bh);
-          let ty = cy + 2 + bh + 4;
-          doc.setFont("helvetica", "bold").setFontSize(7).setTextColor(58, 20, 48);
-          doc.text(doc.splitTextToSize(label.name, cellW - 3).slice(0, 2), cx + cellW / 2, ty, { align: "center" });
-          ty += 3.2 * Math.min(2, doc.splitTextToSize(label.name, cellW - 3).length);
+          // barcode DIPUTAR 90°: strip vertikal di kiri (panjang = tinggi sel), info kanan
+          let rotH = cellH - 4;
+          let rotW = rotH * label.ratio; // lebar gambar rotasi = tinggi asli × ratio
+          if (rotW > cellW * 0.45) {
+            rotW = cellW * 0.45;
+            rotH = rotW / label.ratio;
+          }
+          doc.addImage(label.rotImage ?? label.image, "PNG", cx + 1.5, cy + (cellH - rotH) / 2, rotW, rotH);
+          const infoX = cx + 1.5 + rotW + 1.5;
+          const infoW = cellW - rotW - 5;
+          let ty = cy + 4;
+          doc.setFont("helvetica", "bold").setFontSize(6.5).setTextColor(58, 20, 48);
+          doc.text(doc.splitTextToSize(label.name, infoW).slice(0, 3), infoX, ty);
+          ty += 3 * Math.min(3, doc.splitTextToSize(label.name, infoW).length) + 1;
           doc.setFont("helvetica", "normal").setFontSize(5.5).setTextColor(100, 100, 100);
-          if (label.color) { doc.text(label.color, cx + cellW / 2, ty, { align: "center" }); ty += 3; }
-          doc.text(`Size: ${label.size}`, cx + cellW / 2, ty, { align: "center" });
+          if (label.color) { doc.text(label.color, infoX, ty); ty += 3; }
+          doc.text(`Size: ${label.size}`, infoX, ty);
           doc.setFont("helvetica", "bold").setFontSize(7).setTextColor(119, 85, 51);
-          doc.text(`Rp ${label.price.toLocaleString("id-ID")}`, cx + cellW / 2, cy + cellH - 2.5, { align: "center" });
-        } else {
+          doc.text(`Rp ${label.price.toLocaleString("id-ID")}`, infoX, cy + cellH - 4);
+          return;
+        }
+        // landscape (cellW >= cellH): barcode kiri, info kanan
+        {
           const infoX = cx + cellW * 0.62;
           const bw = infoX - cx - 3;
           const bh = Math.min(bw / label.ratio, cellH * 0.5);
