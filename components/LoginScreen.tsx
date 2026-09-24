@@ -164,7 +164,7 @@ const [showGeoNotice, setShowGeoNotice] = useState(false);
   // E9: popup geofence — render di KEDUA layar (username & PIN) supaya tetap tampil
   // setelah login ditolak dan LoginScreen balik ke pilih nama.
   const geoNoticeEl = showGeoNotice ? (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-6 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-6">
       <div className="card w-full max-w-[340px] p-5 text-center">
         <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-apricot/20 text-2xl">📍</div>
         <div className="mb-1 text-base font-extrabold text-ink">Login harus di dalam toko</div>

@@ -41,6 +41,18 @@ import {
 } from "@/lib/store-mappers";
 
 const generateLocalId = () => "local-" + Math.random().toString(36).slice(2, 10);
+
+// Perf (audit 2026-09-19): refetch transaksi realtime di-debounce 4 dtk —
+// beberapa event beruntun (checkout, realtime antar toko) cukup 1x fetch,
+// tidak menahan main thread perangkat low-end di tengah interaksi user.
+let __txRefetchTimer: ReturnType<typeof setTimeout> | null = null;
+function debouncedTxRefetch() {
+  if (__txRefetchTimer) clearTimeout(__txRefetchTimer);
+  __txRefetchTimer = setTimeout(() => {
+    __txRefetchTimer = null;
+    useData.getState().fetchTransactions();
+  }, 4000);
+}
 const STORE_ID = process.env.NEXT_PUBLIC_STORE_ID ?? "demo-store";
 
 // Re-export safeJson for backward compat (used inline in some mappers)
@@ -2498,14 +2510,14 @@ export const useData = create<DataState>()(
             'postgres_changes',
             { event: 'INSERT', schema: 'public', table: 'transactions', ...storeFilter },
             async () => {
-              await get().fetchTransactions();
+              debouncedTxRefetch();
             }
           )
           .on(
             'postgres_changes',
             { event: 'UPDATE', schema: 'public', table: 'transactions', ...storeFilter },
             async () => {
-              await get().fetchTransactions();
+              debouncedTxRefetch();
             }
           )
           .on(
@@ -2525,6 +2537,8 @@ export const useData = create<DataState>()(
       storage: createJSONStorage(() => quotaSafeStorage),
       // Persist irit: foto bukti tetap di Supabase/in-memory, riwayat dibatasi.
       // Mencegah QuotaExceededError yang dulu bikin popup pembayaran stuck.
+      // Perf: makin kecil = JSON.stringify + tulis localStorage makin ringan
+      // (jank di perangkat low-end saat realtime masuk — audit perf 2026-09-19).
       partialize: (s) => ({
         products: s.products,
         categories: s.categories,
@@ -2532,8 +2546,8 @@ export const useData = create<DataState>()(
         staff: s.staff,
         stores: s.stores,
         shifts: s.shifts,
-        transactions: s.transactions.slice(0, 100).map(stripTxForPersist),
-        movements: s.movements.slice(0, 200),
+        transactions: s.transactions.slice(0, 30).map(stripTxForPersist),
+        movements: s.movements.slice(0, 50),
       }),
     }
   )

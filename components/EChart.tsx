@@ -48,7 +48,8 @@ export default function EChart({
   }, []);
 
   useEffect(() => {
-    chart.current?.setOption(option, true);
+    // Perf: animation off — chart realtime re-render tanpa animasi (jank di low-end).
+    chart.current?.setOption({ ...option, animation: false }, true);
   }, [option]);
 
   return <div ref={ref} style={{ height }} className={className} />;

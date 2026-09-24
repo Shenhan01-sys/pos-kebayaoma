@@ -390,7 +390,7 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
 
   if (paid) {
     return (
-      <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 backdrop-blur-sm sm:items-center sm:p-4">
+      <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4">
         <div className="max-h-full w-full max-w-[380px] overflow-auto rounded-t-4xl bg-white p-5 shadow-soft-xl sm:rounded-3xl">
           <div className="mb-3 flex flex-col items-center text-center">
             <span className="flex h-14 w-14 items-center justify-center rounded-full bg-success text-white shadow-glow">
@@ -460,7 +460,7 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
 
   if (pendingId) {
     return (
-      <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 backdrop-blur-sm sm:items-center sm:p-4">
+      <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4">
         <div className="w-full max-w-[380px] overflow-hidden rounded-t-4xl bg-white p-5 text-center shadow-soft-xl sm:rounded-3xl">
           <div className="mb-3 flex flex-col items-center">
             <span className="flex h-12 w-12 animate-pulse items-center justify-center rounded-full bg-apricot/20 text-apricot">
@@ -500,7 +500,7 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 backdrop-blur-sm sm:items-center sm:p-4">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4">
       <div className="w-full max-w-[440px] overflow-hidden rounded-t-4xl bg-white shadow-soft-xl sm:rounded-3xl">
         <div className="flex items-center justify-between bg-beige px-5 py-4">
           <div>

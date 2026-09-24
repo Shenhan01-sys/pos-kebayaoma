@@ -21,7 +21,7 @@
 @layer components {
   /* ---------- Card ---------- */
   .card {
-    @apply rounded-3xl bg-white/90 shadow-soft ring-1 ring-black/5 backdrop-blur-sm;
+    @apply rounded-3xl bg-white shadow-soft ring-1 ring-black/5;
   }
   .card-pad {
     @apply p-4 sm:p-5;
@@ -58,7 +58,7 @@
 
   /* ---------- Inputs ---------- */
   .input {
-    @apply w-full rounded-2xl border border-black/10 bg-white/80 px-3.5 py-2.5 text-sm text-ink shadow-inset outline-none transition placeholder:text-gray-400 focus:border-apricot focus:ring-2 focus:ring-apricot/30;
+    @apply w-full rounded-2xl border border-black/10 bg-white px-3.5 py-2.5 text-sm text-ink shadow-inset outline-none transition placeholder:text-gray-400 focus:border-apricot focus:ring-2 focus:ring-apricot/30;
   }
   /* Backwards-compatible alias for legacy usages */
   .inp { @apply input; }

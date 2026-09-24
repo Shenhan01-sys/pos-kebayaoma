@@ -174,7 +174,7 @@ export default function ShiftsPage() {
 
       {/* Open shift modal */}
       {openModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm" onClick={() => setOpenModal(false)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setOpenModal(false)}>
           <div className="w-full max-w-sm rounded-3xl bg-white p-5 shadow-soft-xl" onClick={(e) => e.stopPropagation()}>
             <h2 className="text-lg font-extrabold text-ink">Buka Shift</h2>
             <p className="text-sm text-gray-600">Masukkan modal awal kasir untuk shift ini.</p>

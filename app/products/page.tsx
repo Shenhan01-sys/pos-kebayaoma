@@ -79,7 +79,7 @@ export default function ProductsPage() {
       </div>
 
       {(adding || editing) && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 backdrop-blur-sm sm:items-center sm:p-4">
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4">
           <div className="max-h-full w-full max-w-[640px] overflow-auto rounded-t-4xl bg-white p-5 shadow-soft-xl sm:rounded-3xl">
             <div className="mb-3 flex items-center justify-between">
               <h3 className="text-lg font-bold text-ink">{editing ? "Edit Produk" : "Tambah Produk"}</h3>
@@ -93,7 +93,7 @@ export default function ProductsPage() {
       )}
 
       {toDelete && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 backdrop-blur-sm sm:items-center sm:p-4">
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4">
           <div className="w-full max-w-[360px] rounded-t-4xl bg-white p-5 text-center shadow-soft-xl sm:rounded-3xl">
             <p className="mb-4 text-ink">Hapus produk <b>{toDelete.name}</b>?</p>
             <div className="flex gap-2">
@@ -113,7 +113,7 @@ export default function ProductsPage() {
       )}
 
       {qr && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 backdrop-blur-sm sm:items-center sm:p-4">
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4">
           <div className="w-full max-w-[360px] rounded-t-4xl bg-white p-5 text-center shadow-soft-xl sm:rounded-3xl">
             <h3 className="mb-3 font-bold text-ink">Label QR — {qr}</h3>
             <div className="flex justify-center rounded-2xl border border-black/5 bg-beige/50 p-3">

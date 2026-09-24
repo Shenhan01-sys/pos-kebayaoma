@@ -400,7 +400,7 @@ export default function InventoryPage() {
       )}
 
       {trFormOpen && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 backdrop-blur-sm sm:items-center sm:p-4">
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4">
           <div className="w-full max-w-[380px] rounded-t-4xl bg-white p-5 shadow-soft-xl sm:rounded-3xl">
             <h3 className="mb-4 text-lg font-bold text-ink">Ajukan Transfer</h3>
             <div className="mb-3 grid grid-cols-2 gap-2">
@@ -449,7 +449,7 @@ export default function InventoryPage() {
       )}
 
       {stockOpen && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 backdrop-blur-sm sm:items-center sm:p-4">
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4">
           <div className="w-full max-w-[380px] rounded-t-4xl bg-white p-5 shadow-soft-xl sm:rounded-3xl">
             <h3 className="mb-1 text-lg font-bold text-ink">Stok: {stockOpen.productName}</h3>
             <p className="mb-4 text-xs text-gray-600">{stockOpen.sku} · stok saat ini: <span className="font-bold text-ink">{stockOpen.current}</span></p>

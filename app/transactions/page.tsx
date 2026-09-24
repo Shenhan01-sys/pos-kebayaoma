@@ -529,7 +529,7 @@ export default function TransactionsPage() {
       {/* Photo proof viewer */}
       {photoView && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
           onClick={() => setPhotoView(null)}
         >
           <div
@@ -554,7 +554,7 @@ export default function TransactionsPage() {
 
       {/* Cancel / Refund confirmation */}
       {confirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-[360px] rounded-3xl bg-white p-5 text-center shadow-soft-xl">
             <span className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-danger/15 text-danger">
               <Icon name="alert" size={24} />
@@ -591,7 +591,7 @@ export default function TransactionsPage() {
 
       {/* E6: Pelunasan Pre-order */}
       {settle && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-[360px] rounded-3xl bg-white p-5 shadow-soft-xl">
             <h3 className="mb-1 text-lg font-bold text-ink">Lunasi Pre-order</h3>
             <p className="mb-3 text-sm text-gray-600">

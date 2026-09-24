@@ -265,7 +265,7 @@ export default function PosPage() {
             <button
               key={p.id}
               onClick={() => setPicker(p)}
-              className="group w-[calc(50%-0.25rem)] shrink-0 overflow-hidden rounded-3xl bg-white/90 text-left shadow-soft ring-1 ring-black/5 backdrop-blur-sm transition hover:-translate-y-0.5 hover:shadow-soft-lg sm:w-[calc(33.333%-0.5rem)] xl:w-[calc(25%-0.563rem)]"
+              className="group w-[calc(50%-0.25rem)] shrink-0 overflow-hidden rounded-3xl bg-white text-left shadow-soft ring-1 ring-black/5 transition hover:-translate-y-0.5 hover:shadow-soft-lg sm:w-[calc(33.333%-0.5rem)] xl:w-[calc(25%-0.563rem)]"
             >
               <div
                 className={`relative flex h-28 items-center justify-center overflow-hidden rounded-t-3xl text-white ${
@@ -320,7 +320,7 @@ export default function PosPage() {
       </section>
 
       {/* Cart */}
-      <aside className="flex w-full shrink-0 flex-col rounded-3xl bg-white/90 p-4 shadow-soft-lg ring-1 ring-black/5 backdrop-blur-md lg:w-80">
+      <aside className="flex w-full shrink-0 flex-col rounded-3xl bg-white p-4 shadow-soft-lg ring-1 ring-black/5 lg:w-80">
         <div className="mb-2 flex items-center justify-between">
           <h2 className="text-lg font-bold text-ink">Keranjang</h2>
           {lines.length > 0 && <span className="pill-apricot">{lines.length}</span>}
@@ -404,7 +404,7 @@ export default function PosPage() {
 
       {/* Variant picker */}
       {picker && (
-        <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4">
+        <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4">
           <div className="w-full max-w-[440px] rounded-t-4xl bg-white p-5 shadow-soft-xl sm:rounded-3xl">
             <div className="mb-3 flex items-center justify-between">
               <h3 className="text-lg font-bold text-ink">{picker.name}</h3>
@@ -470,7 +470,7 @@ export default function PosPage() {
       )}
 
       {customOpen && (
-        <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4">
+        <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4">
           <div className="w-full max-w-[380px] rounded-t-4xl bg-white p-5 shadow-soft-xl sm:rounded-3xl">
             <h3 className="mb-3 text-lg font-bold text-ink">Tambah Item Custom</h3>
             <label className="mb-1 block text-sm text-olive">Series (dari catalog)</label>
