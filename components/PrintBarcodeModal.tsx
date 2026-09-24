@@ -163,25 +163,35 @@ export default function PrintBarcodeModal({
     };
 
     let labelHTML: string;
-    // E15: satu "sub-label" = barcode + info (dipakai mode single maupun sel grid).
-    // Portrait (h >= w) → barcode di atas, info di bawah (pas utk 25x45 / sel grid).
-    const subLabelHTML = (label: (typeof labels)[0], w: number, h: number, small: boolean) => {
-      const img = barcodeImgFor(label.barcode, small, true);
-      // portrait: barcode DIPUTAR 90° — strip vertikal di kiri (panjang = tinggi sel),
-      // info horizontal di kanan (tetap terbaca normal)
-      return `
-      <div class="sub portrait" style="width:${w}mm;height:${h}mm;">
-        <img class="rot" src="${img}" />
-        <div class="sub-info">
+    // E15 grid: kartu didesain LANDSCAPE (barcode kiri, info kanan) lalu SELURUH kartu
+    // diputar 90° ke kanan di dalam sel portrait — kayak hangtag (konten menghadap samping).
+    const card90HTML = (label: (typeof labels)[0], cw: number, ch: number) => `
+      <div class="card90" style="width:${ch}mm;height:${cw}mm;">
+        <div class="label-barcode"><img src="${barcodeImgFor(label.barcode, true)}" style="max-width:100%;max-height:${cw * 0.85}mm;" /></div>
+        <div class="label-info">
           <div class="label-name">${label.name}</div>
           ${label.color ? `<div class="label-color">${label.color}</div>` : ""}
-          <div class="label-size">${label.size}</div>
+          <div class="label-size">Size: ${label.size}</div>
+          <div class="label-price">Rp ${label.price.toLocaleString("id-ID")}</div>
+        </div>
+      </div>`;
+    // E13 single: label utuh tegak (barcode kiri, info kanan) — tidak dirotasi
+    const uprightHTML = (label: (typeof labels)[0], w: number, h: number, small: boolean) => {
+      const img = barcodeImgFor(label.barcode, small);
+      return `
+      <div class="sub" style="width:${w}mm;height:${h}mm;">
+        <div class="label-barcode"><img src="${img}" style="max-width:100%;max-height:${h * 0.6}mm;" /></div>
+        <div class="label-info">
+          <div class="label-name">${label.name}</div>
+          ${label.color ? `<div class="label-color">${label.color}</div>` : ""}
+          ${label.vendor ? `<div class="label-color">Vend: ${label.vendor}</div>` : ""}
+          <div class="label-size">Size: ${label.size}</div>
           <div class="label-price">Rp ${label.price.toLocaleString("id-ID")}</div>
         </div>
       </div>`;
     };
     if (isGrid) {
-      // E15: 1 halaman = 1 KERTAS label (mis. 10x15cm) berisi grid sub-label 25x45
+      // E15: 1 halaman = 1 KERTAS label (mis. 10x15cm) berisi 9 kartu yang diputar 90°
       const cellW = labelWidth / gridCols;
       const cellH = labelHeight / gridRows;
       const chunks: (typeof labels)[] = [];
@@ -190,7 +200,7 @@ export default function PrintBarcodeModal({
         .map(
           (cells) => `
         <div class="label sheet" style="width:${labelWidth}mm;height:${labelHeight}mm;grid-template-columns:repeat(${gridCols},1fr);grid-template-rows:repeat(${gridRows},1fr);">
-          ${cells.map((l) => `<div class="cell">${subLabelHTML(l, cellW - 1.5, cellH - 1.5, true)}</div>`).join("")}
+          ${cells.map((l) => `<div class="cell">${card90HTML(l, cellW, cellH)}</div>`).join("")}
         </div>`
         )
         .join("");
@@ -198,7 +208,7 @@ export default function PrintBarcodeModal({
       labelHTML = labels
         .map((label) => `
         <div class="label" style="width:${labelWidth}mm;height:${labelHeight}mm;">
-          ${subLabelHTML(label, labelWidth - 2, labelHeight - 2, false)}
+          ${uprightHTML(label, labelWidth - 2, labelHeight - 2, false)}
         </div>`)
         .join("");
     }
@@ -237,10 +247,35 @@ export default function PrintBarcodeModal({
   .cell {
     box-sizing: border-box;
     border: 0.3mm dashed #b0b0b0;
+    position: relative;
+    overflow: hidden;
+  }
+  /* kartu landscape (w=h-sel, h=w-sel) diputar 90° CW di tengah sel */
+  .card90 {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) rotate(90deg);
+    display: flex;
+    align-items: center;
+    box-sizing: border-box;
+    padding: 0.5mm;
+    overflow: hidden;
+  }
+  .card90 .label-barcode {
+    flex: 0 0 68%;
     display: flex;
     align-items: center;
     justify-content: center;
-    overflow: hidden;
+  }
+  .card90 .label-barcode img {
+    max-width: 100%;
+    max-height: 100%;
+  }
+  .card90 .label-info {
+    flex: 1;
+    min-width: 0;
+    padding-left: 1mm;
   }
   .sub {
     display: flex;
@@ -249,38 +284,8 @@ export default function PrintBarcodeModal({
     padding: 0.4mm;
     overflow: hidden;
   }
-  .sub.portrait {
-    flex-direction: row;
-    gap: 0.6mm;
-  }
-  .sub.portrait img.rot {
-    height: 97%;
-    width: auto;
-    max-width: 45%;
-    object-fit: contain;
-  }
-  .sub.portrait .sub-info {
-    flex: 1;
-    min-width: 0;
-    text-align: left;
-  }
-  .sub.portrait .label-name,
-  .sub.portrait .label-size,
-  .sub.portrait .label-price {
-    max-width: 100%;
-  }
-  .sub-info {
-    flex: 1;
-    min-width: 0;
-  }
-  .label-barcode {
+  .sub .label-barcode {
     flex: 0 0 60%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-  .label-barcode {
-    flex: 0 0 65%;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -319,7 +324,7 @@ ${labelHTML}
 
   // Print handler - single: PDF A4 berisi banyak label; grid (E15): PDF per-label
   // seukuran label fisik (proyeksi 1:1 ke printer label)
-  const handlePrint = () => {
+  const handlePrint = async () => {
     const { w: labelWidth, h: labelHeight } = LABEL_DIMS[labelSize];
     const isGrid = printMode === "grid";
     const margin = 5;
@@ -390,7 +395,53 @@ ${labelHTML}
     });
 
     // Draw labels in grid
-    labels.forEach((label, i) => {
+    const cardCache = new Map<string, string>();
+    const card90Image = async (label: (typeof labels)[0]): Promise<string> => {
+      if (cardCache.has(label.barcode)) return cardCache.get(label.barcode)!;
+      const { default: html2canvas } = await import("html2canvas");
+      const holder = document.createElement("div");
+      holder.style.cssText = "position:fixed;left:-9999px;top:0;";
+      holder.innerHTML = `
+        <div style="width:340px;height:188px;box-sizing:border-box;display:flex;align-items:center;background:#fff;font-family:Helvetica,Arial,sans-serif;">
+          <div style="flex:0 0 66%;display:flex;align-items:center;justify-content:center;padding:8px;min-width:0;">
+            <img data-bc />
+          </div>
+          <div style="flex:1;padding:0 10px 0 2px;min-width:0;">
+            <div style="font-weight:bold;font-size:15px;color:#3a1430;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${label.name}</div>
+            ${label.color ? `<div style="font-size:11px;color:#666;">${label.color}</div>` : ""}
+            <div style="font-size:11px;color:#666;">Size: ${label.size}</div>
+            <div style="font-size:14px;font-weight:bold;color:#775533;margin-top:4px;">Rp ${label.price.toLocaleString("id-ID")}</div>
+          </div>
+        </div>`;
+      document.body.appendChild(holder);
+      const bc = holder.querySelector("img[data-bc]") as unknown as HTMLCanvasElement;
+      JsBarcode(bc as unknown as HTMLCanvasElement, label.barcode, {
+        format: "CODE128",
+        width: 2,
+        height: 56,
+        displayValue: true,
+        fontSize: 13,
+        margin: 0,
+      });
+      const card = await html2canvas(holder.firstChild as HTMLElement, { scale: 2, backgroundColor: "#ffffff", logging: false });
+      holder.remove();
+      // putar seluruh kartu 90° CW → portrait pas sel
+      const rot = document.createElement("canvas");
+      rot.width = card.height;
+      rot.height = card.width;
+      const rctx = rot.getContext("2d")!;
+      rctx.translate(rot.width, 0);
+      rctx.rotate(Math.PI / 2);
+      rctx.drawImage(card, 0, 0);
+      const url = rot.toDataURL("image/png");
+      cardCache.set(label.barcode, url);
+      return url;
+    };
+
+    let cellIdx = 0;
+    for (const label of labels) {
+      const i = cellIdx;
+      cellIdx++;
       if (i > 0 && i % perPage === 0) {
         if (isGrid) doc.addPage([labelWidth, labelHeight], "portrait");
         else doc.addPage("a4", "portrait");
@@ -401,7 +452,7 @@ ${labelHTML}
       const row = Math.floor(posInPage / cols);
 
       if (isGrid) {
-        // E15: halaman = 1 kertas label; tiap sel = SUB-LABEL lengkap (barcode+info)
+        // E15: halaman = 1 kertas label; tiap sel = KARTU UTUH dirotasi 90° CW (raster)
         const cellW = labelWidth / cols;
         const cellH = labelHeight / rows;
         const cx = col * cellW;
@@ -412,45 +463,9 @@ ${labelHTML}
         doc.rect(cx, cy, cellW, cellH);
         doc.setLineDashPattern([], 0);
 
-        const portrait = cellH >= cellW;
-        if (portrait) {
-          // barcode DIPUTAR 90°: strip vertikal di kiri (panjang = tinggi sel), info kanan
-          let rotH = cellH - 4;
-          let rotW = rotH * label.ratio; // lebar gambar rotasi = tinggi asli × ratio
-          if (rotW > cellW * 0.45) {
-            rotW = cellW * 0.45;
-            rotH = rotW / label.ratio;
-          }
-          doc.addImage(label.rotImage ?? label.image, "PNG", cx + 1.5, cy + (cellH - rotH) / 2, rotW, rotH);
-          const infoX = cx + 1.5 + rotW + 1.5;
-          const infoW = cellW - rotW - 5;
-          let ty = cy + 4;
-          doc.setFont("helvetica", "bold").setFontSize(6.5).setTextColor(58, 20, 48);
-          doc.text(doc.splitTextToSize(label.name, infoW).slice(0, 3), infoX, ty);
-          ty += 3 * Math.min(3, doc.splitTextToSize(label.name, infoW).length) + 1;
-          doc.setFont("helvetica", "normal").setFontSize(5.5).setTextColor(100, 100, 100);
-          if (label.color) { doc.text(label.color, infoX, ty); ty += 3; }
-          doc.text(`Size: ${label.size}`, infoX, ty);
-          doc.setFont("helvetica", "bold").setFontSize(7).setTextColor(119, 85, 51);
-          doc.text(`Rp ${label.price.toLocaleString("id-ID")}`, infoX, cy + cellH - 4);
-          return;
-        }
-        // landscape (cellW >= cellH): barcode kiri, info kanan
-        {
-          const infoX = cx + cellW * 0.62;
-          const bw = infoX - cx - 3;
-          const bh = Math.min(bw / label.ratio, cellH * 0.5);
-          doc.addImage(label.image, "PNG", cx + 1.5, cy + (cellH - bh) / 2 - 2, bw, bh);
-          doc.setFont("helvetica", "normal").setFontSize(5.5).setTextColor(80, 80, 80);
-          doc.text(label.barcode, cx + 1.5 + bw / 2, cy + (cellH - bh) / 2 + bh, { align: "center" });
-          doc.setFont("helvetica", "bold").setFontSize(7).setTextColor(58, 20, 48);
-          doc.text(doc.splitTextToSize(label.name, cellW - (infoX - cx) - 2).slice(0, 2), infoX, cy + 5);
-          doc.setFont("helvetica", "normal").setFontSize(5.5).setTextColor(100, 100, 100);
-          doc.text(`Size: ${label.size}`, infoX, cy + 12);
-          doc.setFont("helvetica", "bold").setFontSize(7).setTextColor(119, 85, 51);
-          doc.text(`Rp ${label.price.toLocaleString("id-ID")}`, infoX, cy + cellH - 4);
-        }
-        return;
+        const cardImg = await card90Image(label);
+        doc.addImage(cardImg, "PNG", cx + 0.6, cy + 0.6, cellW - 1.2, cellH - 1.2);
+        continue;
       }
 
       const x = margin + col * (labelWidth + gap);
@@ -503,7 +518,7 @@ ${labelHTML}
       doc.setFontSize(8);
       doc.setTextColor(119, 85, 51); // #775533
       doc.text(`Rp ${label.price.toLocaleString("id-ID")}`, infoX, y + labelHeight - 4);
-    });
+    }
 
     // Download PDF
     doc.save("barcode-labels.pdf");
