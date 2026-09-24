@@ -25,7 +25,18 @@ export default function PrintBarcodeModal({
   const [selectedVariants, setSelectedVariants] = useState<Record<string, number>>({});
   // E13: default 40x20 — pas untuk RPP02N (kertas 58mm, area cetak ~48mm, feed max 20mm).
   // 60x30/50x25 terlalu lebar/tinggi → printer feed nonstop mencari gap sensor.
-  const [labelSize, setLabelSize] = useState<"60x30" | "50x25" | "40x20">("40x20");
+  // E15: +25x45 (roll Xprinter XP-420B, 25mm lebar × 45mm tinggi portrait).
+  const [labelSize, setLabelSize] = useState<"60x30" | "50x25" | "40x20" | "25x45">("25x45");
+  const LABEL_DIMS: Record<string, { w: number; h: number }> = {
+    "60x30": { w: 60, h: 30 },
+    "50x25": { w: 50, h: 25 },
+    "40x20": { w: 40, h: 20 },
+    "25x45": { w: 25, h: 45 },
+  };
+  // E15: mode cetak — single (1 barcode per label, auto-scaled) atau grid (banyak sel, qty per barcode)
+  const [printMode, setPrintMode] = useState<"single" | "grid">("single");
+  const [gridCols, setGridCols] = useState(3);
+  const [gridRows, setGridRows] = useState(3);
 
   // Get products to print
   const productsToPrint = productId === "all" 
@@ -78,10 +89,11 @@ export default function PrintBarcodeModal({
 
   // Direct print via browser — supports thermal printer (Bluetooth/USB/WiFi)
   const handleDirectPrint = () => {
-    const labelWidth = labelSize === "60x30" ? 60 : labelSize === "50x25" ? 50 : 40;
-    const labelHeight = labelSize === "60x30" ? 30 : labelSize === "50x25" ? 25 : 20;
+    const { w: labelWidth, h: labelHeight } = LABEL_DIMS[labelSize];
+    const isGrid = printMode === "grid";
+    const perLabel = gridCols * gridRows;
 
-    // Collect labels
+    // Collect labels (single) / cells (grid)
     const labels: { name: string; color?: string; size: string; price: number; barcode: string; vendor?: string; }[] = [];
     allVariants.forEach(({ product, variant }) => {
       const count = selectedVariants[variant.id] || 0;
@@ -109,25 +121,61 @@ export default function PrintBarcodeModal({
       );
       if (!ok) return;
     }
-    if (!confirm(`Print ${labels.length} label (${labelWidth}x${labelHeight}mm) via printer?`)) return;
+
+    // E15: grid mode —peringatan scannability: CODE128 butuh ±0.125mm per modul di 203dpi.
+    let gridWarn = "";
+    if (isGrid) {
+      const cellW = (labelWidth - 1) / gridCols; // -1mm padding
+      const longest = Math.max(...labels.map((l) => l.barcode.length));
+      const minMm = 0.125 * (11 * longest + 35) + 2;
+      if (cellW < minMm) {
+        gridWarn = `\n⚠️ Kode terpanjang (${longest} karakter) butuh ±${minMm.toFixed(0)}mm — sel grid ini hanya ${cellW.toFixed(0)}mm.\nBarcode bisa gagal discan! Kurangi jumlah kolom atau pakai mode Single.`;
+      }
+    }
+    if (!confirm(
+      isGrid
+        ? `Print ${labels.length} barcode dalam ${Math.ceil(labels.length / perLabel)} label grid ${gridCols}×${gridRows} (${labelWidth}x${labelHeight}mm)?${gridWarn}`
+        : `Print ${labels.length} label (${labelWidth}x${labelHeight}mm) via printer?`
+    )) return;
 
     // Generate barcode SVGs
-    const labelHTML = labels.map((label) => {
+    const barcodeImgFor = (barcode: string, small = false) => {
       const canvas = document.createElement("canvas");
-      JsBarcode(canvas, label.barcode, {
+      JsBarcode(canvas, barcode, {
         format: "CODE128",
-        width: 2,
-        height: 50,
+        width: small ? 1 : 2,
+        height: small ? 28 : 50,
         displayValue: true,
-        fontSize: 10,
+        fontSize: small ? 7 : 10,
         margin: 0,
       });
-      const barcodeImg = canvas.toDataURL("image/png");
+      return canvas.toDataURL("image/png");
+    };
 
-      return `
+    let labelHTML: string;
+    if (isGrid) {
+      // E15: 1 label fisik = grid cols×rows berisi barcode (border tiap sel utk potong)
+      const cellHTML = (label: (typeof labels)[0]) => `
+        <div class="cell">
+          <img src="${barcodeImgFor(label.barcode, true)}" />
+          <div class="cap">${label.name} ${label.size ? `· ${label.size}` : ""}</div>
+        </div>`;
+      const chunks: (typeof labels)[] = [];
+      for (let i = 0; i < labels.length; i += perLabel) chunks.push(labels.slice(i, i + perLabel));
+      labelHTML = chunks
+        .map(
+          (cells) => `
+        <div class="label grid" style="width:${labelWidth}mm;height:${labelHeight}mm;">
+          ${cells.map(cellHTML).join("")}
+        </div>`
+        )
+        .join("");
+    } else {
+      labelHTML = labels
+        .map((label) => `
         <div class="label" style="width:${labelWidth}mm;height:${labelHeight}mm;">
           <div class="label-barcode">
-            <img src="${barcodeImg}" style="max-width:100%;max-height:${labelHeight * 0.6}mm;" />
+            <img src="${barcodeImgFor(label.barcode)}" style="max-width:100%;max-height:${labelHeight * 0.6}mm;" />
           </div>
           <div class="label-info">
             <div class="label-name">${label.name}</div>
@@ -136,8 +184,9 @@ export default function PrintBarcodeModal({
             <div class="label-size">Size: ${label.size}</div>
             <div class="label-price">Rp ${label.price.toLocaleString("id-ID")}</div>
           </div>
-        </div>`;
-    }).join("");
+        </div>`)
+        .join("");
+    }
 
     const printWindow = window.open("", "_blank", "width=400,height=600");
     if (!printWindow) {
@@ -167,6 +216,35 @@ export default function PrintBarcodeModal({
     padding: 1mm;
     page-break-after: always;
     overflow: hidden;
+    border: 0.3mm dashed #b0b0b0;
+  }
+  .label.grid {
+    display: grid;
+    padding: 0.5mm;
+    gap: 0;
+  }
+  .cell {
+    box-sizing: border-box;
+    border: 0.25mm dashed #b0b0b0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    padding: 0.3mm;
+  }
+  .cell img {
+    max-width: 94%;
+    max-height: 72%;
+  }
+  .cell .cap {
+    font-size: 5pt;
+    line-height: 1.1;
+    color: #3a1430;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
   }
   .label-barcode {
     flex: 0 0 65%;
@@ -430,11 +508,12 @@ ${labelHTML}
               <h3 className="text-sm font-semibold text-[#3a1430] mb-3">
                 Label Size:
               </h3>
-              <div className="flex gap-3">
+              <div className="flex flex-wrap gap-3">
                 {[
-                  { value: "60x30", label: "60mm x 30mm", desc: "Lebih Lega (Recommended)" },
+                  { value: "25x45", label: "25mm x 45mm", desc: "Roll Xprinter (portrait)" },
+                  { value: "60x30", label: "60mm x 30mm", desc: "Lebih Lega" },
                   { value: "50x25", label: "50mm x 25mm", desc: "Memanjang" },
-                  { value: "40x20", label: "40mm x 20mm", desc: "Minimalis" },
+                  { value: "40x20", label: "40mm x 20mm", desc: "RPP02N" },
                 ].map((size) => (
                   <label key={size.value} className="flex-1 cursor-pointer">
                     <input
@@ -452,6 +531,60 @@ ${labelHTML}
                   </label>
                 ))}
               </div>
+            </div>
+
+            {/* Print Mode (E15) */}
+            <div className="mb-6">
+              <h3 className="text-sm font-semibold text-[#3a1430] mb-3">Mode Cetak:</h3>
+              <div className="flex gap-3 mb-3">
+                {[
+                  { value: "single", label: "Single", desc: "1 barcode + info per label" },
+                  { value: "grid", label: "Grid", desc: "Banyak barcode per label" },
+                ].map((m) => (
+                  <label key={m.value} className="flex-1 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="print-mode"
+                      value={m.value}
+                      checked={printMode === m.value}
+                      onChange={() => setPrintMode(m.value as any)}
+                      className="peer hidden"
+                    />
+                    <div className="p-3 border-2 border-gray-200 rounded-xl peer-checked:border-[#775533] peer-checked:bg-[#775533]/5 text-center hover:bg-gray-50 transition">
+                      <div className="font-semibold text-sm">{m.label}</div>
+                      <div className="text-xs text-gray-600 mt-1">{m.desc}</div>
+                    </div>
+                  </label>
+                ))}
+              </div>
+              {printMode === "grid" && (
+                <div className="flex items-center gap-4 p-3 bg-[#F2F5E2] rounded-xl">
+                  <label className="text-sm">
+                    Kolom:{" "}
+                    <select
+                      value={gridCols}
+                      onChange={(e) => setGridCols(Number(e.target.value))}
+                      className="px-2 py-1 border border-gray-300 rounded-lg"
+                    >
+                      {[1, 2, 3].map((n) => <option key={n} value={n}>{n}</option>)}
+                    </select>
+                  </label>
+                  <label className="text-sm">
+                    Baris:{" "}
+                    <select
+                      value={gridRows}
+                      onChange={(e) => setGridRows(Number(e.target.value))}
+                      className="px-2 py-1 border border-gray-300 rounded-lg"
+                    >
+                      {[1, 2, 3, 4].map((n) => <option key={n} value={n}>{n}</option>)}
+                    </select>
+                  </label>
+                  <span className="text-xs text-gray-600">
+                    {gridCols * gridRows} barcode per label — qty tiap barcode diatur di daftar atas.
+                    ⚠️ Sel terlalu sempit = barcode bisa gagal discan (lihat peringatan saat print).
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* Preview */}
@@ -489,13 +622,20 @@ ${labelHTML}
             <div className="p-4 bg-blue-50 rounded-xl">
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="text-sm text-gray-600">Total Labels:</div>
+                  <div className="text-sm text-gray-600">
+                    {printMode === "grid" ? "Total Barcode:" : "Total Labels:"}
+                  </div>
                   <div className="text-2xl font-bold text-blue-700">{totalLabels}</div>
+                  {printMode === "grid" && (
+                    <div className="text-xs text-gray-600">
+                      ≈ {Math.ceil(totalLabels / (gridCols * gridRows))} label fisik ({gridCols}×{gridRows})
+                    </div>
+                  )}
                 </div>
                 <div className="text-right">
                   <div className="text-sm text-gray-600">Estimasi Waktu:</div>
                   <div className="text-lg font-semibold text-gray-800">
-                    ~{totalLabels * 3} detik
+                    ~{(printMode === "grid" ? Math.ceil(totalLabels / (gridCols * gridRows)) : totalLabels) * 3} detik
                   </div>
                 </div>
               </div>
