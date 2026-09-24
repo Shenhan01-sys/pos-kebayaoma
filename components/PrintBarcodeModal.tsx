@@ -399,42 +399,59 @@ ${labelHTML}
     });
 
     // Draw labels in grid
-    // raster kartu landscape (html2canvas) → rotasi 90° CW → identik dgn direct print
+    // raster kartu digambar MANUAL ke canvas 2D (tanpa html2canvas — anti error
+    // "cloned iframe" di production) → rotasi 90° CW → identik dgn direct print
     const cardCache = new Map<string, string>();
-    const card90Image = async (label: (typeof labels)[0], cellW: number, cellH: number): Promise<string> => {
+    const card90Image = (label: (typeof labels)[0], cellW: number, cellH: number): string => {
       if (cardCache.has(label.barcode)) return cardCache.get(label.barcode)!;
-      const { default: html2canvas } = await import("html2canvas");
       const iw = cellH - 1; // kartu landscape: lebar = tinggi sel
       const ih = cellW - 1; // tinggi kartu = lebar sel
-      // px (96dpi × 2 utk ketajaman)
-      const pw = Math.round(iw * 7.56);
+      const pw = Math.round(iw * 7.56); // 96dpi × 2 (ketajaman utk 203dpi printer)
       const ph = Math.round(ih * 7.56);
-      const holder = document.createElement("div");
-      holder.style.cssText = "position:fixed;left:-9999px;top:0;";
-      holder.innerHTML = `
-        <div style="width:${pw}px;height:${ph}px;box-sizing:border-box;display:flex;align-items:center;background:#fff;font-family:Helvetica,Arial,sans-serif;">
-          <div style="flex:0 0 62%;display:flex;align-items:center;justify-content:center;padding:6px;min-width:0;">
-            <img data-bc />
-          </div>
-          <div style="flex:1;padding:0 8px 0 2px;min-width:0;">
-            <div style="font-weight:bold;font-size:${Math.max(11, ph * 0.07)}px;color:#3a1430;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${label.name}</div>
-            ${label.color ? `<div style="font-size:${Math.max(9, ph * 0.05)}px;color:#666;">${label.color}</div>` : ""}
-            <div style="font-size:${Math.max(9, ph * 0.05)}px;color:#666;">Size: ${label.size}</div>
-            <div style="font-size:${Math.max(11, ph * 0.065)}px;font-weight:bold;color:#775533;margin-top:3px;">Rp ${label.price.toLocaleString("id-ID")}</div>
-          </div>
-        </div>`;
-      document.body.appendChild(holder);
-      const bc = holder.querySelector("img[data-bc]") as unknown as HTMLCanvasElement;
-      JsBarcode(bc as unknown as HTMLCanvasElement, label.barcode, {
+      const card = document.createElement("canvas");
+      card.width = pw;
+      card.height = ph;
+      const ctx = card.getContext("2d")!;
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, pw, ph);
+      ctx.textBaseline = "top";
+
+      // barcode kiri (62% lebar) — aspect terjaga
+      const bc = document.createElement("canvas");
+      JsBarcode(bc, label.barcode, {
         format: "CODE128",
         width: 2,
-        height: Math.round(ph * 0.55),
+        height: Math.round(ph * 0.5),
         displayValue: true,
-        fontSize: Math.max(10, Math.round(ph * 0.06)),
+        fontSize: Math.max(10, Math.round(ph * 0.055)),
         margin: 0,
       });
-      const card = await html2canvas(holder.firstChild as HTMLElement, { scale: 2, backgroundColor: "#ffffff", logging: false });
-      holder.remove();
+      const zoneW = Math.round(pw * 0.62);
+      const scale = Math.min((zoneW - 10) / bc.width, (ph - 10) / bc.height);
+      const dw = bc.width * scale;
+      const dh = bc.height * scale;
+      ctx.drawImage(bc, (zoneW - dw) / 2, (ph - dh) / 2, dw, dh);
+
+      // info kanan
+      const infoX = zoneW + 6;
+      const maxW = pw - infoX - 6;
+      const clip = (s: string) => {
+        while (s.length > 1 && ctx.measureText(s).width > maxW) s = s.slice(0, -2) + "…";
+        return s;
+      };
+      let ty = ph * 0.14;
+      ctx.fillStyle = "#3a1430";
+      ctx.font = `bold ${Math.max(12, Math.round(ph * 0.075))}px Helvetica, Arial, sans-serif`;
+      ctx.fillText(clip(label.name), infoX, ty);
+      ty += Math.round(ph * 0.11);
+      ctx.font = `${Math.max(9, Math.round(ph * 0.05))}px Helvetica, Arial, sans-serif`;
+      ctx.fillStyle = "#666666";
+      if (label.color) { ctx.fillText(clip(label.color), infoX, ty); ty += Math.round(ph * 0.07); }
+      ctx.fillText(`Size: ${label.size}`, infoX, ty);
+      ctx.fillStyle = "#775533";
+      ctx.font = `bold ${Math.max(11, Math.round(ph * 0.065))}px Helvetica, Arial, sans-serif`;
+      ctx.fillText(`Rp ${label.price.toLocaleString("id-ID")}`, infoX, ph - Math.round(ph * 0.14));
+
       // putar kartu 90° CW → portrait pas sel
       const rot = document.createElement("canvas");
       rot.width = card.height;
