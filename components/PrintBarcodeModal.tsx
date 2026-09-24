@@ -26,12 +26,13 @@ export default function PrintBarcodeModal({
   // E13: default 40x20 — pas untuk RPP02N (kertas 58mm, area cetak ~48mm, feed max 20mm).
   // 60x30/50x25 terlalu lebar/tinggi → printer feed nonstop mencari gap sensor.
   // E15: +25x45 (roll Xprinter XP-420B, 25mm lebar × 45mm tinggi portrait).
-  const [labelSize, setLabelSize] = useState<"60x30" | "50x25" | "40x20" | "25x45">("25x45");
+  const [labelSize, setLabelSize] = useState<"60x30" | "50x25" | "40x20" | "25x45" | "100x150">("100x150");
   const LABEL_DIMS: Record<string, { w: number; h: number }> = {
     "60x30": { w: 60, h: 30 },
     "50x25": { w: 50, h: 25 },
     "40x20": { w: 40, h: 20 },
     "25x45": { w: 25, h: 45 },
+    "100x150": { w: 100, h: 150 },
   };
   // E15: mode cetak — single (1 barcode per label, auto-scaled) atau grid (banyak sel, qty per barcode)
   const [printMode, setPrintMode] = useState<"single" | "grid">("single");
@@ -284,22 +285,23 @@ ${labelHTML}
     }, 500);
   };
 
-  // Print handler - generate PDF with multi-label grid on A4
+  // Print handler - single: PDF A4 berisi banyak label; grid (E15): PDF per-label
+  // seukuran label fisik (proyeksi 1:1 ke printer label)
   const handlePrint = () => {
-    const labelWidth = labelSize === "60x30" ? 60 : labelSize === "50x25" ? 50 : 40;
-    const labelHeight = labelSize === "60x30" ? 30 : labelSize === "50x25" ? 25 : 20;
+    const { w: labelWidth, h: labelHeight } = LABEL_DIMS[labelSize];
+    const isGrid = printMode === "grid";
     const margin = 5;
     const gap = 2;
 
     const doc = new jsPDF({
       orientation: "portrait",
       unit: "mm",
-      format: "a4", // 210 x 297 mm - many labels per page
+      format: isGrid ? [labelWidth, labelHeight] : "a4",
     });
 
-    // Grid: how many labels fit per A4 page
-    const cols = Math.floor((210 - margin * 2 + gap) / (labelWidth + gap));
-    const rows = Math.floor((297 - margin * 2 + gap) / (labelHeight + gap));
+    // Grid: how many labels fit per A4 page (single mode)
+    const cols = isGrid ? gridCols : Math.floor((210 - margin * 2 + gap) / (labelWidth + gap));
+    const rows = isGrid ? gridRows : Math.floor((297 - margin * 2 + gap) / (labelHeight + gap));
     const perPage = cols * rows;
 
     // Collect labels (expanded by copy count)
@@ -311,6 +313,7 @@ ${labelHTML}
       barcode: string;
       vendor?: string;
       image: string;
+      ratio: number;
     }[] = [];
 
     allVariants.forEach(({ product, variant }) => {
@@ -327,6 +330,7 @@ ${labelHTML}
         margin: 0,
       });
       const image = canvas.toDataURL("image/png");
+      const ratio = canvas.height / canvas.width; // aspect utk grid cells (anti gepeng)
 
       for (let c = 0; c < count; c++) {
         labels.push({
@@ -337,17 +341,52 @@ ${labelHTML}
           barcode: barcodeFor(variant),
           vendor: vendorFor(variant.id),
           image,
+          ratio,
         });
       }
     });
 
     // Draw labels in grid
     labels.forEach((label, i) => {
-      if (i > 0 && i % perPage === 0) doc.addPage("a4", "portrait");
+      if (i > 0 && i % perPage === 0) {
+        if (isGrid) doc.addPage([labelWidth, labelHeight], "portrait");
+        else doc.addPage("a4", "portrait");
+      }
 
       const posInPage = i % perPage;
       const col = posInPage % cols;
       const row = Math.floor(posInPage / cols);
+
+      if (isGrid) {
+        // E15 grid: halaman = 1 label fisik; sel = border dashed + barcode + caption
+        const pad = 2;
+        const cellW = labelWidth / cols;
+        const cellH = labelHeight / rows;
+        const cx = col * cellW;
+        const cy = row * cellH;
+
+        doc.setDrawColor(150, 150, 150);
+        doc.setLineDashPattern([0.8, 0.8], 0);
+        doc.rect(cx, cy, cellW, cellH);
+        doc.setLineDashPattern([], 0);
+
+        const bw = Math.min(cellW - pad * 2, 30);
+        let bh = bw / label.ratio; // jaga aspect ratio barcode (anti gepeng)
+        if (bh > cellH * 0.6) {
+          bh = cellH * 0.6;
+          const fixedW = bh * label.ratio;
+          doc.addImage(label.image, "PNG", cx + (cellW - fixedW) / 2, cy + cellH * 0.15, fixedW, bh);
+        } else {
+          doc.addImage(label.image, "PNG", cx + (cellW - bw) / 2, cy + cellH * 0.15, bw, bh);
+        }
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(6);
+        doc.setTextColor(58, 20, 48);
+        const cap = `${label.name} ${label.size ? `· ${label.size}` : ""}`;
+        doc.text(doc.splitTextToSize(cap, cellW - pad * 2).slice(0, 2), cx + cellW / 2, cy + cellH * 0.85, { align: "center" });
+        return;
+      }
+
       const x = margin + col * (labelWidth + gap);
       const y = margin + row * (labelHeight + gap);
 
@@ -510,7 +549,8 @@ ${labelHTML}
               </h3>
               <div className="flex flex-wrap gap-3">
                 {[
-                  { value: "25x45", label: "25mm x 45mm", desc: "Roll Xprinter (portrait)" },
+                  { value: "100x150", label: "100mm x 150mm", desc: "Resi/A6 — grid 3×3 (9 barcode)" },
+                  { value: "25x45", label: "25mm x 45mm", desc: "Roll kecil (portrait)" },
                   { value: "60x30", label: "60mm x 30mm", desc: "Lebih Lega" },
                   { value: "50x25", label: "50mm x 25mm", desc: "Memanjang" },
                   { value: "40x20", label: "40mm x 20mm", desc: "RPP02N" },
