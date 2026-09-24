@@ -34,8 +34,8 @@ export default function PrintBarcodeModal({
     "25x45": { w: 25, h: 45 },
     "100x150": { w: 100, h: 150 },
   };
-  // E15: mode cetak — single (1 barcode per label, auto-scaled) atau grid (banyak sel, qty per barcode)
-  const [printMode, setPrintMode] = useState<"single" | "grid">("single");
+  // E15: mode cetak — default GRID (kertas 100x150 = 9 sub-label; single utk kasus khusus)
+  const [printMode, setPrintMode] = useState<"single" | "grid">("grid");
   const [gridCols, setGridCols] = useState(3);
   const [gridRows, setGridRows] = useState(3);
 
