@@ -126,11 +126,11 @@ export default function PrintBarcodeModal({
     // E15: grid mode —peringatan scannability: CODE128 butuh ±0.125mm per modul di 203dpi.
     let gridWarn = "";
     if (isGrid) {
-      const cellW = (labelWidth - 1) / gridCols; // -1mm padding
+      const cellW = labelWidth / gridCols;
       const longest = Math.max(...labels.map((l) => l.barcode.length));
-      const minMm = 0.125 * (11 * longest + 35) + 2;
+      const minMm = 0.125 * (11 * longest + 35) + 4;
       if (cellW < minMm) {
-        gridWarn = `\n⚠️ Kode terpanjang (${longest} karakter) butuh ±${minMm.toFixed(0)}mm — sel grid ini hanya ${cellW.toFixed(0)}mm.\nBarcode bisa gagal discan! Kurangi jumlah kolom atau pakai mode Single.`;
+        gridWarn = `\n⚠️ Kode terpanjang (${longest} karakter) butuh ±${minMm.toFixed(0)}mm — kolom grid ini hanya ${cellW.toFixed(0)}mm.\nBarcode bisa gagal discan! Kurangi jumlah kolom.`;
       }
     }
     if (!confirm(
@@ -154,20 +154,43 @@ export default function PrintBarcodeModal({
     };
 
     let labelHTML: string;
-    if (isGrid) {
-      // E15: 1 label fisik = grid cols×rows berisi barcode (border tiap sel utk potong)
-      const cellHTML = (label: (typeof labels)[0]) => `
-        <div class="cell">
-          <img src="${barcodeImgFor(label.barcode, true)}" />
-          <div class="cap">${label.name} ${label.size ? `· ${label.size}` : ""}</div>
+    // E15: satu "sub-label" = barcode + info (dipakai mode single maupun sel grid).
+    // Portrait (h >= w) → barcode di atas, info di bawah (pas utk 25x45 / sel grid).
+    const subLabelHTML = (label: (typeof labels)[0], w: number, h: number, small: boolean) => {
+      const img = barcodeImgFor(label.barcode, small);
+      if (h >= w) {
+        return `
+        <div class="sub portrait" style="width:${w}mm;height:${h}mm;">
+          <img src="${img}" style="max-width:92%;max-height:36%;" />
+          <div class="sub-info">
+            <div class="label-name">${label.name}</div>
+            ${label.color ? `<div class="label-color">${label.color}</div>` : ""}
+            <div class="label-size">${label.size}</div>
+            <div class="label-price">Rp ${label.price.toLocaleString("id-ID")}</div>
+          </div>
         </div>`;
+      }
+      return `
+      <div class="sub" style="width:${w}mm;height:${h}mm;">
+        <div class="label-barcode"><img src="${img}" style="max-width:100%;max-height:${h * 0.6}mm;" /></div>
+        <div class="label-info">
+          <div class="label-name">${label.name}</div>
+          <div class="label-size">Size: ${label.size}</div>
+          <div class="label-price">Rp ${label.price.toLocaleString("id-ID")}</div>
+        </div>
+      </div>`;
+    };
+    if (isGrid) {
+      // E15: 1 halaman = 1 KERTAS label (mis. 10x15cm) berisi grid sub-label 25x45
+      const cellW = labelWidth / gridCols;
+      const cellH = labelHeight / gridRows;
       const chunks: (typeof labels)[] = [];
       for (let i = 0; i < labels.length; i += perLabel) chunks.push(labels.slice(i, i + perLabel));
       labelHTML = chunks
         .map(
           (cells) => `
-        <div class="label grid" style="width:${labelWidth}mm;height:${labelHeight}mm;">
-          ${cells.map(cellHTML).join("")}
+        <div class="label sheet" style="width:${labelWidth}mm;height:${labelHeight}mm;grid-template-columns:repeat(${gridCols},1fr);grid-template-rows:repeat(${gridRows},1fr);">
+          ${cells.map((l) => `<div class="cell">${subLabelHTML(l, cellW - 1.5, cellH - 1.5, true)}</div>`).join("")}
         </div>`
         )
         .join("");
@@ -175,16 +198,7 @@ export default function PrintBarcodeModal({
       labelHTML = labels
         .map((label) => `
         <div class="label" style="width:${labelWidth}mm;height:${labelHeight}mm;">
-          <div class="label-barcode">
-            <img src="${barcodeImgFor(label.barcode)}" style="max-width:100%;max-height:${labelHeight * 0.6}mm;" />
-          </div>
-          <div class="label-info">
-            <div class="label-name">${label.name}</div>
-            ${label.color ? `<div class="label-color">${label.color}</div>` : ""}
-            ${label.vendor ? `<div class="label-color">Vend: ${label.vendor}</div>` : ""}
-            <div class="label-size">Size: ${label.size}</div>
-            <div class="label-price">Rp ${label.price.toLocaleString("id-ID")}</div>
-          </div>
+          ${subLabelHTML(label, labelWidth - 2, labelHeight - 2, false)}
         </div>`)
         .join("");
     }
@@ -211,41 +225,53 @@ export default function PrintBarcodeModal({
     font-family: "Helvetica", "Arial", sans-serif;
   }
   .label {
-    display: flex;
-    align-items: center;
     box-sizing: border-box;
-    padding: 1mm;
     page-break-after: always;
     overflow: hidden;
     border: 0.3mm dashed #b0b0b0;
   }
-  .label.grid {
+  .label.sheet {
     display: grid;
     padding: 0.5mm;
-    gap: 0;
   }
   .cell {
     box-sizing: border-box;
-    border: 0.25mm dashed #b0b0b0;
+    border: 0.3mm dashed #b0b0b0;
     display: flex;
-    flex-direction: column;
     align-items: center;
     justify-content: center;
     overflow: hidden;
-    padding: 0.3mm;
   }
-  .cell img {
-    max-width: 94%;
-    max-height: 72%;
-  }
-  .cell .cap {
-    font-size: 5pt;
-    line-height: 1.1;
-    color: #3a1430;
-    white-space: nowrap;
+  .sub {
+    display: flex;
+    align-items: center;
+    box-sizing: border-box;
+    padding: 0.4mm;
     overflow: hidden;
-    text-overflow: ellipsis;
+  }
+  .sub.portrait {
+    flex-direction: column;
+    justify-content: center;
+    text-align: center;
+  }
+  .sub.portrait img {
+    display: block;
+    margin: 0 auto 0.6mm;
+  }
+  .sub.portrait .label-name,
+  .sub.portrait .label-size,
+  .sub.portrait .label-price {
     max-width: 100%;
+  }
+  .sub-info {
+    flex: 1;
+    min-width: 0;
+  }
+  .label-barcode {
+    flex: 0 0 60%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
   .label-barcode {
     flex: 0 0 65%;
@@ -358,8 +384,7 @@ ${labelHTML}
       const row = Math.floor(posInPage / cols);
 
       if (isGrid) {
-        // E15 grid: halaman = 1 label fisik; sel = border dashed + barcode + caption
-        const pad = 2;
+        // E15: halaman = 1 kertas label; tiap sel = SUB-LABEL lengkap (barcode+info)
         const cellW = labelWidth / cols;
         const cellH = labelHeight / rows;
         const cx = col * cellW;
@@ -370,20 +395,35 @@ ${labelHTML}
         doc.rect(cx, cy, cellW, cellH);
         doc.setLineDashPattern([], 0);
 
-        const bw = Math.min(cellW - pad * 2, 30);
-        let bh = bw / label.ratio; // jaga aspect ratio barcode (anti gepeng)
-        if (bh > cellH * 0.6) {
-          bh = cellH * 0.6;
-          const fixedW = bh * label.ratio;
-          doc.addImage(label.image, "PNG", cx + (cellW - fixedW) / 2, cy + cellH * 0.15, fixedW, bh);
+        const portrait = cellH >= cellW;
+        if (portrait) {
+          // barcode di atas (penuh lebar sel, aspect terjaga), info di bawah
+          const bw = cellW - 4;
+          const bh = Math.min(bw / label.ratio, cellH * 0.42);
+          doc.addImage(label.image, "PNG", cx + (cellW - bw) / 2, cy + 2, bw, bh);
+          let ty = cy + 2 + bh + 4;
+          doc.setFont("helvetica", "bold").setFontSize(7).setTextColor(58, 20, 48);
+          doc.text(doc.splitTextToSize(label.name, cellW - 3).slice(0, 2), cx + cellW / 2, ty, { align: "center" });
+          ty += 3.2 * Math.min(2, doc.splitTextToSize(label.name, cellW - 3).length);
+          doc.setFont("helvetica", "normal").setFontSize(5.5).setTextColor(100, 100, 100);
+          if (label.color) { doc.text(label.color, cx + cellW / 2, ty, { align: "center" }); ty += 3; }
+          doc.text(`Size: ${label.size}`, cx + cellW / 2, ty, { align: "center" });
+          doc.setFont("helvetica", "bold").setFontSize(7).setTextColor(119, 85, 51);
+          doc.text(`Rp ${label.price.toLocaleString("id-ID")}`, cx + cellW / 2, cy + cellH - 2.5, { align: "center" });
         } else {
-          doc.addImage(label.image, "PNG", cx + (cellW - bw) / 2, cy + cellH * 0.15, bw, bh);
+          const infoX = cx + cellW * 0.62;
+          const bw = infoX - cx - 3;
+          const bh = Math.min(bw / label.ratio, cellH * 0.5);
+          doc.addImage(label.image, "PNG", cx + 1.5, cy + (cellH - bh) / 2 - 2, bw, bh);
+          doc.setFont("helvetica", "normal").setFontSize(5.5).setTextColor(80, 80, 80);
+          doc.text(label.barcode, cx + 1.5 + bw / 2, cy + (cellH - bh) / 2 + bh, { align: "center" });
+          doc.setFont("helvetica", "bold").setFontSize(7).setTextColor(58, 20, 48);
+          doc.text(doc.splitTextToSize(label.name, cellW - (infoX - cx) - 2).slice(0, 2), infoX, cy + 5);
+          doc.setFont("helvetica", "normal").setFontSize(5.5).setTextColor(100, 100, 100);
+          doc.text(`Size: ${label.size}`, infoX, cy + 12);
+          doc.setFont("helvetica", "bold").setFontSize(7).setTextColor(119, 85, 51);
+          doc.text(`Rp ${label.price.toLocaleString("id-ID")}`, infoX, cy + cellH - 4);
         }
-        doc.setFont("helvetica", "normal");
-        doc.setFontSize(6);
-        doc.setTextColor(58, 20, 48);
-        const cap = `${label.name} ${label.size ? `· ${label.size}` : ""}`;
-        doc.text(doc.splitTextToSize(cap, cellW - pad * 2).slice(0, 2), cx + cellW / 2, cy + cellH * 0.85, { align: "center" });
         return;
       }
 
