@@ -141,14 +141,12 @@ export default function PrintBarcodeModal({
       });
       return c.toDataURL("image/png");
     };
-    // E15: TRIAL ROTASI — barcode dibaca SEARAH ROLL (panah merah).
-    // XP_ROT: 90 = putar searah jarum jam; -90 = berlawanan. Ganti angka kalau arah kebalik.
-    const XP_ROT = 90;
+    // E15 FINAL: barcode HORIZONTAL (30mm muat di lebar label 33mm) + caption di bawah
+    // (barcode vertikal 30mm GAK muat di tinggi label 15mm — terbukti fisik 2026-09-25)
     const cellHTML = (l: (typeof labels)[0]) => `
       <div class="xcell">
-        <div class="xrot" style="transform: translate(-50%, -50%) rotate(${XP_ROT}deg);">
-          <img src="${bcImg(l.barcode)}" />
-        </div>
+        <img src="${bcImg(l.barcode)}" />
+        <div class="xcap">${l.name}${l.size ? ` · ${l.size}` : ""} · Rp ${l.price.toLocaleString("id-ID")}</div>
       </div>`;
     const pagesHTML: string[] = [];
     for (let p = 0; p < pages; p++) {
@@ -197,18 +195,16 @@ export default function PrintBarcodeModal({
     box-sizing: border-box;
   }
   .xcell:nth-child(3) { margin-right: 0; }
-  /* kartu dirotasi 90°: kotak 30mm(barcode panjang) x 9mm, diputar di tengah sel
-     → occupies 9mm x 30mm — barcode membaca searah roll */
-  .xrot {
-    position: absolute;
-    width: 30mm;
-    height: 9mm;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+  .xcell img { width: 30mm; max-height: 9mm; }
+  .xcap {
+    font-size: 4.6pt;
+    color: #3a1430;
+    max-width: 31mm;
+    white-space: nowrap;
     overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: center;
   }
-  .xrot img { width: 30mm; max-height: 9mm; }
 </style>
 </head>
 <body>
@@ -357,21 +353,12 @@ ${labelHTML}
           format: "CODE128",
           width: 2,
           height: 40,
-          displayValue: true,
-          fontSize: 9,
+          displayValue: false,
           margin: 0,
         });
-        // rotasi 90° CW — barcode membaca searah roll (panah merah)
-        const rot = document.createElement("canvas");
-        rot.width = canvas.height;
-        rot.height = canvas.width;
-        const rctx = rot.getContext("2d")!;
-        rctx.translate(rot.width, 0);
-        rctx.rotate(Math.PI / 2);
-        rctx.drawImage(canvas, 0, 0);
         imgCache.set(label.barcode, {
-          image: rot.toDataURL("image/png"),
-          ratio: rot.height / rot.width,
+          image: canvas.toDataURL("image/png"),
+          ratio: canvas.height / canvas.width,
         });
       }
       return imgCache.get(label.barcode)!;
@@ -390,9 +377,16 @@ ${labelHTML}
           const x = 1.5 + colI * (33 + 3);
 
           const { image, ratio } = imgFor(label);
-          const bh = 30; // barcode 30mm SEARAH ROLL (vertikal di liner)
-          const bw = Math.min(bh / ratio, 9.5);
-          doc.addImage(image, "PNG", x + (33 - bw) / 2, y + (15 - bh) / 2, bw, bh);
+          const bw = 30; // barcode 30mm — muat di lebar label 33mm
+          const bh = Math.min(bw / ratio, 9.5);
+          doc.addImage(image, "PNG", x + (33 - bw) / 2, y + 1, bw, bh);
+          doc.setFont("helvetica", "normal").setFontSize(5).setTextColor(58, 20, 48);
+          doc.text(
+            `${label.name}${label.size ? ` · ${label.size}` : ""} · Rp ${label.price.toLocaleString("id-ID")}`,
+            x + 16.5,
+            y + 13.4,
+            { align: "center", maxWidth: 32 }
+          );
         }
       }
     }
