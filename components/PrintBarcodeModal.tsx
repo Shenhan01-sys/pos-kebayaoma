@@ -118,7 +118,8 @@ export default function PrintBarcodeModal({
 
   // ===== E15 FINAL: XP-420B — halaman 108x144mm (8 baris x 18mm, break di gap) =====
   const xp420bDirectPrint = (labels: ReturnType<typeof collectLabels>) => {
-    const ROWS_PER_PAGE = 8; // 8 x 1.8cm = 14.4cm — pas stock driver custom 108x144mm
+    const ROWS_PER_PAGE = 7; // (144 - 5mm spacer) / 18 = 7 baris
+    const XP_TOP_OFFSET = 5; // 8 x 1.8cm = 14.4cm — pas stock driver custom 108x144mm
     const rows = Math.ceil(labels.length / XP_COLS);
     const pages = Math.ceil(rows / ROWS_PER_PAGE);
     if (
@@ -177,7 +178,7 @@ export default function PrintBarcodeModal({
 <style>
   @page { size: 108mm 144mm; margin: 0; }
   body { margin: 0; padding: 0; font-family: "Helvetica", "Arial", sans-serif; }
-  .xpage { height: 144mm; overflow: hidden; page-break-after: always; box-sizing: border-box; }
+  .xpage { height: 144mm; overflow: hidden; page-break-after: always; box-sizing: border-box; padding-top: 5mm; }
   .xpage:last-child { page-break-after: auto; }
   .xrow {
     display: flex;
@@ -336,7 +337,8 @@ ${labelHTML}
 
   // ===== E15 FINAL: XP-420B — PDF halaman 108x144mm (8 baris x 18mm per halaman) =====
   const xp420bPdf = (labels: SimpleLabel[]) => {
-    const ROWS_PER_PAGE = 8;
+    const ROWS_PER_PAGE = 7; // (144 - 5mm spacer) / 18 = 7 baris
+    const XP_TOP_OFFSET = 5;
     const rows = Math.ceil(labels.length / XP_COLS);
     const pages = Math.ceil(rows / ROWS_PER_PAGE);
     const doc = new jsPDF({
@@ -369,7 +371,7 @@ ${labelHTML}
       if (p > 0) doc.addPage([SHEET_W, 144], "portrait");
       for (let r = 0; r < ROWS_PER_PAGE; r++) {
         const row = p * ROWS_PER_PAGE + r;
-        const y = row * ROW_PITCH - p * ROWS_PER_PAGE * ROW_PITCH;
+        const y = XP_TOP_OFFSET + (row * ROW_PITCH - p * ROWS_PER_PAGE * ROW_PITCH);
         for (let colI = 0; colI < XP_COLS; colI++) {
           if (cellIdx >= labels.length) break;
           const label = labels[cellIdx];
