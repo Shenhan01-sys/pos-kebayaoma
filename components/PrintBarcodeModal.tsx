@@ -116,13 +116,15 @@ export default function PrintBarcodeModal({
     return labels;
   };
 
-  // ===== E15 FINAL: XP-420B — direct print (liner 108mm, 3 label/baris) =====
+  // ===== E15 FINAL: XP-420B — halaman 108x144mm (8 baris x 18mm, break di gap) =====
   const xp420bDirectPrint = (labels: ReturnType<typeof collectLabels>) => {
+    const ROWS_PER_PAGE = 8; // 8 x 1.8cm = 14.4cm — pas stock driver custom 108x144mm
     const rows = Math.ceil(labels.length / XP_COLS);
+    const pages = Math.ceil(rows / ROWS_PER_PAGE);
     if (
       !confirm(
-        `Print ${labels.length} label (${rows} baris × 3) — liner 108 mm.\n` +
-          `WAJIB: Margin = None di dialog print.`
+        `Print ${labels.length} label (${rows} baris × 3) — ${pages} halaman 108×144 mm.\n` +
+          `WAJIB: Margin = None, Scale = 100%.`
       )
     )
       return;
@@ -144,11 +146,20 @@ export default function PrintBarcodeModal({
         <img src="${bcImg(l.barcode)}" />
         <div class="xcap">${l.name}${l.size ? ` · ${l.size}` : ""} · Rp ${l.price.toLocaleString("id-ID")}</div>
       </div>`;
-    const rowsHTML: string[] = [];
-    for (let r = 0; r < rows; r++) {
-      const slice = labels.slice(r * XP_COLS, r * XP_COLS + XP_COLS);
-      const pad = Array.from({ length: XP_COLS - slice.length }, () => `<div class="xcell"></div>`);
-      rowsHTML.push(`<div class="xrow">${slice.map(cellHTML).join("")}${pad.join("")}</div>`);
+    const pagesHTML: string[] = [];
+    for (let p = 0; p < pages; p++) {
+      const rowsHTML: string[] = [];
+      for (let r = 0; r < ROWS_PER_PAGE; r++) {
+        const idx = (p * ROWS_PER_PAGE + r) * XP_COLS;
+        if (idx >= labels.length) {
+          rowsHTML.push(`<div class="xrow">${`<div class="xcell"></div>`.repeat(XP_COLS)}</div>`);
+          continue;
+        }
+        const slice = labels.slice(idx, idx + XP_COLS);
+        const pad = Array.from({ length: XP_COLS - slice.length }, () => `<div class="xcell"></div>`);
+        rowsHTML.push(`<div class="xrow">${slice.map(cellHTML).join("")}${pad.join("")}</div>`);
+      }
+      pagesHTML.push(`<div class="xpage">${rowsHTML.join("")}</div>`);
     }
 
     const printWindow = window.open("", "_blank", "width=430,height=640");
@@ -162,8 +173,10 @@ export default function PrintBarcodeModal({
 <meta charset="utf-8">
 <title>Print Barcode Labels (XP-420B)</title>
 <style>
-  @page { size: ${SHEET_W}mm ${rows * ROW_PITCH}mm; margin: 0; }
+  @page { size: 108mm 144mm; margin: 0; }
   body { margin: 0; padding: 0; font-family: "Helvetica", "Arial", sans-serif; }
+  .xpage { height: 144mm; overflow: hidden; page-break-after: always; box-sizing: border-box; }
+  .xpage:last-child { page-break-after: auto; }
   .xrow {
     display: flex;
     height: 15mm;
@@ -196,7 +209,7 @@ export default function PrintBarcodeModal({
 </style>
 </head>
 <body>
-${rowsHTML.join("")}
+${pagesHTML.join("")}
 </body>
 </html>`);
     printWindow.document.close();
@@ -322,13 +335,15 @@ ${labelHTML}
     return legacyDirectPrint(labels, LABEL_DIMS[labelSize]);
   };
 
-  // ===== E15 FINAL: XP-420B — PDF strip liner (kelipatan 1,8 cm) =====
+  // ===== E15 FINAL: XP-420B — PDF halaman 108x144mm (8 baris x 18mm per halaman) =====
   const xp420bPdf = (labels: SimpleLabel[]) => {
+    const ROWS_PER_PAGE = 8;
     const rows = Math.ceil(labels.length / XP_COLS);
+    const pages = Math.ceil(rows / ROWS_PER_PAGE);
     const doc = new jsPDF({
       orientation: "portrait",
       unit: "mm",
-      format: [SHEET_W, rows * ROW_PITCH],
+      format: [SHEET_W, 144],
     });
 
     const imgCache = new Map<string, { image: string; ratio: number }>();
@@ -350,24 +365,32 @@ ${labelHTML}
       return imgCache.get(label.barcode)!;
     };
 
-    labels.forEach((label, i) => {
-      const row = Math.floor(i / XP_COLS);
-      const colI = i % XP_COLS;
-      const x = 1.5 + colI * (33 + 3);
-      const y = row * ROW_PITCH;
+    let cellIdx = 0;
+    for (let p = 0; p < pages; p++) {
+      if (p > 0) doc.addPage([SHEET_W, 144], "portrait");
+      for (let r = 0; r < ROWS_PER_PAGE; r++) {
+        const row = p * ROWS_PER_PAGE + r;
+        const y = row * ROW_PITCH - p * ROWS_PER_PAGE * ROW_PITCH;
+        for (let colI = 0; colI < XP_COLS; colI++) {
+          if (cellIdx >= labels.length) break;
+          const label = labels[cellIdx];
+          cellIdx++;
+          const x = 1.5 + colI * (33 + 3);
 
-      const { image, ratio } = imgFor(label);
-      const bw = 30; // barcode 30mm
-      const bh = Math.min(bw / ratio, 9.5);
-      doc.addImage(image, "PNG", x + (33 - bw) / 2, y + 0.8, bw, bh);
-      doc.setFont("helvetica", "normal").setFontSize(5.5).setTextColor(58, 20, 48);
-      doc.text(
-        `${label.name}${label.size ? ` · ${label.size}` : ""} · Rp ${label.price.toLocaleString("id-ID")}`,
-        x + 16.5,
-        y + 13.4,
-        { align: "center", maxWidth: 32 }
-      );
-    });
+          const { image, ratio } = imgFor(label);
+          const bw = 30; // barcode 30mm
+          const bh = Math.min(bw / ratio, 9.5);
+          doc.addImage(image, "PNG", x + (33 - bw) / 2, y + 0.8, bw, bh);
+          doc.setFont("helvetica", "normal").setFontSize(5.5).setTextColor(58, 20, 48);
+          doc.text(
+            `${label.name}${label.size ? ` · ${label.size}` : ""} · Rp ${label.price.toLocaleString("id-ID")}`,
+            x + 16.5,
+            y + 13.4,
+            { align: "center", maxWidth: 32 }
+          );
+        }
+      }
+    }
 
     doc.save("barcode-labels-xp420b.pdf");
     onClose();
