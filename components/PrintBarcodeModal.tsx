@@ -335,16 +335,14 @@ ${labelHTML}
     return legacyDirectPrint(labels, LABEL_DIMS[labelSize]);
   };
 
-  // ===== E15 FINAL: XP-420B — PDF halaman 108x144mm (8 baris x 18mm per halaman) =====
+  // ===== E15 FINAL: XP-420B — PDF 1 halaman memanjang (tinggi = baris × 1,8cm, tanpa potong) =====
   const xp420bPdf = (labels: SimpleLabel[]) => {
-    const ROWS_PER_PAGE = 7; // (144 - 5mm spacer) / 18 = 7 baris
     const XP_TOP_OFFSET = 5;
     const rows = Math.ceil(labels.length / XP_COLS);
-    const pages = Math.ceil(rows / ROWS_PER_PAGE);
     const doc = new jsPDF({
       orientation: "portrait",
       unit: "mm",
-      format: [SHEET_W, 144],
+      format: [SHEET_W, XP_TOP_OFFSET + rows * ROW_PITCH],
     });
 
     const imgCache = new Map<string, { image: string; ratio: number }>();
@@ -366,33 +364,24 @@ ${labelHTML}
       return imgCache.get(label.barcode)!;
     };
 
-    let cellIdx = 0;
-    for (let p = 0; p < pages; p++) {
-      if (p > 0) doc.addPage([SHEET_W, 144], "portrait");
-      for (let r = 0; r < ROWS_PER_PAGE; r++) {
-        const row = p * ROWS_PER_PAGE + r;
-        const y = XP_TOP_OFFSET + (row * ROW_PITCH - p * ROWS_PER_PAGE * ROW_PITCH);
-        // catatan: x += XP_LEFT_OFFSET (geser kanan kalibrasi)
-        for (let colI = 0; colI < XP_COLS; colI++) {
-          if (cellIdx >= labels.length) break;
-          const label = labels[cellIdx];
-          cellIdx++;
-          const x = 1.5 + colI * (33 + 3);
+    labels.forEach((label, i) => {
+      const row = Math.floor(i / XP_COLS);
+      const colI = i % XP_COLS;
+      const x = 1.5 + colI * (33 + 3);
+      const y = XP_TOP_OFFSET + row * ROW_PITCH;
 
-          const { image, ratio } = imgFor(label);
-          const bw = 30; // barcode 30mm — muat di lebar label 33mm
-          const bh = Math.min(bw / ratio, 9.5);
-          doc.addImage(image, "PNG", x + (33 - bw) / 2, y + 1, bw, bh);
-          doc.setFont("helvetica", "normal").setFontSize(5).setTextColor(58, 20, 48);
-          doc.text(
-            `${label.name}${label.size ? ` · ${label.size}` : ""} · Rp ${label.price.toLocaleString("id-ID")}`,
-            x + 16.5,
-            y + 13.4,
-            { align: "center", maxWidth: 32 }
-          );
-        }
-      }
-    }
+      const { image, ratio } = imgFor(label);
+      const bw = 30; // barcode 30mm — muat di lebar label 33mm
+      const bh = Math.min(bw / ratio, 9.5);
+      doc.addImage(image, "PNG", x + (33 - bw) / 2, y + 1, bw, bh);
+      doc.setFont("helvetica", "normal").setFontSize(5).setTextColor(58, 20, 48);
+      doc.text(
+        `${label.name}${label.size ? ` · ${label.size}` : ""} · Rp ${label.price.toLocaleString("id-ID")}`,
+        x + 16.5,
+        y + 13.4,
+        { align: "center", maxWidth: 32 }
+      );
+    });
 
     doc.save("barcode-labels-xp420b.pdf");
     onClose();
