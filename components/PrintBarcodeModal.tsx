@@ -183,7 +183,7 @@ export default function PrintBarcodeModal({
   .xrow {
     display: flex;
     height: 15mm;
-    margin: 0 1.5mm 3mm 1.5mm;
+    margin: 0 1.5mm 3mm mm;
     box-sizing: border-box;
   }
   .xrow:last-child { margin-bottom: 0; }
@@ -372,6 +372,7 @@ ${labelHTML}
       for (let r = 0; r < ROWS_PER_PAGE; r++) {
         const row = p * ROWS_PER_PAGE + r;
         const y = XP_TOP_OFFSET + (row * ROW_PITCH - p * ROWS_PER_PAGE * ROW_PITCH);
+        // catatan: x += XP_LEFT_OFFSET (geser kanan kalibrasi)
         for (let colI = 0; colI < XP_COLS; colI++) {
           if (cellIdx >= labels.length) break;
           const label = labels[cellIdx];
