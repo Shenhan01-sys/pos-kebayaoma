@@ -7,6 +7,15 @@ import { Dialog, DialogPanel, DialogTitle } from "@headlessui/react";
 import BarcodeLabel from "./BarcodeLabel";
 import { useData } from "@/store/data";
 
+interface SimpleLabel {
+  name: string;
+  color?: string;
+  size: string;
+  price: number;
+  barcode: string;
+  vendor?: string;
+}
+
 interface PrintBarcodeModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -23,25 +32,24 @@ export default function PrintBarcodeModal({
 }: PrintBarcodeModalProps) {
   const { products } = useData();
   const [selectedVariants, setSelectedVariants] = useState<Record<string, number>>({});
-  // E13: default 40x20 — pas untuk RPP02N (kertas 58mm, area cetak ~48mm, feed max 20mm).
-  // 60x30/50x25 terlalu lebar/tinggi → printer feed nonstop mencari gap sensor.
-  // E15: +25x45 (roll Xprinter XP-420B, 25mm lebar × 45mm tinggi portrait).
-  const [labelSize, setLabelSize] = useState<"60x30" | "50x25" | "40x20" | "25x45" | "100x150">("100x150");
+  // E15 FINAL (2026-09-24): XP-420B = label die-cut 3,3×1,5 cm, 3 label per baris,
+  // liner 10,8 cm (margin tepi 0,15 + gap antar card 0,3), roll kontinu TANPA halaman.
+  // Satuan baris = 1,5 label + 0,3 gap = 1,8 cm → page break wajib kelipatan 1,8.
+  // 40x20/50x25/60x30 = jalur RPP02N (single label per halaman).
+  const [labelSize, setLabelSize] = useState<"60x30" | "50x25" | "40x20" | "xp420b">("xp420b");
   const LABEL_DIMS: Record<string, { w: number; h: number }> = {
     "60x30": { w: 60, h: 30 },
     "50x25": { w: 50, h: 25 },
     "40x20": { w: 40, h: 20 },
-    "25x45": { w: 25, h: 45 },
-    "100x150": { w: 100, h: 150 },
+    xp420b: { w: 33, h: 15 }, // 1 label (di dalam liner 108mm, 3 label/baris)
   };
-  // E15: mode cetak — default GRID (kertas 100x150 = 9 sub-label; single utk kasus khusus)
-  const [printMode, setPrintMode] = useState<"single" | "grid">("grid");
-  const [gridCols, setGridCols] = useState(3);
-  const [gridRows, setGridRows] = useState(3);
+  const SHEET_W = 108; // mm — lebar liner
+  const ROW_PITCH = 18; // mm — 15 label + 3 gap
+  const XP_COLS = 3;
 
   // Get products to print
-  const productsToPrint = productId === "all" 
-    ? products 
+  const productsToPrint = productId === "all"
+    ? products
     : products.filter((p) => p.id === productId);
 
   // Barcode + label vendor utk varian preset (E2), selain itu default varian
@@ -88,13 +96,8 @@ export default function PrintBarcodeModal({
     }));
   };
 
-  // Direct print via browser — supports thermal printer (Bluetooth/USB/WiFi)
-  const handleDirectPrint = () => {
-    const { w: labelWidth, h: labelHeight } = LABEL_DIMS[labelSize];
-    const isGrid = printMode === "grid";
-    const perLabel = gridCols * gridRows;
-
-    // Collect labels (single) / cells (grid)
+  // Kumpulkan label (expand qty per varian)
+  const collectLabels = () => {
     const labels: { name: string; color?: string; size: string; price: number; barcode: string; vendor?: string; }[] = [];
     allVariants.forEach(({ product, variant }) => {
       const count = selectedVariants[variant.id] || 0;
@@ -110,99 +113,140 @@ export default function PrintBarcodeModal({
         });
       }
     });
+    return labels;
+  };
 
-    if (labels.length === 0) return;
+  // ===== E15 FINAL: XP-420B — direct print (liner 108mm, 3 label/baris) =====
+  const xp420bDirectPrint = (labels: ReturnType<typeof collectLabels>) => {
+    const rows = Math.ceil(labels.length / XP_COLS);
+    if (
+      !confirm(
+        `Print ${labels.length} label (${rows} baris × 3) — liner 108 mm.\n` +
+          `WAJIB: Margin = None di dialog print.`
+      )
+    )
+      return;
 
+    const bcImg = (code: string) => {
+      const c = document.createElement("canvas");
+      JsBarcode(c, code, {
+        format: "CODE128",
+        width: 1,
+        height: 34,
+        displayValue: true,
+        fontSize: 8,
+        margin: 0,
+      });
+      return c.toDataURL("image/png");
+    };
+    const cellHTML = (l: (typeof labels)[0]) => `
+      <div class="xcell">
+        <img src="${bcImg(l.barcode)}" />
+        <div class="xcap">${l.name}${l.size ? ` · ${l.size}` : ""} · Rp ${l.price.toLocaleString("id-ID")}</div>
+      </div>`;
+    const rowsHTML: string[] = [];
+    for (let r = 0; r < rows; r++) {
+      const slice = labels.slice(r * XP_COLS, r * XP_COLS + XP_COLS);
+      const pad = Array.from({ length: XP_COLS - slice.length }, () => `<div class="xcell"></div>`);
+      rowsHTML.push(`<div class="xrow">${slice.map(cellHTML).join("")}${pad.join("")}</div>`);
+    }
+
+    const printWindow = window.open("", "_blank", "width=430,height=640");
+    if (!printWindow) {
+      alert("Popup diblokir browser. Izinkan popup untuk print barcode.");
+      return;
+    }
+    printWindow.document.write(`<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Print Barcode Labels (XP-420B)</title>
+<style>
+  @page { size: ${SHEET_W}mm ${rows * ROW_PITCH}mm; margin: 0; }
+  body { margin: 0; padding: 0; font-family: "Helvetica", "Arial", sans-serif; }
+  .xrow {
+    display: flex;
+    height: 15mm;
+    margin: 0 1.5mm 3mm 1.5mm;
+    box-sizing: border-box;
+  }
+  .xrow:last-child { margin-bottom: 0; }
+  .xcell {
+    width: 33mm;
+    height: 15mm;
+    margin-right: 3mm;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    box-sizing: border-box;
+  }
+  .xcell:nth-child(3) { margin-right: 0; }
+  .xcell img { width: 30mm; max-height: 9mm; }
+  .xcap {
+    font-size: 4.6pt;
+    color: #3a1430;
+    max-width: 31mm;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+${rowsHTML.join("")}
+</body>
+</html>`);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+      printWindow.print();
+      printWindow.close();
+    }, 500);
+  };
+
+  // ===== jalur RPP02N: direct print single label per halaman =====
+  const legacyDirectPrint = (labels: ReturnType<typeof collectLabels>, dims: { w: number; h: number }) => {
     // E13: guard printer portable — RPP02N area cetak ~48mm; lebar lebih → feed nonstop.
-    if (labelWidth > 48) {
+    if (dims.w > 48) {
       const ok = confirm(
-        `Label ${labelWidth}mm lebih lebar dari area cetak RPP02N (~48mm).\n` +
+        `Label ${dims.w}mm lebih lebar dari area cetak RPP02N (~48mm).\n` +
           `Hasil bisa terpotong / feed tidak berhenti.\n` +
           `Disarankan pakai label 40x20. Tetap lanjut print?`
       );
       if (!ok) return;
     }
+    if (!confirm(`Print ${labels.length} label (${dims.w}x${dims.h}mm) via printer?`)) return;
 
-    // E15: grid mode —peringatan scannability: CODE128 butuh ±0.125mm per modul di 203dpi.
-    let gridWarn = "";
-    if (isGrid) {
-      const cellW = labelWidth / gridCols;
-      const longest = Math.max(...labels.map((l) => l.barcode.length));
-      const minMm = 0.125 * (11 * longest + 35) + 4;
-      if (cellW < minMm) {
-        gridWarn = `\n⚠️ Kode terpanjang (${longest} karakter) butuh ±${minMm.toFixed(0)}mm — kolom grid ini hanya ${cellW.toFixed(0)}mm.\nBarcode bisa gagal discan! Kurangi jumlah kolom.`;
-      }
-    }
-    if (!confirm(
-      isGrid
-        ? `Print ${labels.length} barcode dalam ${Math.ceil(labels.length / perLabel)} label grid ${gridCols}×${gridRows} (${labelWidth}x${labelHeight}mm)?${gridWarn}`
-        : `Print ${labels.length} label (${labelWidth}x${labelHeight}mm) via printer?`
-    )) return;
-
-    // Generate barcode SVGs
-    const barcodeImgFor = (barcode: string, small = false, rotate = false) => {
-      const canvas = document.createElement("canvas");
-      JsBarcode(canvas, barcode, {
-        format: "CODE128",
-        width: small ? 1 : 2,
-        height: small ? 28 : 50,
-        displayValue: true,
-        fontSize: small ? 7 : 10,
-        margin: 0,
-      });
-      if (!rotate) return canvas.toDataURL("image/png");
-      // putar 90° CW — panjang barcode mengikuti sisi TINGGI sel (sub-label portrait)
-      const rot = document.createElement("canvas");
-      rot.width = canvas.height;
-      rot.height = canvas.width;
-      const ctx = rot.getContext("2d")!;
-      ctx.translate(rot.width, 0);
-      ctx.rotate(Math.PI / 2);
-      ctx.drawImage(canvas, 0, 0);
-      return rot.toDataURL("image/png");
-    };
-
-    let labelHTML: string;
-    // E15 grid: kartu desain PERSIS PDF (8) — barcode kiri + nama/size/harga kanan —
-    // didesain LANDSCAPE (lebar = tinggi sel, tinggi = lebar sel) lalu SELURUH kartu
-    // diputar 90° ke kanan (transform) di dalam sel.
-    const card90HTML = (label: (typeof labels)[0], cellW: number, cellH: number, upright = false) => {
-      const img = barcodeImgFor(label.barcode, true);
-      const iw = upright ? cellW - 2 : cellH - 1; // kartu landscape: lebar = tinggi sel
-      const ih = upright ? cellH - 2 : cellW - 1; // tinggi kartu = lebar sel
-      return `
-      <div class="card90${upright ? " upright" : ""}">
-        <div class="card90-inner" style="width:${iw}mm;height:${ih}mm;">
-          <div class="card90-bc"><img src="${img}" /></div>
-          <div class="card90-info">
+    const labelHTML = labels
+      .map((label) => {
+        const canvas = document.createElement("canvas");
+        JsBarcode(canvas, label.barcode, {
+          format: "CODE128",
+          width: 2,
+          height: 50,
+          displayValue: true,
+          fontSize: 10,
+          margin: 0,
+        });
+        const barcodeImg = canvas.toDataURL("image/png");
+        return `
+        <div class="label" style="width:${dims.w}mm;height:${dims.h}mm;">
+          <div class="label-barcode">
+            <img src="${barcodeImg}" style="max-width:100%;max-height:${dims.h * 0.6}mm;" />
+          </div>
+          <div class="label-info">
             <div class="label-name">${label.name}</div>
             ${label.color ? `<div class="label-color">${label.color}</div>` : ""}
+            ${label.vendor ? `<div class="label-color">Vend: ${label.vendor}</div>` : ""}
             <div class="label-size">Size: ${label.size}</div>
             <div class="label-price">Rp ${label.price.toLocaleString("id-ID")}</div>
           </div>
-        </div>
-      </div>`;
-    };
-    if (isGrid) {
-      // 1 halaman = 1 KERTAS (10x15cm) berisi 9 kartu yang diputar 90° kanan
-      const chunks: (typeof labels)[] = [];
-      for (let i = 0; i < labels.length; i += perLabel) chunks.push(labels.slice(i, i + perLabel));
-      labelHTML = chunks
-        .map(
-          (cells) => `
-        <div class="label sheet" style="width:${labelWidth}mm;height:${labelHeight}mm;grid-template-columns:repeat(${gridCols},1fr);grid-template-rows:repeat(${gridRows},1fr);">
-          ${cells.map((l) => `<div class="cell">${card90HTML(l, labelWidth / gridCols, labelHeight / gridRows)}</div>`).join("")}
-        </div>`
-        )
-        .join("");
-    } else {
-      labelHTML = labels
-        .map((label) => `
-        <div class="label" style="width:${labelWidth}mm;height:${labelHeight}mm;">
-          ${card90HTML(label, labelWidth, labelHeight, true)}
-        </div>`)
-        .join("");
-    }
+        </div>`;
+      })
+      .join("");
 
     const printWindow = window.open("", "_blank", "width=400,height=600");
     if (!printWindow) {
@@ -217,7 +261,7 @@ export default function PrintBarcodeModal({
 <title>Print Barcode Labels</title>
 <style>
   @page {
-    size: ${labelWidth}mm ${labelHeight}mm;
+    size: ${dims.w}mm ${dims.h}mm;
     margin: 0;
   }
   body {
@@ -226,69 +270,14 @@ export default function PrintBarcodeModal({
     font-family: "Helvetica", "Arial", sans-serif;
   }
   .label {
-    box-sizing: border-box;
-    page-break-after: always;
-    overflow: hidden;
-    border: 0.3mm dashed #b0b0b0;
-  }
-  .label.sheet {
-    display: grid;
-    padding: 0.5mm;
-  }
-  .cell {
-    box-sizing: border-box;
-    border: 0.3mm dashed #b0b0b0;
-    position: relative;
-    overflow: hidden;
-  }
-  /* kartu landscape didesain dgn dimensi sel TERBALIK (h×w), lalu diputar 90° CW
-     dgn transform-origin center → bounding box pas mengisi sel (w×h) */
-  .card90 {
-    position: relative;
-    width: 100%;
-    height: 100%;
-  }
-  .card90-inner {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%) rotate(90deg);
     display: flex;
     align-items: center;
     box-sizing: border-box;
     padding: 1mm;
+    page-break-after: always;
     overflow: hidden;
   }
-  .card90.upright .card90-inner {
-    position: relative;
-    top: auto;
-    left: auto;
-    transform: none;
-  }
-  .card90-bc {
-    flex: 0 0 62%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 0;
-  }
-  .card90-bc img {
-    max-width: 100%;
-    max-height: 100%;
-  }
-  .card90-info {
-    flex: 1;
-    min-width: 0;
-    padding-left: 1mm;
-  }
-  .sub {
-    display: flex;
-    align-items: center;
-    box-sizing: border-box;
-    padding: 0.4mm;
-    overflow: hidden;
-  }
-  .sub .label-barcode {
+  .label-barcode {
     flex: 0 0 60%;
     display: flex;
     align-items: center;
@@ -326,230 +315,126 @@ ${labelHTML}
     }, 500);
   };
 
-  // Print handler - single: PDF A4 berisi banyak label; grid (E15): PDF per-label
-  // seukuran label fisik (proyeksi 1:1 ke printer label)
-  const handlePrint = async () => {
-    const { w: labelWidth, h: labelHeight } = LABEL_DIMS[labelSize];
-    const isGrid = printMode === "grid";
-    const margin = 5;
-    const gap = 2;
+  const handleDirectPrint = () => {
+    const labels = collectLabels();
+    if (labels.length === 0) return;
+    if (labelSize === "xp420b") return xp420bDirectPrint(labels);
+    return legacyDirectPrint(labels, LABEL_DIMS[labelSize]);
+  };
 
+  // ===== E15 FINAL: XP-420B — PDF strip liner (kelipatan 1,8 cm) =====
+  const xp420bPdf = (labels: SimpleLabel[]) => {
+    const rows = Math.ceil(labels.length / XP_COLS);
     const doc = new jsPDF({
       orientation: "portrait",
       unit: "mm",
-      format: isGrid ? [labelWidth, labelHeight] : "a4",
+      format: [SHEET_W, rows * ROW_PITCH],
     });
 
-    // Grid: how many labels fit per A4 page (single mode)
-    const cols = isGrid ? gridCols : Math.floor((210 - margin * 2 + gap) / (labelWidth + gap));
-    const rows = isGrid ? gridRows : Math.floor((297 - margin * 2 + gap) / (labelHeight + gap));
+    const imgCache = new Map<string, { image: string; ratio: number }>();
+    const imgFor = (label: SimpleLabel) => {
+      if (!imgCache.has(label.barcode)) {
+        const canvas = document.createElement("canvas");
+        JsBarcode(canvas, label.barcode, {
+          format: "CODE128",
+          width: 2,
+          height: 40,
+          displayValue: false,
+          margin: 0,
+        });
+        imgCache.set(label.barcode, {
+          image: canvas.toDataURL("image/png"),
+          ratio: canvas.height / canvas.width,
+        });
+      }
+      return imgCache.get(label.barcode)!;
+    };
+
+    labels.forEach((label, i) => {
+      const row = Math.floor(i / XP_COLS);
+      const colI = i % XP_COLS;
+      const x = 1.5 + colI * (33 + 3);
+      const y = row * ROW_PITCH;
+
+      const { image, ratio } = imgFor(label);
+      const bw = 30; // barcode 30mm
+      const bh = Math.min(bw / ratio, 9.5);
+      doc.addImage(image, "PNG", x + (33 - bw) / 2, y + 0.8, bw, bh);
+      doc.setFont("helvetica", "normal").setFontSize(5.5).setTextColor(58, 20, 48);
+      doc.text(
+        `${label.name}${label.size ? ` · ${label.size}` : ""} · Rp ${label.price.toLocaleString("id-ID")}`,
+        x + 16.5,
+        y + 13.4,
+        { align: "center", maxWidth: 32 }
+      );
+    });
+
+    doc.save("barcode-labels-xp420b.pdf");
+    onClose();
+  };
+
+  // ===== jalur RPP02N: PDF A4 sticker sheet =====
+  const legacyPdf = (labels: SimpleLabel[], dims: { w: number; h: number }) => {
+    const margin = 5;
+    const gap = 2;
+    const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+    const cols = Math.floor((210 - margin * 2 + gap) / (dims.w + gap));
+    const rows = Math.floor((297 - margin * 2 + gap) / (dims.h + gap));
     const perPage = cols * rows;
 
-    // Collect labels (expanded by copy count)
-    const labels: {
-      name: string;
-      color?: string;
-      size: string;
-      price: number;
-      barcode: string;
-      vendor?: string;
-      image: string;
-      ratio: number;
-      rotImage: string;
-    }[] = [];
+    labels.forEach((label, i) => {
+      if (i > 0 && i % perPage === 0) doc.addPage("a4", "portrait");
 
-    allVariants.forEach(({ product, variant }) => {
-      const count = selectedVariants[variant.id] || 0;
-      if (count === 0) return;
+      const posInPage = i % perPage;
+      const col = posInPage % cols;
+      const row = Math.floor(posInPage / cols);
+      const x = margin + col * (dims.w + gap);
+      const y = margin + row * (dims.h + gap);
 
-      // Generate barcode image once per variant
+      doc.setDrawColor(200, 200, 200);
+      doc.rect(x, y, dims.w, dims.h);
+
+      const infoX = x + dims.w * 0.68;
+      const infoW = dims.w - (infoX - x) - 2;
       const canvas = document.createElement("canvas");
-      JsBarcode(canvas, barcodeFor(variant), {
+      JsBarcode(canvas, label.barcode, {
         format: "CODE128",
         width: 2,
         height: 40,
         displayValue: false,
         margin: 0,
       });
-      const image = canvas.toDataURL("image/png");
-      const ratio = canvas.height / canvas.width; // aspect utk grid cells (anti gepeng)
-      // versi rotasi 90° CW utk sel portrait (panjang barcode = tinggi sel)
-      const rot = document.createElement("canvas");
-      rot.width = canvas.height;
-      rot.height = canvas.width;
-      const rctx = rot.getContext("2d")!;
-      rctx.translate(rot.width, 0);
-      rctx.rotate(Math.PI / 2);
-      rctx.drawImage(canvas, 0, 0);
-      const rotImage = rot.toDataURL("image/png");
-
-      for (let c = 0; c < count; c++) {
-        labels.push({
-          name: product.name,
-          color: variant.color,
-          size: variant.size,
-          price: variant.sellingPrice,
-          barcode: barcodeFor(variant),
-          vendor: vendorFor(variant.id),
-          image,
-          ratio,
-          rotImage,
-        });
-      }
-    });
-
-    // Draw labels in grid
-    // raster kartu digambar MANUAL ke canvas 2D (tanpa html2canvas — anti error
-    // "cloned iframe" di production) → rotasi 90° CW → identik dgn direct print
-    const cardCache = new Map<string, string>();
-    const card90Image = (label: (typeof labels)[0], cellW: number, cellH: number): string => {
-      if (cardCache.has(label.barcode)) return cardCache.get(label.barcode)!;
-      const iw = cellH - 1; // kartu landscape: lebar = tinggi sel
-      const ih = cellW - 1; // tinggi kartu = lebar sel
-      const pw = Math.round(iw * 7.56); // 96dpi × 2 (ketajaman utk 203dpi printer)
-      const ph = Math.round(ih * 7.56);
-      const card = document.createElement("canvas");
-      card.width = pw;
-      card.height = ph;
-      const ctx = card.getContext("2d")!;
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, pw, ph);
-      ctx.textBaseline = "top";
-
-      // barcode kiri (62% lebar) — aspect terjaga
-      const bc = document.createElement("canvas");
-      JsBarcode(bc, label.barcode, {
-        format: "CODE128",
-        width: 2,
-        height: Math.round(ph * 0.5),
-        displayValue: true,
-        fontSize: Math.max(10, Math.round(ph * 0.055)),
-        margin: 0,
-      });
-      const zoneW = Math.round(pw * 0.62);
-      const scale = Math.min((zoneW - 10) / bc.width, (ph - 10) / bc.height);
-      const dw = bc.width * scale;
-      const dh = bc.height * scale;
-      ctx.drawImage(bc, (zoneW - dw) / 2, (ph - dh) / 2, dw, dh);
-
-      // info kanan
-      const infoX = zoneW + 6;
-      const maxW = pw - infoX - 6;
-      const clip = (s: string) => {
-        while (s.length > 1 && ctx.measureText(s).width > maxW) s = s.slice(0, -2) + "…";
-        return s;
-      };
-      let ty = ph * 0.14;
-      ctx.fillStyle = "#3a1430";
-      ctx.font = `bold ${Math.max(12, Math.round(ph * 0.075))}px Helvetica, Arial, sans-serif`;
-      ctx.fillText(clip(label.name), infoX, ty);
-      ty += Math.round(ph * 0.11);
-      ctx.font = `${Math.max(9, Math.round(ph * 0.05))}px Helvetica, Arial, sans-serif`;
-      ctx.fillStyle = "#666666";
-      if (label.color) { ctx.fillText(clip(label.color), infoX, ty); ty += Math.round(ph * 0.07); }
-      ctx.fillText(`Size: ${label.size}`, infoX, ty);
-      ctx.fillStyle = "#775533";
-      ctx.font = `bold ${Math.max(11, Math.round(ph * 0.065))}px Helvetica, Arial, sans-serif`;
-      ctx.fillText(`Rp ${label.price.toLocaleString("id-ID")}`, infoX, ph - Math.round(ph * 0.14));
-
-      // putar kartu 90° CW → portrait pas sel
-      const rot = document.createElement("canvas");
-      rot.width = card.height;
-      rot.height = card.width;
-      const rctx = rot.getContext("2d")!;
-      rctx.translate(rot.width, 0);
-      rctx.rotate(Math.PI / 2);
-      rctx.drawImage(card, 0, 0);
-      const url = rot.toDataURL("image/png");
-      cardCache.set(label.barcode, url);
-      return url;
-    };
-
-    let cellIdx = 0;
-    for (const label of labels) {
-      const i = cellIdx;
-      cellIdx++;
-      if (i > 0 && i % perPage === 0) {
-        if (isGrid) doc.addPage([labelWidth, labelHeight], "portrait");
-        else doc.addPage("a4", "portrait");
-      }
-
-      const posInPage = i % perPage;
-      const col = posInPage % cols;
-      const row = Math.floor(posInPage / cols);
-
-      if (isGrid) {
-        // E15: halaman = 1 kertas; tiap sel = KARTU landscape dirotasi 90° CW (raster)
-        const cellW = labelWidth / cols;
-        const cellH = labelHeight / rows;
-        const cx = col * cellW;
-        const cy = row * cellH;
-
-        doc.setDrawColor(150, 150, 150);
-        doc.setLineDashPattern([0.8, 0.8], 0);
-        doc.rect(cx, cy, cellW, cellH);
-        doc.setLineDashPattern([], 0);
-
-        const cardImg = await card90Image(label, cellW, cellH);
-        doc.addImage(cardImg, "PNG", cx + 0.7, cy + 0.7, cellW - 1.4, cellH - 1.4);
-        continue;
-      }
-
-      const x = margin + col * (labelWidth + gap);
-      const y = margin + row * (labelHeight + gap);
-
-      // Label border (light, for cutting)
-      doc.setDrawColor(200, 200, 200);
-      doc.rect(x, y, labelWidth, labelHeight);
-
-      // Layout: barcode left (~68%), info right
-      const infoX = x + labelWidth * 0.68;
-      const infoW = labelWidth - (infoX - x) - 2;
-
-      // Barcode image
       const barcodeW = infoX - x - 3;
-      const barcodeH = Math.min(barcodeW * 0.4, labelHeight * 0.55);
-      doc.addImage(label.image, "PNG", x + 1.5, y + 2, barcodeW, barcodeH);
+      const barcodeH = Math.min(barcodeW * 0.4, dims.h * 0.55);
+      doc.addImage(canvas.toDataURL("image/png"), "PNG", x + 1.5, y + 2, barcodeW, barcodeH);
 
-      // Barcode text below image
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(6);
-      doc.setTextColor(80, 80, 80);
-      doc.text(label.barcode, x + 1.5 + barcodeW / 2, y + barcodeH + 5, {
-        align: "center",
-      });
+      doc.setFont("helvetica", "normal").setFontSize(6).setTextColor(80, 80, 80);
+      doc.text(label.barcode, x + 1.5 + barcodeW / 2, y + barcodeH + 5, { align: "center" });
 
-      // Product info (right column)
-      doc.setTextColor(58, 20, 48); // #3a1430
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(8);
+      doc.setTextColor(58, 20, 48);
+      doc.setFont("helvetica", "bold").setFontSize(8);
       const nameLines = doc.splitTextToSize(label.name, infoW).slice(0, 2);
       doc.text(nameLines, infoX, y + 4);
 
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(6.5);
-      doc.setTextColor(100, 100, 100);
+      doc.setFont("helvetica", "normal").setFontSize(6.5).setTextColor(100, 100, 100);
       let textY = y + 4 + nameLines.length * 3.5;
-      if (label.color) {
-        doc.text(label.color, infoX, textY);
-        textY += 3.5;
-      }
-      if (label.vendor) {
-        doc.text(`Vend: ${label.vendor}`, infoX, textY);
-        textY += 3.5;
-      }
+      if (label.color) { doc.text(label.color, infoX, textY); textY += 3.5; }
+      if (label.vendor) { doc.text(`Vend: ${label.vendor}`, infoX, textY); textY += 3.5; }
       doc.text(`Size: ${label.size}`, infoX, textY);
 
-      // Price at bottom of label
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(8);
-      doc.setTextColor(119, 85, 51); // #775533
-      doc.text(`Rp ${label.price.toLocaleString("id-ID")}`, infoX, y + labelHeight - 4);
-    }
+      doc.setFont("helvetica", "bold").setFontSize(8).setTextColor(119, 85, 51);
+      doc.text(`Rp ${label.price.toLocaleString("id-ID")}`, infoX, y + dims.h - 4);
+    });
 
-    // Download PDF
     doc.save("barcode-labels.pdf");
     onClose();
+  };
+
+  const handlePrint = async () => {
+    const labels = collectLabels();
+    if (labels.length === 0) return;
+    if (labelSize === "xp420b") return xp420bPdf(labels);
+    return legacyPdf(labels, LABEL_DIMS[labelSize]);
   };
 
   // Calculate total labels
@@ -657,11 +542,10 @@ ${labelHTML}
               </h3>
               <div className="flex flex-wrap gap-3">
                 {[
-                  { value: "100x150", label: "100mm x 150mm", desc: "Resi/A6 — grid 3×3 (9 barcode)" },
-                  { value: "25x45", label: "25mm x 45mm", desc: "Roll kecil (portrait)" },
-                  { value: "60x30", label: "60mm x 30mm", desc: "Lebih Lega" },
-                  { value: "50x25", label: "50mm x 25mm", desc: "Memanjang" },
+                  { value: "xp420b", label: "3.3cm x 1.5cm ×3", desc: "XP-420B — liner 10.8cm, die-cut roll" },
                   { value: "40x20", label: "40mm x 20mm", desc: "RPP02N" },
+                  { value: "50x25", label: "50mm x 25mm", desc: "Memanjang" },
+                  { value: "60x30", label: "60mm x 30mm", desc: "Lebih Lega" },
                 ].map((size) => (
                   <label key={size.value} className="flex-1 cursor-pointer">
                     <input
@@ -679,59 +563,11 @@ ${labelHTML}
                   </label>
                 ))}
               </div>
-            </div>
-
-            {/* Print Mode (E15) */}
-            <div className="mb-6">
-              <h3 className="text-sm font-semibold text-[#3a1430] mb-3">Mode Cetak:</h3>
-              <div className="flex gap-3 mb-3">
-                {[
-                  { value: "single", label: "Single", desc: "1 barcode + info per label" },
-                  { value: "grid", label: "Grid", desc: "Banyak barcode per label" },
-                ].map((m) => (
-                  <label key={m.value} className="flex-1 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="print-mode"
-                      value={m.value}
-                      checked={printMode === m.value}
-                      onChange={() => setPrintMode(m.value as any)}
-                      className="peer hidden"
-                    />
-                    <div className="p-3 border-2 border-gray-200 rounded-xl peer-checked:border-[#775533] peer-checked:bg-[#775533]/5 text-center hover:bg-gray-50 transition">
-                      <div className="font-semibold text-sm">{m.label}</div>
-                      <div className="text-xs text-gray-600 mt-1">{m.desc}</div>
-                    </div>
-                  </label>
-                ))}
-              </div>
-              {printMode === "grid" && (
-                <div className="flex items-center gap-4 p-3 bg-[#F2F5E2] rounded-xl">
-                  <label className="text-sm">
-                    Kolom:{" "}
-                    <select
-                      value={gridCols}
-                      onChange={(e) => setGridCols(Number(e.target.value))}
-                      className="px-2 py-1 border border-gray-300 rounded-lg"
-                    >
-                      {[1, 2, 3].map((n) => <option key={n} value={n}>{n}</option>)}
-                    </select>
-                  </label>
-                  <label className="text-sm">
-                    Baris:{" "}
-                    <select
-                      value={gridRows}
-                      onChange={(e) => setGridRows(Number(e.target.value))}
-                      className="px-2 py-1 border border-gray-300 rounded-lg"
-                    >
-                      {[1, 2, 3, 4].map((n) => <option key={n} value={n}>{n}</option>)}
-                    </select>
-                  </label>
-                  <span className="text-xs text-gray-600">
-                    {gridCols * gridRows} barcode per label — qty tiap barcode diatur di daftar atas.
-                    ⚠️ Sel terlalu sempit = barcode bisa gagal discan (lihat peringatan saat print).
-                  </span>
-                </div>
+              {labelSize === "xp420b" && (
+                <p className="mt-2 text-xs text-gray-600">
+                  Roll die-cut siap pakai: 3 label per baris, liner 10,8 cm, roll terus tanpa potong halaman.
+                  Print dialog: <b>Margin = None</b>.
+                </p>
               )}
             </div>
 
@@ -753,8 +589,8 @@ ${labelHTML}
                         color={variant.color}
                         size={variant.size}
                         price={variant.sellingPrice}
-                        width={labelSize === "60x30" ? 60 : labelSize === "50x25" ? 50 : 40}
-                        height={labelSize === "60x30" ? 30 : labelSize === "50x25" ? 25 : 20}
+                        width={LABEL_DIMS[labelSize].w}
+                        height={LABEL_DIMS[labelSize].h}
                       />
                     ))}
                   {Object.keys(selectedVariants).length > 3 && (
@@ -770,20 +606,18 @@ ${labelHTML}
             <div className="p-4 bg-blue-50 rounded-xl">
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="text-sm text-gray-600">
-                    {printMode === "grid" ? "Total Barcode:" : "Total Labels:"}
-                  </div>
+                  <div className="text-sm text-gray-600">Total Labels:</div>
                   <div className="text-2xl font-bold text-blue-700">{totalLabels}</div>
-                  {printMode === "grid" && (
+                  {labelSize === "xp420b" && (
                     <div className="text-xs text-gray-600">
-                      ≈ {Math.ceil(totalLabels / (gridCols * gridRows))} label fisik ({gridCols}×{gridRows})
+                      {Math.ceil(totalLabels / XP_COLS)} baris × 3 label — liner 10,8 cm
                     </div>
                   )}
                 </div>
                 <div className="text-right">
                   <div className="text-sm text-gray-600">Estimasi Waktu:</div>
                   <div className="text-lg font-semibold text-gray-800">
-                    ~{(printMode === "grid" ? Math.ceil(totalLabels / (gridCols * gridRows)) : totalLabels) * 3} detik
+                    ~{totalLabels * 3} detik
                   </div>
                 </div>
               </div>
@@ -825,7 +659,7 @@ ${labelHTML}
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   strokeWidth="2"
-                  d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"
+                  d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"
                 />
               </svg>
               Print {totalLabels} Labels
