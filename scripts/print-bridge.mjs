@@ -73,6 +73,8 @@ function rawPrint(job) {
 
 const server = http.createServer(async (req, res) => {
   const origin = req.headers.origin;
+  // log tiap request (diagnosis: apakah browser sampai ke bridge?)
+  console.log(new Date().toISOString(), req.method, req.url, "origin=" + (origin || "-"), "pna=" + (req.headers["access-control-request-private-network"] || "-"));
   const ok = originAllowed(origin);
   if (origin && ok) {
     res.setHeader("Access-Control-Allow-Origin", origin);

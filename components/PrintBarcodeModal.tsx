@@ -121,110 +121,6 @@ export default function PrintBarcodeModal({
     return labels;
   };
 
-  // ===== E15 FINAL: XP-420B — halaman 108x144mm (8 baris x 18mm, break di gap) =====
-  const xp420bDirectPrint = (labels: ReturnType<typeof collectLabels>) => {
-    const ROWS_PER_PAGE = 7; // (144 - 5mm spacer) / 18 = 7 baris
-    const XP_TOP_OFFSET = 5; // 8 x 1.8cm = 14.4cm — pas stock driver custom 108x144mm
-    const rows = Math.ceil(labels.length / XP_COLS);
-    const pages = Math.ceil(rows / ROWS_PER_PAGE);
-    if (
-      !confirm(
-        `Print ${labels.length} label (${rows} baris × 3) — ${pages} halaman 108×144 mm.\n` +
-          `WAJIB: Margin = None, Scale = 100%.`
-      )
-    )
-      return;
-
-    const bcImg = (code: string) => {
-      const c = document.createElement("canvas");
-      JsBarcode(c, code, {
-        format: "CODE128",
-        width: 1,
-        height: 34,
-        displayValue: true,
-        fontSize: 8,
-        margin: 0,
-      });
-      return c.toDataURL("image/png");
-    };
-    // E15 FINAL: barcode HORIZONTAL (30mm muat di lebar label 33mm) + caption di bawah
-    // (barcode vertikal 30mm GAK muat di tinggi label 15mm — terbukti fisik 2026-09-25)
-    const cellHTML = (l: (typeof labels)[0]) => `
-      <div class="xcell">
-        <img src="${bcImg(l.barcode)}" />
-        <div class="xcap">${l.name}${l.size ? ` · ${l.size}` : ""} · Rp ${l.price.toLocaleString("id-ID")}</div>
-      </div>`;
-    const pagesHTML: string[] = [];
-    for (let p = 0; p < pages; p++) {
-      const rowsHTML: string[] = [];
-      for (let r = 0; r < ROWS_PER_PAGE; r++) {
-        const idx = (p * ROWS_PER_PAGE + r) * XP_COLS;
-        if (idx >= labels.length) {
-          rowsHTML.push(`<div class="xrow">${`<div class="xcell"></div>`.repeat(XP_COLS)}</div>`);
-          continue;
-        }
-        const slice = labels.slice(idx, idx + XP_COLS);
-        const pad = Array.from({ length: XP_COLS - slice.length }, () => `<div class="xcell"></div>`);
-        rowsHTML.push(`<div class="xrow">${slice.map(cellHTML).join("")}${pad.join("")}</div>`);
-      }
-      pagesHTML.push(`<div class="xpage">${rowsHTML.join("")}</div>`);
-    }
-
-    const printWindow = window.open("", "_blank", "width=430,height=640");
-    if (!printWindow) {
-      alert("Popup diblokir browser. Izinkan popup untuk print barcode.");
-      return;
-    }
-    printWindow.document.write(`<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<title>Print Barcode Labels (XP-420B)</title>
-<style>
-  @page { size: 108mm 144mm; margin: 0; }
-  body { margin: 0; padding: 0; font-family: "Helvetica", "Arial", sans-serif; }
-  .xpage { height: 144mm; overflow: hidden; page-break-after: always; box-sizing: border-box; padding-top: 5mm; }
-  .xpage:last-child { page-break-after: auto; }
-  .xrow {
-    display: flex;
-    height: 15mm;
-    margin: 0 1.5mm 3mm 4.5mm; /* kiri 1.5 + offset kalibrasi 3 (typo "3mm mm" membuang seluruh margin) */
-    box-sizing: border-box;
-  }
-  .xrow:last-child { margin-bottom: 0; }
-  .xcell {
-    width: 33mm;
-    height: 15mm;
-    margin-right: 3mm;
-    position: relative;
-    overflow: hidden;
-    box-sizing: border-box;
-  }
-  .xcell:nth-child(3) { margin-right: 0; }
-  .xcell img { width: 30mm; max-height: 9mm; }
-  .xcap {
-    font-size: 4.6pt;
-    color: #3a1430;
-    max-width: 31mm;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    text-align: center;
-  }
-</style>
-</head>
-<body>
-${pagesHTML.join("")}
-</body>
-</html>`);
-    printWindow.document.close();
-    printWindow.focus();
-    setTimeout(() => {
-      printWindow.print();
-      printWindow.close();
-    }, 500);
-  };
-
   // ===== jalur RPP02N: direct print single label per halaman =====
   const legacyDirectPrint = (labels: ReturnType<typeof collectLabels>, dims: { w: number; h: number }) => {
     // E13: guard printer portable — RPP02N area cetak ~48mm; lebar lebih → feed nonstop.
@@ -334,29 +230,38 @@ ${labelHTML}
   };
 
   // E15: cetak XP-420B via bridge lokal (TSPL). Baris = ceil(label/3) → tidak ada label kosong terbuang.
+  // Tanpa cadangan dialog browser: jalur itu memajukan halaman 144 mm penuh (24 label) → buang media.
+  // Chrome ≥142 memblokir halaman publik (https) memanggil 127.0.0.1 kecuali user memberi izin
+  // "Local network access" → tunggu lama saat health-check agar popup izin sempat dijawab.
+  const bridgeFetch = (path: string, init: RequestInit & { targetAddressSpace?: string } = {}, timeoutMs = 20000) =>
+    fetch(`${PRINT_BRIDGE_URL}${path}`, {
+      ...init,
+      targetAddressSpace: "loopback",
+      signal: AbortSignal.timeout(timeoutMs),
+    } as RequestInit);
+
   const xp420bBridgePrint = async (labels: ReturnType<typeof collectLabels>) => {
     const rows = Math.ceil(labels.length / XP_COLS);
     let alive = false;
     try {
-      const h = await fetch(`${PRINT_BRIDGE_URL}/health`, { signal: AbortSignal.timeout(1500) });
-      alive = h.ok;
+      alive = (await bridgeFetch("/health")).ok;
     } catch {
       alive = false;
     }
     if (!alive) {
-      if (
-        confirm(
-          "Print-bridge belum aktif di PC ini.\n" +
-            "Jalankan: npm run print-bridge (di folder aplikasi), lalu coba lagi.\n\n" +
-            "Pakai dialog print browser sebagai cadangan? (bisa feed berlebih/berotasi)"
-        )
-      )
-        xp420bDirectPrint(labels);
+      alert(
+        "Tidak bisa menghubungi print-bridge (printer label). Tidak ada yang dicetak.\n\n" +
+          "1) Pastikan bridge menyala di PC ini: jalankan  npm run print-bridge  (folder aplikasi).\n" +
+          "2) Jika Chrome menampilkan popup izin akses jaringan lokal / perangkat lain → pilih IZINKAN.\n" +
+          "   Jika pernah diblokir: klik ikon di sebelah alamat situs → Setelan situs → " +
+          "Akses jaringan lokal → Izinkan, lalu muat ulang halaman.\n" +
+          "3) Cetak label hanya bisa dari browser di PC yang terhubung ke printer."
+      );
       return;
     }
     if (!confirm(`Print ${labels.length} label (${rows} baris × 3) ke printer label?`)) return;
     try {
-      const r = await fetch(`${PRINT_BRIDGE_URL}/print`, {
+      const r = await bridgeFetch("/print", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ data: bytesToBase64(buildTsplJob(labels, canvasTextRenderer())) }),
