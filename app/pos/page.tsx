@@ -6,7 +6,6 @@ import { useCart } from "@/store/cart";
 import { useData } from "@/store/data";
 import CheckoutModal from "@/components/CheckoutModal";
 import BarcodeScanner from "@/components/BarcodeScanner";
-import RentalModal from "@/components/RentalModal";
 import { useAuth } from "@/store/auth";
 import { useSettings } from "@/store/settings";
 import { parseVoBarcode, resolveVoScan } from "@/lib/barcode";
@@ -22,7 +21,6 @@ export default function PosPage() {
   const [cat, setCat] = useState<string>("all");
   const [query, setQuery] = useState("");
   const [picker, setPicker] = useState<Product | null>(null);
-  const [rentalFor, setRentalFor] = useState<{ product: Product; variant: Variant } | null>(null);
   const [checkout, setCheckout] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
   const { lines, addVariant, addCustomItem, inc, dec, remove, total, customerName, setCustomer } =
@@ -62,10 +60,10 @@ export default function PosPage() {
 
   // Re-focus hidden input when modals close
   useEffect(() => {
-    if (!picker && !checkout && !scannerOpen && !customOpen && !rentalFor) {
+    if (!picker && !checkout && !scannerOpen && !customOpen) {
       focusScan();
     }
-  }, [picker, checkout, scannerOpen, customOpen, rentalFor]);
+  }, [picker, checkout, scannerOpen, customOpen]);
 
   useEffect(() => {
     return () => {
@@ -304,10 +302,10 @@ export default function PosPage() {
           onChange={(e) => setScanBuffer(e.target.value)}
           onKeyDown={onScanKeyDown}
           onBlur={() => setTimeout(() => {
-            // Jangan rebut fokus saat modal terbuka (picker/checkout/scanner/custom/sewa),
+            // Jangan rebut fokus saat modal terbuka (picker/checkout/scanner/custom),
             // dan jangan rebut dari select/input/textarea — native dropdown akan
             // collapse sepersekian detik kalau fokus dicuri balik (bug dropdown series).
-            if (picker || checkout || scannerOpen || customOpen || rentalFor) return;
+            if (picker || checkout || scannerOpen || customOpen) return;
             const el = document.activeElement as HTMLElement | null;
             if (el && (el.tagName === "SELECT" || el.tagName === "TEXTAREA" ||
               (el.tagName === "INPUT" && el !== scanInputRef.current))) return;
@@ -440,16 +438,6 @@ export default function PosPage() {
                     >
                       {picker.stock === 0 ? "Habis" : "+ Keranjang"}
                     </button>
-                    {(v.rentalPrice ?? 0) > 0 && (
-                      <button
-                        disabled={picker.stock === 0}
-                        onClick={() => { setPicker(null); setRentalFor({ product: picker, variant: v }); }}
-                        className="btn-violet px-3 py-1.5 text-sm"
-                        title={`Sewa ${formatRupiah(v.rentalPrice ?? 0)}`}
-                      >
-                        Sewa
-                      </button>
-                    )}
                   </div>
                 </div>
               ))}
@@ -460,14 +448,6 @@ export default function PosPage() {
 
       {checkout && <CheckoutModal onClose={() => setCheckout(false)} />}
       {scannerOpen && <BarcodeScanner onScan={handleScan} onClose={() => setScannerOpen(false)} />}
-      {rentalFor && (
-        <RentalModal
-          product={rentalFor.product}
-          variant={rentalFor.variant}
-          cashierName={cashierName}
-          onClose={() => setRentalFor(null)}
-        />
-      )}
 
       {customOpen && (
         <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4">

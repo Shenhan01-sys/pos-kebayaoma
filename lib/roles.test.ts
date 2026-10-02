@@ -14,7 +14,7 @@ describe("E12 RBAC roles", () => {
     expect(pagesForRole("superadmin")).toContain("/settings");
     expect(pagesForRole("superadmin")).toContain("/staff");
     expect(pagesForRole("superadmin")).toContain("/reports");
-    expect(pagesForRole("superadmin").length).toBe(11); // E8: +/expenses
+    expect(pagesForRole("superadmin").length).toBe(12); // E8: +/expenses · E17: +/sewa
   });
 
   it("pagesForRole: manager tanpa /staff & /settings, dengan /reports & /inventory", () => {
@@ -35,6 +35,15 @@ describe("E12 RBAC roles", () => {
     expect(p).toContain("/inventory");
     expect(p).not.toContain("/products");
     expect(p).not.toContain("/reports");
+  });
+
+  it("E17: /sewa untuk superadmin, manager, kasir — bukan admin; role tak dikenal ditolak", () => {
+    expect(canAccessPage("superadmin", "/sewa")).toBe(true);
+    expect(canAccessPage("manager", "/sewa")).toBe(true);
+    expect(canAccessPage("kasir", "/sewa")).toBe(true);
+    expect(canAccessPage("admin", "/sewa")).toBe(false);
+    expect(canAccessPage(undefined, "/sewa")).toBe(false);
+    expect(canAccessPage("hacker" as never, "/sewa")).toBe(false);
   });
 
   it("fail-closed: role tidak dikenal = tidak ada akses", () => {

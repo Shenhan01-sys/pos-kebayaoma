@@ -20,7 +20,6 @@ import { useAuth } from "@/store/auth";
 import { useData } from "@/store/data";
 import { canManageTransactions } from "@/lib/roles";
 import { Icon } from "@/components/icons";
-import RentalPanel from "@/components/RentalPanel";
 import TransferPanel from "@/components/TransferPanel";
 
 const METHOD_LABELS: Record<PaymentMethod, string> = {
@@ -220,7 +219,6 @@ export default function TransactionsPage() {
         </div>
       </div>
 
-      <RentalPanel />
       <TransferPanel />
 
       <div className="flex flex-col gap-4 lg:flex-row">
@@ -270,6 +268,9 @@ export default function TransactionsPage() {
                       ) : (
                         ""
                       )}
+                      {r.isFirstOfNota && r.tx.kind === "rental" ? (
+                        <span className="pill-violet ml-1 text-[10px]" title="Transaksi sewa — kelola di menu Sewa">Sewa</span>
+                      ) : null}
                       {r.isFirstOfNota && r.tx.kind === "preorder" ? (
                         <span className="pill-apricot ml-1 text-[10px]" title={r.tx.dueDate ? `Tempo ${r.tx.dueDate}` : "Pre-order"}>PO</span>
                       ) : null}

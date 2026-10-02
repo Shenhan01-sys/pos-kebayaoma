@@ -8,6 +8,7 @@ export type { Role };
 export const ALL_PAGES = [
   "/",
   "/pos",
+  "/sewa",
   "/products",
   "/inventory",
   "/customers",
@@ -20,10 +21,11 @@ export const ALL_PAGES = [
 ] as const;
 
 const SUPERADMIN_PAGES: string[] = [...ALL_PAGES];
-const MANAGER_PAGES = ["/", "/pos", "/products", "/inventory", "/customers", "/transactions", "/shifts", "/reports"];
+// E17: /sewa = superadmin + manager + kasir (pengembalian & sewa dilayani di kasir); admin tidak (matriks E12).
+const MANAGER_PAGES = ["/", "/pos", "/sewa", "/products", "/inventory", "/customers", "/transactions", "/shifts", "/reports"];
 // E8: petty cash = admin + superadmin (matriks E12) — manager/kasir tidak.
 const ADMIN_PAGES = ["/", "/transactions", "/expenses", "/reports"];
-const KASIR_PAGES = ["/", "/pos", "/inventory", "/customers", "/transactions", "/shifts"];
+const KASIR_PAGES = ["/", "/pos", "/sewa", "/inventory", "/customers", "/transactions", "/shifts"];
 
 export function pagesForRole(role: Role | undefined | null): string[] {
   switch (role) {

@@ -1401,9 +1401,9 @@ export const useData = create<DataState>()(
               .map((r: any) => ({
               id: r.id,
               transactionId: r.transaction_id,
-              txNumber: r.transactions?.number ?? "â€”",
+              txNumber: r.transactions?.number ?? "—",
               productId: r.product_id,
-              productName: r.products?.name ?? "â€”",
+              productName: r.products?.name ?? "—",
               customerName: r.customers?.name ?? null,
               customerPhone: r.customers?.phone ?? null,
               qty: Number(r.qty),

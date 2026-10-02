@@ -14,6 +14,7 @@ import LoginScreen from "@/components/LoginScreen";
 const links: { href: string; label: string; icon: IconName }[] = [
   { href: "/", label: "Dashboard", icon: "dashboard" },
   { href: "/pos", label: "Kasir POS", icon: "pos" },
+  { href: "/sewa", label: "Sewa", icon: "rental" },
   { href: "/products", label: "Produk", icon: "products" },
   { href: "/inventory", label: "Inventori", icon: "inventory" },
 { href: "/customers", label: "Pelanggan", icon: "customers" },

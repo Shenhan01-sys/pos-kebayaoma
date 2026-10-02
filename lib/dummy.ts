@@ -56,7 +56,7 @@ export interface Customer {
 
 export type PaymentMethod = "qris" | "cash" | "transfer" | "shopee";
 export type TransactionStatus = "pending" | "paid" | "partial" | "cancelled" | "refunded";
-export type TransactionKind = "sale" | "preorder";
+export type TransactionKind = "sale" | "preorder" | "rental";
 
 export interface TransactionItem {
   productId: string;

@@ -30,3 +30,143 @@ describe("rental (E7)", () => {
     expect(rentTotal(150000.4, 2)).toBe(300001);
   });
 });
+
+// ===== E17: halaman /sewa =====
+import {
+  depositTotal,
+  filterRentals,
+  isOpenRental,
+  matchesQuery,
+  normalizePhoneId,
+  reminderText,
+  rentalSummary,
+  sortRentals,
+  statusOf,
+  waLink,
+  type RentalItem,
+} from "./rental";
+
+const NOW = new Date(2026, 9, 10, 9, 0, 0); // 10 Okt 2026 (lokal)
+const mk = (o: Partial<RentalItem> & { id: string }): RentalItem => ({
+  txNumber: "MJL-0001",
+  productName: "Kebaya Brokat",
+  customerName: "Sari",
+  customerPhone: "081234567890",
+  qty: 1,
+  returnedQty: 0,
+  rentPrice: 100000,
+  deposit: 50000,
+  startDate: "2026-10-07",
+  dueDate: "2026-10-12",
+  ...o,
+});
+
+const data: RentalItem[] = [
+  mk({ id: "a", dueDate: "2026-10-14", customerName: "Ani", txNumber: "MJL-0010" }), // aktif (4 hari)
+  mk({ id: "b", dueDate: "2026-10-10", customerName: "Budi", txNumber: "MJL-0011", productName: "Selendang" }), // hari ini
+  mk({ id: "c", dueDate: "2026-10-07", customerName: "Citra", txNumber: "KTB-0003", qty: 3, returnedQty: 1, deposit: 20000 }), // terlambat 3 hari, sebagian
+  mk({ id: "d", dueDate: "2026-10-01", customerName: "Dewi", qty: 2, returnedQty: 2 }), // selesai
+  mk({ id: "e", dueDate: "2026-10-09", customerName: "Eka", customerPhone: null, deposit: null }), // terlambat 1 hari
+];
+
+describe("E17 status & tab", () => {
+  it("isOpenRental", () => {
+    expect(isOpenRental({ qty: 2, returnedQty: 1 })).toBe(true);
+    expect(isOpenRental({ qty: 2, returnedQty: 2 })).toBe(false);
+  });
+  it("statusOf mengikuti rentalStatus", () => {
+    expect(statusOf(data[0], NOW)).toBe("aktif");
+    expect(statusOf(data[1], NOW)).toBe("jatuh-tempo");
+    expect(statusOf(data[2], NOW)).toBe("sebagian");
+    expect(statusOf(data[3], NOW)).toBe("selesai");
+    expect(statusOf(data[4], NOW)).toBe("lewat");
+  });
+  it("tab aktif = semua yang belum kembali penuh", () => {
+    expect(filterRentals(data, { tab: "aktif", query: "" }, NOW).map((r) => r.id)).toEqual(["c", "e", "b", "a"]);
+  });
+  it("tab terlambat hanya yang lewat jatuh tempo & belum selesai; paling lama di atas", () => {
+    expect(filterRentals(data, { tab: "terlambat", query: "" }, NOW).map((r) => r.id)).toEqual(["c", "e"]);
+  });
+  it("tab hari-ini", () => {
+    expect(filterRentals(data, { tab: "hari-ini", query: "" }, NOW).map((r) => r.id)).toEqual(["b"]);
+  });
+  it("tab selesai hanya yang kembali penuh", () => {
+    expect(filterRentals(data, { tab: "selesai", query: "" }, NOW).map((r) => r.id)).toEqual(["d"]);
+  });
+});
+
+describe("E17 pencarian", () => {
+  it("nama penyewa, produk, nomor nota (tak peka huruf besar)", () => {
+    expect(matchesQuery(data[0], "ANI")).toBe(true);
+    expect(matchesQuery(data[1], "selendang")).toBe(true);
+    expect(matchesQuery(data[2], "ktb-0003")).toBe(true);
+    expect(matchesQuery(data[0], "xyz")).toBe(false);
+  });
+  it("nomor HP dicari lewat digit (abaikan spasi/strip), min 3 digit", () => {
+    expect(matchesQuery(data[0], "0812-3456")).toBe(true);
+    expect(matchesQuery(data[0], "08 12")).toBe(true);
+    expect(matchesQuery(data[4], "0812")).toBe(false); // tanpa HP
+    expect(matchesQuery(data[0], "99")).toBe(false); // < 3 digit tidak dianggap HP
+  });
+  it("query kosong = lolos; digabung dengan tab", () => {
+    expect(matchesQuery(data[0], "   ")).toBe(true);
+    expect(filterRentals(data, { tab: "terlambat", query: "eka" }, NOW).map((r) => r.id)).toEqual(["e"]);
+  });
+});
+
+describe("E17 urutan", () => {
+  it("terbuka: jatuh tempo paling awal dulu; selesai: terbaru dulu; tidak mengubah array asal", () => {
+    const before = data.map((r) => r.id).join();
+    expect(sortRentals(data, "aktif").map((r) => r.id)).toEqual(["d", "c", "e", "b", "a"]);
+    expect(sortRentals(data, "selesai").map((r) => r.id)).toEqual(["a", "b", "e", "c", "d"]);
+    expect(data.map((r) => r.id).join()).toBe(before);
+  });
+});
+
+describe("E17 ringkasan", () => {
+  it("hitung open/overdue/dueToday/unit keluar/deposit ditahan", () => {
+    const s = rentalSummary(data, NOW);
+    expect(s.open).toBe(4); // a b c e (d selesai)
+    expect(s.overdue).toBe(2); // c e
+    expect(s.dueToday).toBe(1); // b
+    expect(s.unitsOut).toBe(1 + 1 + 2 + 1); // a1 b1 c(3-1)=2 e1
+    // deposit per unit × sisa unit: a 50k + b 50k + c 20k×2 + e 0
+    expect(s.depositHeld).toBe(50000 + 50000 + 40000 + 0);
+  });
+  it("daftar kosong", () => {
+    expect(rentalSummary([], NOW)).toEqual({ open: 0, overdue: 0, dueToday: 0, unitsOut: 0, depositHeld: 0 });
+  });
+  it("depositTotal = deposit per unit × qty", () => {
+    expect(depositTotal({ deposit: 20000, qty: 3 })).toBe(60000);
+    expect(depositTotal({ deposit: null, qty: 3 })).toBe(0);
+  });
+});
+
+describe("E17 WhatsApp", () => {
+  it("normalizePhoneId: 08xx, +62, 62, 8xx, spasi/strip", () => {
+    expect(normalizePhoneId("081234567890")).toBe("6281234567890");
+    expect(normalizePhoneId("+62 812-3456-7890")).toBe("6281234567890");
+    expect(normalizePhoneId("6281234567890")).toBe("6281234567890");
+    expect(normalizePhoneId("81234567890")).toBe("6281234567890");
+  });
+  it("normalizePhoneId: kosong / bukan nomor ID / terlalu pendek → null", () => {
+    expect(normalizePhoneId("")).toBeNull();
+    expect(normalizePhoneId(null)).toBeNull();
+    expect(normalizePhoneId("abc")).toBeNull();
+    expect(normalizePhoneId("+1 415 555 0100")).toBeNull();
+    expect(normalizePhoneId("0812")).toBeNull();
+  });
+  it("waLink: URL wa.me dengan teks ter-encode; tanpa HP → null", () => {
+    const link = waLink("0812-3456-7890", "Halo & terima kasih");
+    expect(link).toBe("https://wa.me/6281234567890?text=Halo%20%26%20terima%20kasih");
+    expect(waLink(null, "x")).toBeNull();
+  });
+  it("reminderText: terlambat / hari ini / akan datang, menyebut sisa unit & nota", () => {
+    expect(reminderText(data[2], NOW)).toContain("lewat 3 hari");
+    expect(reminderText(data[2], NOW)).toContain("×2"); // sisa 2 dari 3
+    expect(reminderText(data[2], NOW)).toContain("KTB-0003");
+    expect(reminderText(data[1], NOW)).toContain("HARI INI");
+    expect(reminderText(data[0], NOW)).toContain("4 hari lagi");
+    expect(reminderText(mk({ id: "z", customerName: null, dueDate: "2026-10-20" }), NOW)).toContain("Halo Kak");
+  });
+});
