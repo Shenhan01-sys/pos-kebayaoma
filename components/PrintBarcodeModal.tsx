@@ -6,6 +6,11 @@ import JsBarcode from "jsbarcode";
 import { Dialog, DialogPanel, DialogTitle } from "@headlessui/react";
 import BarcodeLabel from "./BarcodeLabel";
 import { useData } from "@/store/data";
+import { buildTsplJob } from "@/lib/tspl";
+import { bytesToBase64, canvasTextRenderer } from "@/lib/tspl-text";
+
+// E15: jembatan lokal (npm run print-bridge) → TSPL langsung ke printer, tanpa dialog/halaman browser
+const PRINT_BRIDGE_URL = "http://127.0.0.1:9100";
 
 interface SimpleLabel {
   name: string;
@@ -183,7 +188,7 @@ export default function PrintBarcodeModal({
   .xrow {
     display: flex;
     height: 15mm;
-    margin: 0 1.5mm 3mm mm;
+    margin: 0 1.5mm 3mm 4.5mm; /* kiri 1.5 + offset kalibrasi 3 (typo "3mm mm" membuang seluruh margin) */
     box-sizing: border-box;
   }
   .xrow:last-child { margin-bottom: 0; }
@@ -328,10 +333,46 @@ ${labelHTML}
     }, 500);
   };
 
+  // E15: cetak XP-420B via bridge lokal (TSPL). Baris = ceil(label/3) → tidak ada label kosong terbuang.
+  const xp420bBridgePrint = async (labels: ReturnType<typeof collectLabels>) => {
+    const rows = Math.ceil(labels.length / XP_COLS);
+    let alive = false;
+    try {
+      const h = await fetch(`${PRINT_BRIDGE_URL}/health`, { signal: AbortSignal.timeout(1500) });
+      alive = h.ok;
+    } catch {
+      alive = false;
+    }
+    if (!alive) {
+      if (
+        confirm(
+          "Print-bridge belum aktif di PC ini.\n" +
+            "Jalankan: npm run print-bridge (di folder aplikasi), lalu coba lagi.\n\n" +
+            "Pakai dialog print browser sebagai cadangan? (bisa feed berlebih/berotasi)"
+        )
+      )
+        xp420bDirectPrint(labels);
+      return;
+    }
+    if (!confirm(`Print ${labels.length} label (${rows} baris × 3) ke printer label?`)) return;
+    try {
+      const r = await fetch(`${PRINT_BRIDGE_URL}/print`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ data: bytesToBase64(buildTsplJob(labels, canvasTextRenderer())) }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.ok) throw new Error(j.error || `HTTP ${r.status}`);
+      onClose();
+    } catch (e) {
+      alert(`Gagal print: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
+
   const handleDirectPrint = () => {
     const labels = collectLabels();
     if (labels.length === 0) return;
-    if (labelSize === "xp420b") return xp420bDirectPrint(labels);
+    if (labelSize === "xp420b") return void xp420bBridgePrint(labels);
     return legacyDirectPrint(labels, LABEL_DIMS[labelSize]);
   };
 
@@ -579,8 +620,8 @@ ${labelHTML}
               </div>
               {labelSize === "xp420b" && (
                 <p className="mt-2 text-xs text-gray-600">
-                  Roll die-cut siap pakai: 3 label per baris, liner 10,8 cm, roll terus tanpa potong halaman.
-                  Print dialog: <b>Margin = None</b>.
+                  Roll die-cut siap pakai: 3 label per baris, liner 10,8 cm. <b>Direct Print</b> = langsung ke printer
+                  via <code>npm run print-bridge</code> (jumlah baris tepat, tanpa dialog). Tombol PDF = pratinjau.
                 </p>
               )}
             </div>

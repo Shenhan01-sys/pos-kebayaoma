@@ -14,7 +14,8 @@
     "cap:sync": "npm run build && npx cap sync",
     "cap:open": "npx cap open android",
     "cap:run": "npx cap run android",
-    "test:unit": "vitest run"
+    "test:unit": "vitest run",
+    "print-bridge": "node scripts/print-bridge.mjs"
   },
   "dependencies": {
     "@capacitor/cli": "^8.5.0",
