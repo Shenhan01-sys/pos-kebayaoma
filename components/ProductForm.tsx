@@ -5,6 +5,7 @@ import { useData } from "@/store/data";
 import { type Product, type Variant } from "@/lib/dummy";
 import { Icon } from "@/components/icons";
 import { takenCodes, ensureProductSku, fillVariantSkus } from "@/lib/sku";
+import { RENTAL_PCT_OPTIONS, matchingRentalPct, rentalPriceFromPct } from "@/lib/rental";
 
 let vid = 5000;
 const newVid = () => `nv${++vid}`;
@@ -241,6 +242,39 @@ export default function ProductForm({
                     Hapus
                   </button>
                 </div>
+              </div>
+              {/* E17 revisi 1: pilih harga sewa sebagai persen dari harga jual (atau ketik manual di atas) */}
+              <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px]">
+                <span className="font-medium text-olive">Harga sewa dari harga jual:</span>
+                {RENTAL_PCT_OPTIONS.map((p) => {
+                  const active = matchingRentalPct(v.sellingPrice, v.rentalPrice) === p;
+                  return (
+                    <button
+                      key={p}
+                      type="button"
+                      disabled={!(v.sellingPrice > 0)}
+                      aria-pressed={active}
+                      onClick={() => setVar(i, { rentalPrice: rentalPriceFromPct(v.sellingPrice, p) })}
+                      className={`rounded-full px-2.5 py-1 font-semibold transition disabled:opacity-40 ${active ? "bg-violet text-white" : "bg-black/5 text-ink hover:bg-black/10"}`}
+                    >
+                      {p}%
+                    </button>
+                  );
+                })}
+                {v.rentalPrice ? (
+                  <button type="button" onClick={() => setVar(i, { rentalPrice: null })} className="rounded-full px-2.5 py-1 text-danger hover:bg-danger/10">
+                    Tidak disewakan
+                  </button>
+                ) : null}
+                <span className="text-gray-500">
+                  {!(v.sellingPrice > 0)
+                    ? "isi Harga Jual dulu"
+                    : v.rentalPrice
+                      ? matchingRentalPct(v.sellingPrice, v.rentalPrice)
+                        ? `= Rp ${v.rentalPrice.toLocaleString("id-ID")}`
+                        : `Rp ${v.rentalPrice.toLocaleString("id-ID")} (${Math.round((v.rentalPrice / v.sellingPrice) * 100)}% dari harga jual, diisi manual)`
+                      : "belum disewakan"}
+                </span>
               </div>
  {v.costPrice > 0 && v.sellingPrice > 0 && (
  <div className="mt-1.5 flex items-center gap-2 text-[10px] text-gray-600">

@@ -170,3 +170,43 @@ describe("E17 WhatsApp", () => {
     expect(reminderText(mk({ id: "z", customerName: null, dueDate: "2026-10-20" }), NOW)).toContain("Halo Kak");
   });
 });
+
+// ===== E17 revisi 1: persen harga sewa =====
+import { RENTAL_PCT_OPTIONS, matchingRentalPct, rentalPriceFromPct } from "./rental";
+
+describe("E17 persen harga sewa", () => {
+  it("pilihan = 50, 60, 70, 80, 90 persen", () => {
+    expect([...RENTAL_PCT_OPTIONS]).toEqual([50, 60, 70, 80, 90]);
+  });
+  it("persen × harga jual (harga bulat tetap bulat)", () => {
+    expect(rentalPriceFromPct(150000, 50)).toBe(75000);
+    expect(rentalPriceFromPct(150000, 60)).toBe(90000);
+    expect(rentalPriceFromPct(150000, 70)).toBe(105000);
+    expect(rentalPriceFromPct(150000, 80)).toBe(120000);
+    expect(rentalPriceFromPct(150000, 90)).toBe(135000);
+  });
+  it("dibulatkan ke Rp 500 terdekat; minimal Rp 500", () => {
+    expect(rentalPriceFromPct(175000, 70)).toBe(122500); // 122.500 persis
+    expect(rentalPriceFromPct(133000, 70)).toBe(93000); // 93.100 → 93.000
+    expect(rentalPriceFromPct(133500, 70)).toBe(93500); // 93.450 → 93.500
+    expect(rentalPriceFromPct(100, 50)).toBe(500);
+  });
+  it("harga jual belum diisi / negatif / persen tak valid → null", () => {
+    expect(rentalPriceFromPct(0, 50)).toBeNull();
+    expect(rentalPriceFromPct(-1000, 50)).toBeNull();
+    expect(rentalPriceFromPct(NaN, 50)).toBeNull();
+    expect(rentalPriceFromPct(100000, 0)).toBeNull();
+  });
+  it("hasil selalu < harga jual untuk persen < 100 dan naik mengikuti persen", () => {
+    const prices = RENTAL_PCT_OPTIONS.map((p) => rentalPriceFromPct(260000, p)!);
+    expect(prices.every((x) => x < 260000)).toBe(true);
+    expect([...prices].sort((a, b) => a - b)).toEqual(prices);
+  });
+  it("matchingRentalPct menyorot persen yang cocok; harga manual → null", () => {
+    expect(matchingRentalPct(150000, 105000)).toBe(70);
+    expect(matchingRentalPct(150000, 75000)).toBe(50);
+    expect(matchingRentalPct(150000, 100000)).toBeNull(); // diisi manual
+    expect(matchingRentalPct(150000, null)).toBeNull();
+    expect(matchingRentalPct(150000, 0)).toBeNull();
+  });
+});

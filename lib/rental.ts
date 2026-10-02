@@ -172,3 +172,21 @@ export function waLink(phone: string | null | undefined, text: string): string |
   const n = normalizePhoneId(phone);
   return n ? `https://wa.me/${n}?text=${encodeURIComponent(text)}` : null;
 }
+
+// ===== E17 revisi 1: harga sewa dari persentase harga jual (pilihan cepat di form produk) =====
+
+/** pilihan persen harga sewa dari harga jual (keputusan user 2026-10-02) */
+export const RENTAL_PCT_OPTIONS = [50, 60, 70, 80, 90] as const;
+
+/** harga sewa = persen × harga jual, dibulatkan ke Rp 500 terdekat (min Rp 500); null bila harga jual belum diisi */
+export function rentalPriceFromPct(sellingPrice: number, pct: number): number | null {
+  if (!(sellingPrice > 0) || !(pct > 0)) return null;
+  return Math.max(500, Math.round((sellingPrice * pct) / 100 / 500) * 500);
+}
+
+/** persen pilihan yang sama persis dengan harga sewa saat ini (untuk menyorot chip), atau null bila diisi manual */
+export function matchingRentalPct(sellingPrice: number, rentalPrice: number | null | undefined): number | null {
+  if (!rentalPrice) return null;
+  for (const p of RENTAL_PCT_OPTIONS) if (rentalPriceFromPct(sellingPrice, p) === rentalPrice) return p;
+  return null;
+}
