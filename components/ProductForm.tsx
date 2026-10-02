@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useData } from "@/store/data";
 import { type Product, type Variant } from "@/lib/dummy";
 import { Icon } from "@/components/icons";
+import { takenCodes, ensureProductSku, fillVariantSkus } from "@/lib/sku";
 
 let vid = 5000;
 const newVid = () => `nv${++vid}`;
@@ -15,7 +16,9 @@ export default function ProductForm({
   product?: Product;
   onSaved: () => void;
 }) {
-  const { categories, addProduct, updateProduct, vendors, addVendor } = useData();
+  const { categories, addProduct, updateProduct, vendors, addVendor, products } = useData();
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
   const [vendorId, setVendorId] = useState("");
   const [newVendor, setNewVendor] = useState("");
   const [unitCost, setUnitCost] = useState("");
@@ -54,16 +57,43 @@ export default function ProductForm({
   }
 
   async function submit() {
+    if (saving) return; // cegah klik ganda → produk dobel
+    setFormError(null);
+    if (!name.trim()) {
+      setFormError("Nama produk wajib diisi.");
+      return;
+    }
+    if (variants.length === 0) {
+      setFormError("Minimal satu varian.");
+      return;
+    }
+    setSaving(true);
+    try {
+      await save();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function save() {
     // E2: vendor (pilih / tulis baru → auto-insert) + modal/unit utk seed stok awal
     let finalVendorId = vendorId || null;
     if (!product && newVendor.trim()) {
       const v = await addVendor(newVendor.trim());
-      if (!v) return; // error sudah di-set store
+      if (!v) {
+        setFormError(useData.getState().error ?? "Gagal menyimpan vendor.");
+        return;
+      }
       finalVendorId = v.id;
     }
+    // E16: SKU otomatis & unik (kolom SKU dihapus dari form). SKU lama yang unik dipertahankan.
+    const others = takenCodes(products, (p) => p.id === product?.id);
+    const productSku = ensureProductSku(sku, others);
+    others.add(productSku);
+    const variantsFilled = fillVariantSkus(variants, others);
     const base = {
-      name,
-      sku,
+      name: name.trim(),
+      sku: productSku,
       categoryId,
       description,
       fabric,
@@ -76,16 +106,25 @@ export default function ProductForm({
       stock,
       images: [`https://placehold.co/400x500/775533/ffffff?text=${encodeURIComponent(name)}`],
     };
+    // E16: TUNGGU hasil simpan. Dulu addProduct tidak di-await lalu form langsung ditutup → bila gagal
+    // (mis. 409) semua isian "hilang" tanpa pesan dan produk tidak tersimpan.
+    useData.setState({ error: null });
+    let ok = true;
     if (product) {
-      updateProduct(product.id, { ...base, variants });
+      await updateProduct(product.id, { ...base, variants: variantsFilled });
+      ok = !useData.getState().error;
     } else {
-      addProduct({
+      ok = await addProduct({
         ...base,
-        variants,
+        variants: variantsFilled,
         seed: stock,
         vendorId: finalVendorId,
         unitCost: unitCost.trim() ? Number(unitCost) : null,
       } as Parameters<typeof addProduct>[0] & { seed: number; vendorId: string | null; unitCost: number | null });
+    }
+    if (!ok) {
+      setFormError(useData.getState().error ?? "Gagal menyimpan produk.");
+      return; // form tetap terbuka — isian tidak hilang
     }
     onSaved();
   }
@@ -96,9 +135,12 @@ export default function ProductForm({
         <Labeled label="Nama Produk">
           <input value={name} onChange={(e) => setName(e.target.value)} className="input" />
         </Labeled>
-        <Labeled label="SKU">
-          <input value={sku} onChange={(e) => setSku(e.target.value)} className="input" />
-        </Labeled>
+        {/* E16: SKU tidak diisi manual lagi — dibuat otomatis (8 digit, unik) saat simpan */}
+        {product && (
+          <Labeled label="Kode produk (otomatis)">
+            <div className="input bg-black/5 text-gray-600">{sku || "—"}</div>
+          </Labeled>
+        )}
         <Labeled label="Kategori">
           <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className="input">
             {categories.map((c) => (
@@ -182,8 +224,13 @@ export default function ProductForm({
                 <VarInput label="Nama Seri" value={v.name} onChange={(val) => setVar(i, { name: val })} />
                 <VarInput label="Size" value={v.size} onChange={(val) => setVar(i, { size: val })} />
                 <VarInput label="Warna" value={v.color} onChange={(val) => setVar(i, { color: val })} />
-                <VarInput label="SKU" value={v.sku} onChange={(val) => setVar(i, { sku: val })} />
-                <VarInput label="Barcode" value={v.barcode ?? ""} onChange={(val) => setVar(i, { barcode: val })} />
+                {v.sku && (
+                  <label className="block">
+                    <div className="mb-0.5 text-[10px] font-medium text-olive">Kode (otomatis)</div>
+                    <div className="input bg-black/5 text-gray-600">{v.sku}</div>
+                  </label>
+                )}
+                <VarInput label="Barcode (opsional)" value={v.barcode ?? ""} onChange={(val) => setVar(i, { barcode: val })} />
                 <VarInput label="Modal (Rp)" type="number" value={String(v.costPrice)} onChange={(val) => setVar(i, { costPrice: Number(val) })} />
                 <VarInput label="Harga Jual (Rp)" type="number" value={String(v.sellingPrice)} onChange={(val) => setVar(i, { sellingPrice: Number(val) })} />
                 <VarInput label="Harga Sewa (Rp)" type="number" value={String(v.rentalPrice ?? "")} onChange={(val) => setVar(i, { rentalPrice: val ? Number(val) : null })} />
@@ -212,8 +259,13 @@ export default function ProductForm({
         Produk aktif (tampil di kasir & profil)
       </label>
 
-      <button onClick={submit} className="btn-violet w-full py-3 text-base">
-        {product ? "Simpan Perubahan" : "Tambah Produk"}
+      {formError && (
+        <div role="alert" className="rounded-2xl bg-danger/10 px-3 py-2 text-sm font-medium text-danger">
+          {formError}
+        </div>
+      )}
+      <button onClick={submit} disabled={saving} className="btn-violet w-full py-3 text-base disabled:opacity-60">
+        {saving ? "Menyimpan…" : product ? "Simpan Perubahan" : "Tambah Produk"}
       </button>
     </div>
   );

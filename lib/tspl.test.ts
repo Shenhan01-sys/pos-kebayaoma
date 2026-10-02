@@ -248,6 +248,16 @@ describe("barcode adaptive (default) — modul bulat, tanpa distorsi", () => {
       }
     }
   });
+  it("kode SKU otomatis 8 digit → SELALU modul 3 dot & lebar sama (E16)", () => {
+    const widths = new Set<number>();
+    for (const code of ["12345678", "98765432", "10000001", "55555555", "73230444"]) {
+      const b = code128BitmapAdaptive(code, 40)!;
+      expect(widthDots(code)).toBe(79);
+      expect(b.w).toBe(79 * 3);
+      widths.add(b.w);
+    }
+    expect(widths.size).toBe(1);
+  });
   it("kode > sel 33 mm (>264 modul) → null (jatuh ke BARCODE native)", () => {
     expect(code128BitmapAdaptive("KEBAYA-BROKAT-PREMIUM-EDISI-KHUSUS", 40)).toBeNull();
   });

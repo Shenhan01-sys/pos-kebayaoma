@@ -29,6 +29,8 @@ import {
   type Shift,
 } from "@/lib/dummy";
 import type { Expense } from "@/lib/expenses";
+import { takenCodes, ensureProductSku, fillVariantSkus } from "@/lib/sku";
+import { insertProductWithVariants } from "@/lib/catalog-insert";
 import {
   mapVariantRow,
   mapProductRow,
@@ -199,7 +201,8 @@ interface DataState {
   deleteCategory: (id: string) => Promise<void>;
 
   // products
-  addProduct: (p: Omit<Product, "id" | "variants"> & { variants: Variant[] }) => Promise<void>;
+  /** true = tersimpan penuh; false = gagal (error di-set di store, produk di-rollback) */
+  addProduct: (p: Omit<Product, "id" | "variants"> & { variants: Variant[] }) => Promise<boolean>;
   updateProduct: (id: string, patch: Partial<Product>) => Promise<void>;
   deleteProduct: (id: string) => Promise<void>;
   addVariant: (productId: string, v: Variant) => Promise<void>;
@@ -678,7 +681,7 @@ export const useData = create<DataState>()(
         const sid = get().activeStoreId;
         if (!sid) {
           set({ error: "Pilih toko operasional (MJL/KTB) dulu." });
-          return;
+          return false;
         }
         const psDb = getPowerSyncDb();
         if (psDb) {
@@ -697,7 +700,7 @@ export const useData = create<DataState>()(
             );
           }
           await get().fetchProducts();
-          return;
+          return true;
         }
 
         if (!isSupabaseReady) {
@@ -706,10 +709,9 @@ export const useData = create<DataState>()(
           set((s) => ({
             products: [...s.products, { ...p, id, variants } as Product],
           }));
-          return;
+          return true;
         }
         try {
-          // Insert product
           // E2: stok baru = seed via adjust_stock (movement + vendor tercatat), bukan tulis absolut.
           const { seed, vendorId, unitCost, ...pRest } = p as Product & {
             seed?: number;
@@ -717,10 +719,33 @@ export const useData = create<DataState>()(
             unitCost?: number | null;
           };
           const seedQty = seed ?? pRest.stock ?? 0;
-          const { data: product, error: productError } = await supabase
-            .from('products')
-            .insert([{
-              sku: pRest.sku,
+
+          // E16: SKU otomatis & unik (produk + varian). SKU kosong/kembar tidak lagi memicu 409
+          // (unique product_id+sku) dan kode angka 8 digit = barcode 3-dot yang andal di scanner.
+          const taken = takenCodes(get().products);
+          const productSku = ensureProductSku(pRest.sku, taken);
+          taken.add(productSku);
+          const variantsFilled = fillVariantSkus(p.variants, taken);
+
+          // E16: produk + varian + seed stok = satu unit ber-ROLLBACK (gagal di mana pun → produk dihapus
+          // lagi, tidak ada produk yatim tanpa varian).
+          await insertProductWithVariants(
+            {
+              insertProduct: async (row) => {
+                const { data, error } = await supabase.from('products').insert([row]).select().single();
+                if (error) throw error;
+                return data as { id: string };
+              },
+              insertVariants: async (rows) => {
+                const { error } = await supabase.from('variants').insert(rows);
+                if (error) throw error;
+              },
+              deleteProduct: async (pid) => {
+                await supabase.from('products').delete().eq('id', pid);
+              },
+            },
+            {
+              sku: productSku,
               name: pRest.name,
               description: pRest.description,
               category_id: pRest.categoryId,
@@ -733,56 +758,49 @@ export const useData = create<DataState>()(
               season: pRest.season ?? null,
               brand: pRest.brand ?? null,
               compare_at: pRest.compareAt ?? null,
-              store_id: sid
-            }])
-            .select()
-            .single();
-
-          if (productError) throw productError;
-
-          // Insert variants
-          const variants = p.variants.map(v => ({
-            sku: v.sku,
-            name: v.name,
-            size: v.size,
-            color: v.color,
-            color_code: v.colorCode,
-            selling_price: v.sellingPrice,
-            cost_price: v.costPrice,
-            barcode: v.barcode ?? null,
-            rental_price: v.rentalPrice ?? null,
-            rental_days: v.rentalDays ?? 3,
-            deposit_price: v.depositPrice ?? null,
-            product_id: product.id
-          }));
-
-          const { error: variantsError } = await supabase
-            .from('variants')
-            .insert(variants);
-
-          if (variantsError) throw variantsError;
-
-          // Seed stok awal tercatat di ledger (restock, vendor + unit cost bila diisi).
-          // FIX U7 (2026-09-18): produk baru belum ada di state FE → adjustStock tidak menemukannya
-          // dan seed gagal diam-diam (stock 0, tanpa movement). Fetch dulu, baru seed via RPC.
-          if (seedQty > 0) {
-            await get().fetchProducts();
-            const seeded = await get().adjustStock(
-              product.id,
-              seedQty,
-              "restock",
-              "katalog",
-              "Stok awal (katalog)",
-              undefined,
-              vendorId ?? null,
-              unitCost ?? null
-            );
-            if (!seeded) throw new Error(useData.getState().error ?? "Gagal seed stok awal (katalog).");
-          } else {
-            await get().fetchProducts();
-          }
+              store_id: sid,
+            },
+            (productId) =>
+              variantsFilled.map((v) => ({
+                sku: v.sku,
+                name: v.name,
+                size: v.size,
+                color: v.color,
+                color_code: v.colorCode,
+                selling_price: v.sellingPrice,
+                cost_price: v.costPrice,
+                barcode: v.barcode ?? null,
+                rental_price: v.rentalPrice ?? null,
+                rental_days: v.rentalDays ?? 3,
+                deposit_price: v.depositPrice ?? null,
+                product_id: productId,
+              })),
+            async (productId) => {
+              // Seed stok awal tercatat di ledger (restock, vendor + unit cost bila diisi).
+              // FIX U7 (2026-09-18): produk baru belum ada di state FE → adjustStock tidak menemukannya
+              // dan seed gagal diam-diam (stock 0, tanpa movement). Fetch dulu, baru seed via RPC.
+              await get().fetchProducts();
+              if (seedQty > 0) {
+                const seeded = await get().adjustStock(
+                  productId,
+                  seedQty,
+                  "restock",
+                  "katalog",
+                  "Stok awal (katalog)",
+                  undefined,
+                  vendorId ?? null,
+                  unitCost ?? null
+                );
+                if (!seeded) throw new Error(useData.getState().error ?? "Gagal seed stok awal (katalog).");
+              }
+            }
+          );
+          return true;
         } catch (error: any) {
           set({ error: humanizeError(error) });
+          // sinkronkan state (produk sempat muncul di daftar sebelum di-rollback)
+          get().fetchProducts().catch(() => {});
+          return false;
         }
       },
 
