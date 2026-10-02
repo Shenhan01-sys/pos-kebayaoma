@@ -12,7 +12,8 @@ Palette: Beige `#F2F5E2`, Vanilla Custard `#E3DEA4`, Golden Apricot `#D4954D`, O
 ---
 
 ## A. Shell & Tema
-- [x] Sidebar tablet: Dashboard, Kasir POS, Produk, Inventori, Pelanggan, Staff, Transaksi, Shift, Laporan, Pengaturan
+- [x] Sidebar tablet: Dashboard, Kasir POS, Sewa, Produk, Inventori, Pelanggan, Petty Cash (`/expenses`), Staff, Transaksi, Shift, Laporan, Pengaturan — menu yang tampil difilter per role (lihat bagian H)
+- [x] Switcher toko (Semua / MJL / KTB) di sidebar untuk role lintas-toko
 - [x] Palette kustom solid (violet sidebar, aksen apricot/olive)
 - [x] Nama toko dinamis dari Pengaturan
 - [x] Badge stok menipis di sidebar
@@ -32,23 +33,29 @@ Palette: Beige `#F2F5E2`, Vanilla Custard `#E3DEA4`, Golden Apricot `#D4954D`, O
 - [x] Keranjang: qty, hapus (Zustand)
 - [x] Pilih pelanggan
 - [x] Checkout: QRIS / Tunai / Transfer
-- [x] Diskon + **Pajak (VAT % dari Pengaturan)**
+- [x] Diskon + **Pajak inclusive** (harga sudah termasuk PPN; PPN tersirat dihitung dari tarif % di Pengaturan dan ditampilkan "Sudah termasuk PPN" di struk)
 - [x] Tunai: uang diterima + kembalian otomatis + validasi uang kurang
 - [x] QRIS:
   - [x] Generate QRIS dinamis via `/api/qris/charge` (Midtrans / GoPay / mock)
   - [x] Mode simulasi bayar (tanpa API key)
   - [x] Mode real: buat transaksi **pending**, tunggu webhook/realtime, auto-finalisasi saat lunas
-- [x] Struk + QR verifikasi digital + Print (browser)
+- [x] Struk + QR verifikasi digital + Print via browser (kertas 58mm, printer thermal RPP02N)
 - [x] **Otomatis kurangi stok** via log pergerakan (sale)
 - [x] **Auto-update statistik pelanggan** saat transaksi lunas
 
 ## D. Manajemen Produk (`/products`) — CRUD lengkap
 - [x] List + filter kategori + badge Nonaktif
-- [x] **Tambah / Edit produk** (nama, SKU, kategori, brand, season, bahan, perawatan, tags, deskripsi, harga coret)
-- [x] **Editor Varian**: ukuran, warna, SKU, barcode, modal, harga, stok — add/remove
+- [x] **Tambah / Edit produk** (nama, kategori, brand, season, bahan, perawatan, tags, deskripsi, harga coret). **SKU otomatis** (8 digit angka, unik) dibuat saat simpan; tidak ada input SKU manual, saat edit tampil read-only
+- [x] **Editor Varian**: ukuran, warna, barcode, modal, harga, stok — add/remove (SKU varian otomatis, tampil read-only)
+- [x] **Harga Sewa** per varian: pilihan cepat 50 / 60 / 70 / 80 / 90% dari harga jual (chips) atau isi manual
 - [x] **Hapus produk** (konfirmasi)
 - [x] Toggle aktif/nonaktif
 - [x] **Label QR & Barcode** per produk/varian -> profil publik + cetak label
+  - [x] Label thermal **TSPL** untuk printer XP-D4601B / XP-420B: label die-cut 33x15mm, 3 label per baris (liner 108mm), jumlah baris tepat tanpa label kosong
+  - [x] Tombol **Direct Print** mengirim job TSPL lewat `print-bridge` lokal (`npm run print-bridge`, default `127.0.0.1:9100`); hanya bisa dari browser di PC yang menjalankan bridge dan terhubung ke printer
+  - [x] Chrome meminta izin **Local Network Access** untuk situs POS (pilih Izinkan; bila pernah diblokir: Setelan situs → Akses jaringan lokal)
+  - [x] Barcode adaptif (modul 1-3 dot, Code128) agar mudah di-scan; teks nama/harga digambar sebagai bitmap
+  - [x] Tombol PDF = pratinjau; ukuran lain (40x20 RPP02N, 50x25, 60x30) tetap tersedia lewat jalur browser/PDF
 
 ## E. Kategori (modal di Produk)
 - [x] Tambah / Edit / Hapus kategori (nama + slug)
@@ -66,13 +73,38 @@ Palette: Beige `#F2F5E2`, Vanilla Custard `#E3DEA4`, Golden Apricot `#D4954D`, O
 
 ## H. Staff & Peran (`/staff`) — CRUD
 - [x] Tambah / Edit / Hapus staff
-- [x] Role: Manager / Staff (RBAC 2-role; guard manager-terakhir + anti self-delete di API)
+- [x] **RBAC 4 role**: superadmin / manager / admin / kasir (`lib/roles.ts`), akses halaman:
+  - superadmin: semua halaman (termasuk Staff, Pengaturan, Petty Cash; satu-satunya yang melihat laba/HPP)
+  - manager: Dashboard, Kasir POS, Sewa, Produk, Inventori, Pelanggan, Transaksi, Shift, Laporan
+  - admin: Dashboard, Transaksi, Petty Cash, Laporan
+  - kasir: Dashboard, Kasir POS, Sewa, Inventori, Pelanggan, Transaksi, Shift
+  - Restock/penyesuaian stok & batal/refund transaksi: superadmin + manager; CRUD staff: superadmin; guard anti self-delete di API
 - [x] PIN login via Supabase Auth, telepon, status aktif/nonaktif
+- [x] Multi-toko: superadmin/manager/admin lintas-toko (switcher Semua/MJL/KTB), kasir terikat satu toko
 
 ## I. Transaksi (`/transactions`)
 - [x] Tabel semua transaksi + pencarian
 - [x] **Batalkan / Refund** (update status, kembalikan stok, kurangi statistik pelanggan)
 - [x] Link ke Verifikasi
+- [x] Badge **Sewa** pada transaksi sewa (dikelola di menu Sewa)
+- [x] Panel riwayat transfer stok antar-toko
+
+## I2. Sewa (`/sewa`)
+- [x] Menu Sewa untuk superadmin / manager / kasir
+- [x] Ringkasan di atas daftar (jumlah terlambat, deposit ditahan di buku, dll.)
+- [x] Tab **Aktif / Hari ini / Terlambat / Selesai** + pencarian (penyewa, HP, nota, barang)
+- [x] **Sewa baru**: semua varian bertok bisa disewa; bila varian belum punya Harga Sewa, default **70% dari harga jual** (bisa diubah di form; chips 50-90%). Tombol **Mulai sewa** memindahkan ke **/pos**: popup konfirmasi sewa muncul otomatis, lalu **pembayaran memakai modal yang sama dengan penjualan** (QRIS / tunai / transfer + foto bukti wajib). Keranjang sewa terkunci (satu baris sewa, tanpa diskon/nego/pre-order); penyewa dibuat otomatis; stok berkurang saat nota lunas; butuh koneksi internet
+- [x] **Batalkan sewa** dari popup/keranjang POS: tidak ada nota yang terbentuk
+- [x] **Terima barang** (boleh sebagian); stok masuk kembali saat tombol ditekan, bukan otomatis saat jatuh tempo lewat
+- [x] Tombol **WhatsApp** untuk pengingat jatuh tempo/keterlambatan (manual, buka wa.me)
+- [x] Deposit per unit hanya info/pencatatan di buku (bukan modul kas; pengembalian deposit belum dicatat sistem)
+- [x] Tanpa denda keterlambatan
+
+## I3. Petty Cash (`/expenses`)
+- [x] Catat pengeluaran kas kecil per toko (tanggal, kategori, nominal, catatan), langsung tanpa approval
+- [x] Foto bukti opsional (dikompres di browser)
+- [x] Filter rentang tanggal + ringkasan per kategori
+- [x] Akses: admin + superadmin
 
 ## J. Shift (`/shifts`)
 - [x] Buka shift (modal awal)
@@ -97,20 +129,23 @@ Palette: Beige `#F2F5E2`, Vanilla Custard `#E3DEA4`, Golden Apricot `#D4954D`, O
 - [x] Target scan label QR
 
 ## N. Pengaturan (`/settings`)
-- [x] Nama toko, alamat, telepon, kasir, **pajak %**, printer
+- [x] Nama toko, alamat, telepon, kasir, **pajak %** (harga sudah termasuk pajak), printer
+- [x] Koordinat GPS toko (peta) untuk geofence login 25 m — superadmin saja, tersimpan di DB
 - [x] Persist localStorage
 
 ## O. Struk / Receipt
-- [x] Format 80mm, info toko dinamis, item, diskon, **pajak**, total, bayar, kembali
+- [x] Format kertas 58mm (area cetak ~48mm, printer thermal RPP02N), info toko dinamis, item, diskon, **PPN (sudah termasuk)**, total, bayar, kembali
 - [x] Ticket notch cutout
-- [x] QR digital receipt; print via `window.print()`
+- [x] QR digital receipt; print via print browser (`window.print()`); print native ESC/POS belum diimplementasi
 
 ## P. Arsitektur
 - [x] Next.js 16 App Router + TS, Tailwind (palette kustom)
 - [x] Zustand: cart, data (products/categories/customers/staff/movements/shifts persist), settings persist
 - [x] Supabase: Auth, Postgres, RLS, Realtime
 - [x] qrcode.react + jsbarcode untuk generate QR/barcode
-- [x] Build production sukses (16 routes)
+- [x] 16 halaman (`app/**/page.tsx`) + 4 API route (`app/api/**/route.ts`: qris charge/status/webhook, staff)
+- [x] Unit test Vitest (`npm run test:unit`, 150 tes); `npm run print-bridge` untuk printer label TSPL
+- [x] Multi-store (MJL / KTB): data per toko + transfer stok antar-toko
 - [x] Fallback demo mode tanpa Supabase
 
 ## Q. PWA (installable + offline)
@@ -130,8 +165,8 @@ Palette: Beige `#F2F5E2`, Vanilla Custard `#E3DEA4`, Golden Apricot `#D4954D`, O
 ## Belum diimplementasikan (lih. plan-opencode.md)
 - QRIS real end-to-end teruji di production (scaffold API + webhook sudah ada)
 - Offline sync robust (PowerSync/RxDB)
-- Print native ESC/POS via Capacitor / Bluetooth print service
-- PO / Supplier, Loyalty points, Promosi terjadwal, Multi-store, Gift card, e-Faktur/Coretax
+- Print struk native ESC/POS via Capacitor / Bluetooth print service (struk saat ini lewat print browser 58mm; label thermal sudah lewat print-bridge TSPL)
+- PO / Supplier, Loyalty points, Promosi terjadwal, Gift card, e-Faktur/Coretax
 
 ## Setup
 1. Salin `.env.local.example` → `.env.local` dan isi Supabase + QRIS key.
@@ -139,6 +174,7 @@ Palette: Beige `#F2F5E2`, Vanilla Custard `#E3DEA4`, Golden Apricot `#D4954D`, O
 3. Jalankan `node scripts/setup-auth-staff.js` untuk membuat staff & auth user.
 4. Jalankan `node scripts/seed-full.js` (atau `npx ts-node scripts/seed.ts`) untuk data awal.
 5. `npm run build` dan deploy ke Vercel.
+6. (Opsional, cetak label) di PC yang terhubung ke printer: `npm run print-bridge`.
 
 ## Referensi riset
 - `plan-opencode.md` — draf arsitektur & roadmap

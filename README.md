@@ -5,12 +5,15 @@ Dibangun dengan **Next.js 16 (App Router) + TypeScript + Tailwind CSS + Zustand 
 
 ## Fitur
 
-- Kasir POS: katalog, keranjang, varian (ukuran/warna), checkout QRIS/Tunai/Transfer, diskon, pajak (VAT %), struk + print.
-- Manajemen Produk CRUD + editor varian, kategori.
-- Inventori & Stok: restock, penyesuaian, riwayat pergerakan.
-- Pelanggan & Staff (role + PIN via Supabase Auth).
+- Kasir POS: katalog, keranjang, varian (ukuran/warna), checkout QRIS/Tunai/Transfer, diskon, pajak (harga sudah termasuk PPN), struk 58mm (printer thermal RPP02N) + print.
+- **Sewa** (`/sewa`): sewa baru (bayar lewat modal pembayaran POS: QRIS/tunai/transfer), daftar Aktif/Hari ini/Terlambat/Selesai, terima barang sebagian, pengingat WhatsApp. Harga sewa bisa diatur per varian (pilihan 50-90% dari harga jual di form produk); bila belum diatur, default 70% dari harga jual.
+- Manajemen Produk CRUD + editor varian, kategori. **SKU/barcode otomatis** (8 digit angka, unik; tidak diisi manual).
+- Inventori & Stok: restock, penyesuaian, riwayat pergerakan, transfer stok antar-toko.
+- **Petty Cash** (`/expenses`): pencatatan pengeluaran kas kecil per toko, foto bukti opsional.
+- Pelanggan & Staff (PIN via Supabase Auth). **RBAC 4 role**: superadmin / manager / admin / kasir (`lib/roles.ts`), akses menu & aksi dibatasi per role.
+- **Multi-toko** (MJL / KTB): data per toko, switcher toko (Semua / per toko) untuk role lintas-toko, koordinat toko + geofence login di Pengaturan.
 - Transaksi, Shift (buka/tutup + selisih), Laporan (export CSV).
-- Label QR/Barcode per produk → profil publik; verifikasi pembayaran via QR di struk.
+- Label QR/Barcode per produk → profil publik; **cetak label thermal TSPL** (XP-D4601B / XP-420B, label 33x15mm, 3 per baris) lewat `print-bridge` lokal; verifikasi pembayaran via QR di struk.
 - Scan barcode kamera (`html5-qrcode`) di POS.
 - PWA: manifest + service worker, bisa install dan jalan offline (shell cache).
 - **Fallback demo mode**: kalau Supabase belum dikonfigurasi, aplikasi berjalan dengan data dummy + localStorage.
@@ -22,7 +25,8 @@ Dibangun dengan **Next.js 16 (App Router) + TypeScript + Tailwind CSS + Zustand 
 - **Backend:** Supabase (Postgres, Auth, Realtime, Storage)
 - **QR/Barcode:** `qrcode.react`, `jsbarcode`, `html5-qrcode`
 - **Chart:** ECharts 6
-- **PDF/Print:** `jspdf`, `html2canvas`, `window.print()`
+- **PDF/Print:** `jspdf`, `html2canvas` (PDF = pratinjau label), `window.print()` (struk 58mm); label thermal langsung via **TSPL print-bridge** (`scripts/print-bridge.mjs`, XP-D4601B)
+- **Test:** Vitest (`npm run test:unit`, 150 tes)
 
 ## Setup Lokal
 
@@ -31,6 +35,15 @@ npm install
 copy .env.local.example .env.local   # isi variabel Supabase & QRIS
 npm run dev
 ```
+
+Script lain:
+
+```bash
+npm run test:unit      # vitest (150 tes unit)
+npm run print-bridge   # jembatan lokal ke printer label TSPL (jalankan di PC yang terhubung ke printer)
+```
+
+> Cetak label (tombol **Direct Print**) hanya bisa dari browser di PC yang menjalankan `print-bridge` (default `127.0.0.1:9100`, printer `Xprinter XP-D4601B`, bisa diubah lewat env `PRINT_BRIDGE_PORT` / `PRINTER_NAME` / `BRIDGE_ORIGINS`). Di Chrome, izinkan akses jaringan lokal (Local Network Access) untuk situs POS saat diminta.
 
 ### Variabel Lingkungan (`.env.local`)
 
@@ -79,7 +92,7 @@ Opencode/
 ├── components/           # Reusable UI & modals
 ├── store/                # Zustand stores (auth, cart, data, settings)
 ├── lib/                  # Types, Supabase client, dummy data
-├── scripts/              # Seed & staff setup
+├── scripts/              # Seed, staff setup, print-bridge (TSPL)
 ├── supabase/migrations/  # SQL schema + RLS
 ├── public/               # PWA manifest, service worker, icons
 ├── FITUR.md              # Daftar fitur lengkap
@@ -91,9 +104,9 @@ Opencode/
 Lihat `plan-opencode.md` untuk rencana panjang:
 
 - Integrasi QRIS production-ready (Midtrans/Xendit webhook)
-- Offline sync (PowerSync)
-- Print native ESC/POS (Capacitor/native bridge)
-- Multi-toko, loyalty, promo, e-Faktur
+- Offline sync penuh (PowerSync; skema & client sudah ada, belum jadi jalur utama)
+- Print struk native ESC/POS (Capacitor/native bridge) — saat ini struk lewat print browser 58mm (RPP02N)
+- Loyalty, promo, e-Faktur
 
 ## Dokumentasi Lengkap
 
