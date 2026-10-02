@@ -1,18 +1,31 @@
 "use client";
 
 // components/RentalNewModal.tsx — E17: sewa baru dari halaman /sewa (menggantikan RentalModal di POS).
-// Langkah 1: pilih barang (hanya varian ber-harga sewa & stok ada). Langkah 2: data sewa & penyewa.
-// Tarif flat per unit + deposit per unit dari varian; jatuh tempo = mulai + hari; penyewa auto-create.
+// Langkah 1: pilih barang (semua varian bertok; yang belum punya Harga Sewa memakai DEFAULT persen dari
+// harga jual — revisi 2). Langkah 2: harga sewa (bisa diubah, chip persen), data sewa & penyewa.
+// Tarif flat per unit + deposit per unit; jatuh tempo = mulai + hari; penyewa auto-create.
 
 import { useMemo, useState } from "react";
 import { formatRupiah, type Product, type Variant } from "@/lib/dummy";
 import { useData } from "@/store/data";
-import { addDays, formatDateId, rentTotal } from "@/lib/rental";
+import {
+  DEFAULT_RENTAL_PCT,
+  RENTAL_PCT_OPTIONS,
+  addDays,
+  formatDateId,
+  rentTotal,
+  rentalPriceFromPct,
+  resolveRentalPrice,
+} from "@/lib/rental";
 import { Icon } from "@/components/icons";
 
 interface Pick {
   product: Product;
   variant: Variant;
+  /** harga sewa per unit awal (harga varian bila diatur, kalau tidak default persen) */
+  price: number;
+  /** true = harga sewa varian belum diatur → memakai default persen */
+  isDefault: boolean;
 }
 
 const todayIso = () => {
@@ -38,24 +51,29 @@ export default function RentalNewModal({
   const [qty, setQty] = useState(1);
   const [startDate, setStartDate] = useState(todayIso);
   const [days, setDays] = useState(3);
+  const [price, setPrice] = useState(0);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [done, setDone] = useState<{ number: string; item: string; due: string } | null>(null);
 
-  // Barang yang bisa disewa: varian ber-harga sewa, stok produk > 0
+  // Barang yang bisa disewa: SEMUA varian bertok. Harga sewa belum diatur → default persen dari harga jual
+  // (varian tanpa harga jual & tanpa harga sewa tidak bisa dihitung → tidak ditampilkan).
+  // Yang sudah diatur harga sewanya tampil lebih dulu.
   const rentable = useMemo(() => {
     const needle = q.trim().toLowerCase();
     const out: Pick[] = [];
     for (const p of products) {
       if (p.stock <= 0) continue;
       for (const v of p.variants) {
-        if ((v.rentalPrice ?? 0) <= 0) continue;
+        const r = resolveRentalPrice(v.sellingPrice, v.rentalPrice);
+        if (r.price == null) continue;
         if (needle && !`${p.name} ${v.name} ${v.size} ${v.color}`.toLowerCase().includes(needle)) continue;
-        out.push({ product: p, variant: v });
+        out.push({ product: p, variant: v, price: r.price, isDefault: r.isDefault });
       }
     }
+    out.sort((a, b) => Number(a.isDefault) - Number(b.isDefault) || a.product.name.localeCompare(b.product.name));
     return out;
   }, [products, q]);
 
@@ -63,6 +81,7 @@ export default function RentalNewModal({
     setPick(p);
     setQty(1);
     setDays(p.variant.rentalDays ?? 3);
+    setPrice(p.price);
     setErr(null);
   }
 
@@ -75,7 +94,6 @@ export default function RentalNewModal({
     setStartDate(todayIso());
   }
 
-  const price = pick?.variant.rentalPrice ?? 0;
   const deposit = pick?.variant.depositPrice ?? 0;
   const total = rentTotal(price, qty);
   const due = addDays(startDate, days);
@@ -83,6 +101,7 @@ export default function RentalNewModal({
   async function submit() {
     if (!pick) return;
     if (!activeStoreId) { setErr("Pilih toko operasional (MJL/KTB) dulu."); return; }
+    if (!(price > 0)) { setErr("Harga sewa harus lebih dari 0."); return; }
     if (!name.trim()) { setErr("Nama penyewa wajib diisi."); return; }
     if (qty > pick.product.stock) { setErr(`Stok hanya ${pick.product.stock}.`); return; }
     if (busy) return; // cegah klik ganda → sewa dobel
@@ -93,7 +112,7 @@ export default function RentalNewModal({
       productId: pick.product.id,
       variantId: pick.variant.id,
       qty,
-      rentPrice: price,
+      rentPrice: Math.round(price),
       deposit: pick.variant.depositPrice ?? null,
       startDate,
       days,
@@ -150,7 +169,7 @@ export default function RentalNewModal({
             <div className="min-h-0 flex-1 space-y-2 overflow-auto pretty-scroll">
               {rentable.length === 0 && (
                 <p className="rounded-2xl bg-beige/60 px-3 py-4 text-center text-sm text-gray-600">
-                  {q ? "Tidak ada barang yang cocok." : "Belum ada barang yang bisa disewa. Isi Harga Sewa di Produk → Edit → Varian."}
+                  {q ? "Tidak ada barang yang cocok." : "Tidak ada barang bertok dengan harga jual terisi. Cek Produk / Inventori."}
                 </p>
               )}
               {rentable.map((p) => (
@@ -170,8 +189,9 @@ export default function RentalNewModal({
                     </div>
                   </div>
                   <div className="shrink-0 text-right">
-                    <div className="tnum text-sm font-bold text-olive">{formatRupiah(p.variant.rentalPrice ?? 0)}</div>
+                    <div className="tnum text-sm font-bold text-olive">{formatRupiah(p.price)}</div>
                     <div className="text-[10px] text-gray-500">/unit</div>
+                    {p.isDefault && <div className="text-[10px] font-semibold text-warning">default {DEFAULT_RENTAL_PCT}%</div>}
                   </div>
                 </button>
               ))}
@@ -206,6 +226,47 @@ export default function RentalNewModal({
                 <span className="mb-1 block text-olive">Harus kembali</span>
                 <div className="rounded-2xl bg-beige/60 px-3 py-2.5 font-semibold text-ink">{formatDateId(due)}</div>
               </div>
+            </div>
+
+            <div className="mb-3 rounded-2xl bg-beige/40 p-3">
+              <label className="mb-1 block text-sm text-olive">Harga sewa per unit (Rp)</label>
+              <input
+                type="number"
+                min={500}
+                value={price || ""}
+                onChange={(e) => setPrice(Math.max(0, Number(e.target.value) || 0))}
+                className="input mb-2"
+                aria-label="Harga sewa per unit"
+              />
+              <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                <span className="font-medium text-olive">dari harga jual {formatRupiah(pick.variant.sellingPrice)}:</span>
+                {RENTAL_PCT_OPTIONS.map((pct) => {
+                  const v = rentalPriceFromPct(pick.variant.sellingPrice, pct);
+                  const active = v != null && v === price;
+                  return (
+                    <button
+                      key={pct}
+                      type="button"
+                      disabled={v == null}
+                      aria-pressed={active}
+                      onClick={() => v != null && setPrice(v)}
+                      className={`rounded-full px-2.5 py-1 font-semibold transition disabled:opacity-40 ${active ? "bg-violet text-white" : "bg-black/5 text-ink hover:bg-black/10"}`}
+                    >
+                      {pct}%
+                    </button>
+                  );
+                })}
+                {!pick.isDefault && pick.price !== price && (
+                  <button type="button" onClick={() => setPrice(pick.price)} className="rounded-full px-2.5 py-1 text-violet hover:bg-violet/10">
+                    Harga produk ({formatRupiah(pick.price)})
+                  </button>
+                )}
+              </div>
+              {pick.isDefault && (
+                <p className="mt-1.5 text-[11px] text-warning">
+                  Harga sewa produk ini belum diatur — memakai default {DEFAULT_RENTAL_PCT}% dari harga jual. Ubah di sini atau atur permanen di Produk → Edit.
+                </p>
+              )}
             </div>
 
             <label className="mb-1 block text-sm text-olive">Nama penyewa</label>

@@ -210,3 +210,30 @@ describe("E17 persen harga sewa", () => {
     expect(matchingRentalPct(150000, 0)).toBeNull();
   });
 });
+
+// ===== E17 revisi 2: default harga sewa =====
+import { DEFAULT_RENTAL_PCT, resolveRentalPrice } from "./rental";
+
+describe("E17 default harga sewa", () => {
+  it("default = salah satu pilihan persen (70%)", () => {
+    expect(DEFAULT_RENTAL_PCT).toBe(70);
+    expect([...RENTAL_PCT_OPTIONS]).toContain(DEFAULT_RENTAL_PCT);
+  });
+  it("harga sewa varian sudah diatur → dipakai apa adanya (bukan default)", () => {
+    expect(resolveRentalPrice(150000, 90000)).toEqual({ price: 90000, isDefault: false });
+  });
+  it("belum diatur (null/undefined/0) → 70% × harga jual, ditandai default", () => {
+    expect(resolveRentalPrice(150000, null)).toEqual({ price: 105000, isDefault: true });
+    expect(resolveRentalPrice(150000, undefined)).toEqual({ price: 105000, isDefault: true });
+    expect(resolveRentalPrice(150000, 0)).toEqual({ price: 105000, isDefault: true });
+  });
+  it("persen bisa diganti", () => {
+    expect(resolveRentalPrice(100000, null, 50)).toEqual({ price: 50000, isDefault: true });
+  });
+  it("harga jual belum diisi & harga sewa kosong → price null (tak bisa disewa)", () => {
+    expect(resolveRentalPrice(0, null)).toEqual({ price: null, isDefault: true });
+  });
+  it("harga sewa sudah diatur tetap dipakai walau harga jual 0", () => {
+    expect(resolveRentalPrice(0, 50000)).toEqual({ price: 50000, isDefault: false });
+  });
+});

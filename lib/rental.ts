@@ -190,3 +190,25 @@ export function matchingRentalPct(sellingPrice: number, rentalPrice: number | nu
   for (const p of RENTAL_PCT_OPTIONS) if (rentalPriceFromPct(sellingPrice, p) === rentalPrice) return p;
   return null;
 }
+
+// ===== E17 revisi 2: barang tanpa harga sewa tetap bisa disewa (default persen dari harga jual) =====
+
+/** default bila harga sewa varian belum diatur — salah satu dari RENTAL_PCT_OPTIONS; bisa diubah di form sewa */
+export const DEFAULT_RENTAL_PCT = 70;
+
+export interface ResolvedRentalPrice {
+  /** harga sewa per unit yang dipakai; null bila tak bisa dihitung (harga jual belum diisi) */
+  price: number | null;
+  /** true = memakai default persen (harga sewa varian belum diatur) */
+  isDefault: boolean;
+}
+
+/** harga sewa varian bila sudah diatur; kalau belum → DEFAULT_RENTAL_PCT × harga jual */
+export function resolveRentalPrice(
+  sellingPrice: number,
+  rentalPrice: number | null | undefined,
+  pct: number = DEFAULT_RENTAL_PCT
+): ResolvedRentalPrice {
+  if ((rentalPrice ?? 0) > 0) return { price: rentalPrice as number, isDefault: false };
+  return { price: rentalPriceFromPct(sellingPrice, pct), isDefault: true };
+}

@@ -6,6 +6,7 @@
 //  I4 return_rental sisa → selesai (returned_at terisi), stok kembali penuh
 //  I5 create_rental melebihi stok → insufficient_stock
 //  I6 create_rental tarif 0 → no_rental_price
+//  I8 varian TANPA rental_price disewa dengan harga default 70% dari harga jual (revisi 2): nota & rentals memakai harga itu
 //  I7 bentuk data DB → lib/rental.ts (status, ringkasan, tab, pencarian, WA) konsisten
 //  Cleanup + bukti sisa = 0.
 // Jalankan: node --experimental-strip-types --no-warnings scripts/test-e17-rental.mjs
@@ -111,6 +112,16 @@ try {
   check("I7c ringkasan: 1 terbuka, 1 terlambat, deposit ditahan 50000 (1 unit × 50000/unit)", sm.open === 1 && sm.overdue === 1 && sm.depositHeld === 50000, JSON.stringify(sm));
   check("I7d pencarian lewat HP (digit) menemukan sewa; HP dinormalisasi ke 62…", filterRentals(mapped, { tab: "aktif", query: "0812 3456" }, today).length === 1 && normalizePhoneId(late.customerPhone) === "6281234567890");
   check("I7e matchesTab hari-ini tidak salah menandai yang telat", !matchesTab(late, "hari-ini", today));
+
+  // I8: varian tanpa harga sewa (rental_price null) — harga default 70% × harga jual dikirim klien
+  const v2 = (await j(await api("variants", { method: "POST", body: JSON.stringify([{ sku: `${TAG}-V2`, name: "Seri B", size: "L", color: "TES", color_code: "#000000", selling_price: 100000, cost_price: 0, rental_price: null, rental_days: 3, deposit_price: null, product_id: productId }]) })))[0];
+  const stockBefore = await stockOf(productId);
+  const q8 = await rpc("create_rental", mk({ p_variant: v2.id, p_qty: 1, p_rent_price: 70000, p_deposit: null, p_customer_name: `${TAG} Default` }));
+  const tx8 = await j(q8);
+  const t8 = q8.ok ? (await j(await api(`transactions?select=kind,total&id=eq.${tx8}`)))[0] : null;
+  const r8 = q8.ok ? (await j(await api(`rentals?select=rent_price,deposit,qty&transaction_id=eq.${tx8}`)))[0] : null;
+  check("I8a varian tanpa rental_price tetap bisa disewa dengan harga default (RPC tidak mensyaratkan harga varian)", q8.ok && t8?.kind === "rental" && Number(t8?.total) === 70000 && Number(r8?.rent_price) === 70000 && r8?.deposit === null, JSON.stringify({ t8, r8 }));
+  check("I8b stok −1 untuk sewa default", (await stockOf(productId)) === stockBefore - 1);
 } finally {
   // cleanup: movements → transaksi (rentals/transaction_items cascade) → penyewa → produk (varian cascade)
   try {
