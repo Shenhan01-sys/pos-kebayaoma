@@ -3,6 +3,8 @@ import {
   BITMAP_INK_BIT,
   buildTsplJob as buildRaw,
   code128Bitmap,
+  code128BitmapAdaptive,
+  XP_BARCODE_MODE,
   code128Pattern,
   BARCODE_FIXED_W,
   code128Modules,
@@ -14,7 +16,7 @@ import {
 
 /** uji lama: barcode native (lebar alami) — mode tetap dites terpisah di bawah */
 const buildTsplJob = (l: Parameters<typeof buildRaw>[0], r: TextRenderer, o: Parameters<typeof buildRaw>[2] = {}) =>
-  buildRaw(l, r, { fixedBarcode: false, ...o });
+  buildRaw(l, r, { barcodeMode: "native", ...o });
 
 // renderer palsu deterministik: lebar = 0,55 * px per karakter, semua piksel = tinta
 const fake: TextRenderer = (text, px) => {
@@ -205,14 +207,60 @@ describe("barcode lebar seragam (fixedBarcode)", () => {
     expect(code128Bitmap("KEBAYA-BROKAT-PREMIUM-EDISI-KHUSUS", BARCODE_FIXED_W, 40)).toBeNull();
   });
   it("job mode fixed: tidak ada perintah BARCODE, semua barcode = BITMAP selebar 30 byte", () => {
-    const c = parse(buildRaw(mk(3), fake, { fixedBarcode: true }));
+    const c = parse(buildRaw(mk(3), fake, { barcodeMode: "fixed" }));
     expect(count(c, "BARCODE")).toBe(0);
     expect(c.filter((x) => x.cmd === "BITMAP" && x.wb === 30 && x.h === 40).length).toBe(3);
   });
   it("barcode fixed di-center di sel 33 mm: margin kiri == kanan", () => {
-    const c = parse(buildRaw(mk(1), fake, { fixedBarcode: true, topOffsetMm: 0 }));
+    const c = parse(buildRaw(mk(1), fake, { barcodeMode: "fixed", topOffsetMm: 0 }));
     const bm = c.find((x) => x.cmd === "BITMAP" && x.h === 40)!;
     expect(bm.x! - 8).toBe(264 - (bm.x! - 8) - 240);
+  });
+});
+
+describe("barcode adaptive (default) — modul bulat, tanpa distorsi", () => {
+  const widthDots = (c: string) => code128Pattern(c).length;
+  it("default = adaptive (bukan fixed/pecahan)", () => {
+    expect(XP_BARCODE_MODE).toBe("adaptive");
+  });
+  it("modul = bilangan bulat terbesar (maks 3) yang muat SAFE_W 240 dot", () => {
+    const cases: [string, number][] = [
+      ["ABCD", 3],              // 79 modul → 3 dot = 237
+      ["ANTING", 2],            // ±101 modul → 2 dot
+      ["BANDANA", 2],           // 112 modul → 2 dot = 224
+      ["ANTING-ANTING", 1],     // 178 → 1 dot
+      ["BAGCHRAM-BAGCHRAM", 1], // 222 → 1 dot
+    ];
+    for (const [code, scale] of cases) {
+      const b = code128BitmapAdaptive(code, 40)!;
+      expect(b.w).toBe(widthDots(code) * scale);
+      expect(b.w).toBeLessThanOrEqual(240);
+    }
+  });
+  it("lebar bar = kelipatan bulat modul (tanpa pecahan): semua run ink/putih kelipatan scale", () => {
+    for (const code of ["BANDANA", "ANTING-ANTING", "ABCD"]) {
+      const b = code128BitmapAdaptive(code, 1)!;
+      const scale = b.w / widthDots(code);
+      let run = 1;
+      for (let x = 1; x <= b.w; x++) {
+        if (x < b.w && b.ink[x] === b.ink[x - 1]) run++;
+        else { expect(run % scale).toBe(0); run = 1; }
+      }
+    }
+  });
+  it("kode > sel 33 mm (>264 modul) → null (jatuh ke BARCODE native)", () => {
+    expect(code128BitmapAdaptive("KEBAYA-BROKAT-PREMIUM-EDISI-KHUSUS", 40)).toBeNull();
+  });
+  it("job default: tanpa perintah BARCODE; barcode = BITMAP; di-center di sel", () => {
+    const c = parse(buildRaw(mk(1), fake, { topOffsetMm: 0 }));
+    expect(count(c, "BARCODE")).toBe(0);
+    const bm = c.find((x) => x.cmd === "BITMAP" && x.h === 40)!;
+    expect(Math.abs(bm.x! - 8 - (264 - (bm.x! - 8) - bm.w!))).toBeLessThanOrEqual(8);
+  });
+  it("BARCODE native diakhiri CRLF eksplisit", () => {
+    const s = Buffer.from(buildRaw(mk(1), fake, { barcodeMode: "native" })).toString("latin1");
+    expect(/BARCODE [^\n]*"\r\n/.test(s)).toBe(true);
+    expect(/[^\r]\n/.test(s)).toBe(false);
   });
 });
 

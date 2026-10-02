@@ -12,6 +12,8 @@
 
 import JsBarcode from "jsbarcode";
 
+export type BarcodeMode = "adaptive" | "fixed" | "native";
+
 export interface TsplLabel {
   name: string;
   size?: string;
@@ -24,8 +26,9 @@ export interface TsplOptions {
   leftOffsetMm?: number;
   /** koreksi geser seluruh konten ke bawah (mm) */
   topOffsetMm?: number;
-  /** true = semua barcode selebar sama (BARCODE_FIXED_W, modul pecahan) ; false = lebar alami (modul 1 dot) */
-  fixedBarcode?: boolean;
+  /** mode barcode: adaptive = modul bulat 1–3 dot (default, scan paling andal) · fixed = lebar seragam 30 mm
+   *  (modul pecahan, terbukti sulit dibaca scanner) · native = perintah BARCODE printer (modul 1 dot) */
+  barcodeMode?: BarcodeMode;
 }
 
 /** hasil gambar teks: piksel ink (1 = tinta/hitam) baris demi baris */
@@ -50,8 +53,8 @@ export const XP_LEFT_OFFSET_MM = 0;
 export const XP_TOP_OFFSET_MM = 1.5;
 /** BITMAP TSPL: bit 0 = titik hitam (tercetak), bit 1 = putih */
 export const BITMAP_INK_BIT = 0;
-/** default mode barcode (uji fisik opsi 2: lebar seragam) */
-export const XP_FIXED_BARCODE = true;
+/** default mode barcode — user: mode "fixed" (modul pecahan) tidak terbaca scanner (2026-10-02) */
+export const XP_BARCODE_MODE: BarcodeMode = "adaptive";
 
 const mm = (v: number) => Math.round(v * DOTS_PER_MM);
 const CELL_W = mm(XP_LABEL_W_MM); // 264
@@ -60,6 +63,8 @@ const BARCODE_NARROW = 1; // 0,125 mm/modul — batas aman scanner @203dpi
 const BARCODE_H = 40; // 5 mm
 /** lebar barcode seragam (30 mm); kode > ini modul (mis. >240 modul) jatuh ke lebar alami */
 export const BARCODE_FIXED_W = 240;
+/** modul terbesar yang dicoba (3 dot = 0,375 mm) */
+const BARCODE_MAX_SCALE = 3;
 const SAFE_W = CELL_W - 2 * 12; // margin aman 1,5 mm kiri-kanan → 240 dot
 const Y_BARCODE = 14;
 const Y_NAME = 60;
@@ -152,6 +157,32 @@ export function code128Bitmap(text: string, targetW: number, h: number): TextBit
   return { w: targetW, h, ink };
 }
 
+/** barcode dengan lebar modul BILANGAN BULAT (scale dot/modul) — tanpa distorsi rasio garis. */
+export function code128BitmapScaled(text: string, scale: number, h: number): TextBitmap | null {
+  let bits: string;
+  try { bits = code128Pattern(text); } catch { return null; }
+  if (!bits.length || scale < 1) return null;
+  const w = bits.length * scale;
+  const row = new Uint8Array(w);
+  for (let i = 0; i < bits.length; i++) {
+    if (bits[i] === "1") row.fill(1, i * scale, (i + 1) * scale);
+  }
+  const ink = new Uint8Array(w * h);
+  for (let r = 0; r < h; r++) ink.set(row, r * w);
+  return { w, h, ink };
+}
+
+/** Modul terbesar (1–3 dot, bulat) yang muat di area aman (SAFE_W). Kode panjang: modul 1 dot selama
+ *  muat di sel 33 mm; lebih panjang dari itu → null (jatuh ke BARCODE native). */
+export function code128BitmapAdaptive(text: string, h: number): TextBitmap | null {
+  let modules: number;
+  try { modules = code128Pattern(text).length; } catch { return null; }
+  if (!modules) return null;
+  const scale = Math.min(BARCODE_MAX_SCALE, Math.floor(SAFE_W / modules));
+  if (scale >= 1) return code128BitmapScaled(text, scale, h);
+  return modules <= CELL_W ? code128BitmapScaled(text, 1, h) : null;
+}
+
 const enc = new TextEncoder();
 
 /** BITMAP x,y,widthBytes,height,0,<data> — data biner (bit 0 = hitam), padding putih */
@@ -178,16 +209,19 @@ function bitmapCmd(x: number, y: number, b: TextBitmap): Uint8Array {
 const center = (cellX: number, contentDots: number) =>
   cellX + Math.max(0, Math.floor((CELL_W - contentDots) / 2));
 
-function cellParts(l: TsplLabel, cellX: number, top: number, render: TextRenderer, fixedBarcode: boolean): Uint8Array[] {
+function cellParts(l: TsplLabel, cellX: number, top: number, render: TextRenderer, mode: BarcodeMode): Uint8Array[] {
   const parts: Uint8Array[] = [];
   const code = tsplSafe(l.barcode);
-  const fixed = fixedBarcode ? code128Bitmap(code, BARCODE_FIXED_W, BARCODE_H) : null;
-  if (fixed) {
-    parts.push(bitmapCmd(center(cellX, fixed.w), top + Y_BARCODE, fixed));
+  const bc =
+    mode === "adaptive" ? code128BitmapAdaptive(code, BARCODE_H) :
+    mode === "fixed" ? code128Bitmap(code, BARCODE_FIXED_W, BARCODE_H) :
+    null;
+  if (bc) {
+    parts.push(bitmapCmd(center(cellX, bc.w), top + Y_BARCODE, bc));
   } else {
+    // native: dipakai mode "native" atau kode terlalu panjang untuk bitmap (modul > lebar sel)
     const bcW = code128Modules(code) * BARCODE_NARROW;
-    parts.push(enc.encode(`BARCODE ${center(cellX, bcW)},${top + Y_BARCODE},"128",${BARCODE_H},0,0,${BARCODE_NARROW},${BARCODE_NARROW},"${code}"
-`));
+    parts.push(enc.encode(`BARCODE ${center(cellX, bcW)},${top + Y_BARCODE},"128",${BARCODE_H},0,0,${BARCODE_NARROW},${BARCODE_NARROW},"${code}"\r\n`));
   }
 
   // masing-masing objek di-center sendiri terhadap sel 33 mm (bukan satu grup)
@@ -212,7 +246,7 @@ export function buildTsplJob(labels: TsplLabel[], render: TextRenderer, opts: Ts
     for (let c = 0; c < XP_COLS; c++) {
       const l = labels[r * XP_COLS + c];
       if (!l) break;
-      parts.push(...cellParts(l, left + c * CELL_PITCH, top, render, opts.fixedBarcode ?? XP_FIXED_BARCODE));
+      parts.push(...cellParts(l, left + c * CELL_PITCH, top, render, opts.barcodeMode ?? XP_BARCODE_MODE));
     }
     parts.push(enc.encode("PRINT 1,1\r\n"));
   }
