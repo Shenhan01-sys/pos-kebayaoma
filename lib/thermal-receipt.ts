@@ -7,6 +7,7 @@
 // user) karena @page margin ditimpa setting dialog Chrome.
 
 import { formatRupiah, type Transaction } from "@/lib/dummy";
+import { receiptRentalInfo } from "@/lib/rental";
 
 interface ReceiptStoreInfo {
   storeName: string;
@@ -26,6 +27,7 @@ export function buildThermalReceiptHtml(
   s: ReceiptStoreInfo,
   qrPng?: string
 ): string {
+  const rental = receiptRentalInfo(tx); // E19: label SEWA + tanggal kembali (null untuk nota lain)
   const items = tx.items
     .map(
       (it) => `
@@ -77,7 +79,9 @@ export function buildThermalReceiptHtml(
   <div class="dash">${DASH}</div>
   <table class="meta">
     <tr><td>${esc(tx.number)}</td><td class="r">${new Date(tx.createdAt).toLocaleString("id-ID")}</td></tr>
-    <tr><td colspan="2">Kasir: ${esc(tx.cashier)}${tx.customerName ? " / Pelanggan: " + esc(tx.customerName) : ""}</td></tr>
+    ${rental ? `<tr><td colspan="2" class="c b">${esc(rental.label)}</td></tr>` : ""}
+    <tr><td colspan="2">Kasir: ${esc(tx.cashier)}${tx.customerName ? ` / ${rental ? "Penyewa" : "Pelanggan"}: ` + esc(tx.customerName) : ""}</td></tr>
+    ${rental?.returnDate ? `<tr><td colspan="2" class="b">Kembali: ${esc(rental.returnDate)}</td></tr>` : ""}
   </table>
   <div class="dash">${DASH}</div>
   <table>${items}</table>
@@ -92,7 +96,7 @@ export function buildThermalReceiptHtml(
   <div class="dash">${DASH}</div>
   ${qrPng ? `<div class="c"><img class="qr" src="${qrPng}" alt="QR"></div><div class="c small">Scan untuk verifikasi resmi</div>` : ""}
   <div class="c b" style="margin-top:4px">Terima kasih</div>
-  <div class="c small">Barang tidak bisa dikembalikan</div>
+  <div class="c small">${rental ? esc(rental.footer) : "Barang tidak bisa dikembalikan"}</div>
 </body>
 </html>`;
 }

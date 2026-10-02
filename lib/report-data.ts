@@ -1,6 +1,10 @@
 // lib/report-data.ts — E3: satu sumber kebenaran angka laporan (UI == PDF == xlsx).
 // Model P&L: Omzet − HPP − Pengeluaran(v1=0) = Bersih. HPP per baris dari
 // transaction_items.cost_price; baris tanpa modal → kelompok "Tanpa modal" (AC-E3#6).
+// E19: omzet dipecah Penjualan vs Sewa (nota kind=rental). `sales` tetap TOTAL (P&L tidak bergeser);
+// baris sewa TIDAK PERNAH membawa HPP (barang kembali ke stok) walau cost_price terisi — trigger DB set_item_cost_price
+// mengisi cost_price NULL dari modal varian, jadi nota sewa asli memuat modal barangnya; diabaikan di sini.
+// Baris sewa juga tidak dihitung "tanpa modal" dan tidak masuk produk terlaris.
 
 import { toLocalDayKey } from "@/lib/dummy";
 import type { Transaction } from "@/lib/dummy";
@@ -12,6 +16,7 @@ export interface ReportLine {
   cashier: string;
   method: string;
   storeId?: string;
+  kind: "sale" | "preorder" | "rental"; // E19
   product: string;
   sku: string;
   qty: number;
@@ -24,7 +29,11 @@ export interface ReportLine {
 }
 
 export interface Report {
-  sales: number;
+  sales: number; // TOTAL omzet = salesRetail + rentalSales
+  salesRetail: number; // E19: penjualan (sale + preorder)
+  rentalSales: number; // E19: omzet sewa (nota kind=rental, lunas)
+  rentalCount: number; // E19: jumlah nota sewa
+  rentalProducts: [string, { qty: number; rev: number }][]; // E19: sewa per barang
   count: number;
   avg: number;
   discount: number;
@@ -60,6 +69,10 @@ export function computeReport(
   });
 
   const sales = scope.reduce((s, t) => s + t.total, 0);
+  const rentalScope = scope.filter((t) => t.kind === "rental");
+  const rentalSales = rentalScope.reduce((s, t) => s + t.total, 0);
+  const rentalCount = rentalScope.length;
+  const salesRetail = sales - rentalSales;
   const count = scope.length;
   const discount = scope.reduce((s, t) => s + (t.discount ?? 0), 0);
   const tax = scope.reduce((s, t) => s + (t.tax ?? 0), 0);
@@ -69,26 +82,30 @@ export function computeReport(
   const byMethod: Record<string, number> = {};
   const byDayMap: Record<string, number> = {};
   const prodMap: Record<string, { qty: number; rev: number }> = {};
+  const rentalMap: Record<string, { qty: number; rev: number }> = {};
   const lines: ReportLine[] = [];
 
   for (const t of scope) {
     byMethod[t.paymentMethod] = (byMethod[t.paymentMethod] ?? 0) + t.total;
     const day = toLocalDayKey(t.createdAt);
     byDayMap[day] = (byDayMap[day] ?? 0) + t.total;
+    const isRental = t.kind === "rental";
     for (const it of t.items ?? []) {
-      const hasCost = it.costPrice != null && it.costPrice > 0;
+      const hasCost = !isRental && it.costPrice != null && it.costPrice > 0;
       const cost = hasCost ? it.costPrice * it.quantity : 0;
       if (hasCost) hpp += cost;
-      else { unknownQty += it.quantity; unknownRev += it.total; }
-      prodMap[it.name] = prodMap[it.name] ?? { qty: 0, rev: 0 };
-      prodMap[it.name].qty += it.quantity;
-      prodMap[it.name].rev += it.total;
+      else if (!isRental) { unknownQty += it.quantity; unknownRev += it.total; }
+      const map = isRental ? rentalMap : prodMap;
+      map[it.name] = map[it.name] ?? { qty: 0, rev: 0 };
+      map[it.name].qty += it.quantity;
+      map[it.name].rev += it.total;
       lines.push({
         number: t.number,
         date: t.createdAt,
         cashier: t.cashier,
         method: t.paymentMethod,
         storeId: t.storeId,
+        kind: (t.kind ?? "sale") as ReportLine["kind"],
         product: it.name,
         sku: it.sku,
         qty: it.quantity,
@@ -116,6 +133,7 @@ export function computeReport(
   const bersih = sales - hpp - expensesTotal;
   const byDay = Object.entries(byDayMap).sort((a, b) => a[0].localeCompare(b[0]));
   const topProducts = Object.entries(prodMap).sort((a, b) => b[1].rev - a[1].rev);
+  const rentalProducts = Object.entries(rentalMap).sort((a, b) => b[1].rev - a[1].rev);
 
-  return { sales, count, avg, discount, tax, hpp, unknownQty, unknownRev, expenses: expensesTotal, bersih, byCategory, byMethod, byDay, topProducts, lines };
+  return { sales, salesRetail, rentalSales, rentalCount, rentalProducts, count, avg, discount, tax, hpp, unknownQty, unknownRev, expenses: expensesTotal, bersih, byCategory, byMethod, byDay, topProducts, lines };
 }

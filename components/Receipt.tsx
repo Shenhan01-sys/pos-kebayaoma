@@ -1,9 +1,11 @@
 import { QRCodeSVG } from "qrcode.react";
 import { formatRupiah, type Transaction } from "@/lib/dummy";
 import { useSettings } from "@/store/settings";
+import { receiptRentalInfo } from "@/lib/rental";
 
 export default function Receipt({ tx }: { tx: Transaction }) {
   const s = useSettings();
+  const rental = receiptRentalInfo(tx); // E19: label SEWA + tanggal kembali (null untuk nota lain)
   const verifyUrl =
     (typeof window !== "undefined" ? window.location.origin : "https://kebaya-oma.id") +
     "/verify/" +
@@ -33,9 +35,15 @@ export default function Receipt({ tx }: { tx: Transaction }) {
       <div className="my-2 border-t border-dashed border-black/30" />
 
       <div>{tx.number}</div>
+      {rental && (
+        <div className="my-0.5 text-center text-[13px] font-extrabold tracking-wide">{rental.label}</div>
+      )}
       <div>{new Date(tx.createdAt).toLocaleString("id-ID")}</div>
       <div>Kasir: {tx.cashier}</div>
-      {tx.customerName && <div>Pelanggan: {tx.customerName}</div>}
+      {tx.customerName && <div>{rental ? "Penyewa" : "Pelanggan"}: {tx.customerName}</div>}
+      {rental?.returnDate && (
+        <div className="font-bold">Kembali: {rental.returnDate}</div>
+      )}
 
       <div className="my-2 border-t border-dashed border-black/30" />
 
@@ -80,7 +88,7 @@ export default function Receipt({ tx }: { tx: Transaction }) {
       </div>
       <div className="text-center text-[11px] font-semibold">Terima kasih</div>
       <div className="text-center text-[10px] text-gray-600">
-        Barang tidak bisa dikembalikan
+        {rental ? rental.footer : "Barang tidak bisa dikembalikan"}
       </div>
     </div>
   );

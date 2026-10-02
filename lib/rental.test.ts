@@ -315,3 +315,26 @@ describe("E18 validateRentalDraft", () => {
     expect(validateRentalDraft({ ...ok, startDate: "02-10-2026" }, 10)).toMatch(/tanggal/i);
   });
 });
+
+// ===== E19: struk sewa =====
+import { receiptRentalInfo } from "./rental";
+
+describe("E19 receiptRentalInfo", () => {
+  it("nota sewa → label SEWA + tanggal kembali + kaki struk sewa", () => {
+    const r = receiptRentalInfo({ kind: "rental", dueDate: "2026-10-07" })!;
+    expect(r.label).toBe("*** SEWA ***");
+    expect(r.returnDate).toBe("07 Okt 2026");
+    expect(r.footer).toBe("Barang sewa wajib dikembalikan paling lambat 07 Okt 2026");
+  });
+  it("nota sewa tanpa dueDate → tetap berlabel SEWA, tanpa tanggal", () => {
+    const r = receiptRentalInfo({ kind: "rental" })!;
+    expect(r.returnDate).toBeNull();
+    expect(r.footer).toMatch(/dikembalikan sesuai tanggal jatuh tempo/);
+  });
+  it("penjualan, pre-order, kind kosong → null (struk tidak berubah)", () => {
+    expect(receiptRentalInfo({ kind: "sale", dueDate: "2026-10-07" })).toBeNull();
+    expect(receiptRentalInfo({ kind: "preorder", dueDate: "2026-10-07" })).toBeNull();
+    expect(receiptRentalInfo({})).toBeNull();
+    expect(receiptRentalInfo({ kind: null })).toBeNull();
+  });
+});

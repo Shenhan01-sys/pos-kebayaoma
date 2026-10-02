@@ -133,3 +133,83 @@ describe("computeReport expenses (E8)", () => {
     expect(categorizeExpense("bakmi kopyok")).toBe("Lainnya");
   });
 });
+
+describe("computeReport pemisahan sewa (E19)", () => {
+  const rentalItem = (name: string, qty: number, price: number) => ({
+    ...item(name, qty, price, null, qty * price), costPrice: 0,
+  });
+  const txs: Transaction[] = [
+    mk({ number: "S1", total: 100000, storeId: "KTB", kind: "sale",
+      items: [item("Anting", 2, 50000, 40000, 100000)] }),
+    mk({ number: "R1", total: 140000, storeId: "KTB", kind: "rental", paymentMethod: "transfer",
+      items: [rentalItem("Kebaya Pengantin", 2, 70000)] }),
+    mk({ number: "R2", total: 50000, storeId: "KTB", kind: "rental", status: "cancelled",
+      items: [rentalItem("Kebaya Batal", 1, 50000)] }),
+    mk({ number: "P1", total: 30000, storeId: "KTB", kind: "preorder",
+      items: [item("Selendang", 1, 30000, 20000, 30000)] }),
+  ];
+
+  it("omzet total tetap, dipecah penjualan vs sewa; nota batal tak dihitung", () => {
+    const r = computeReport(txs, null);
+    expect(r.sales).toBe(270000);
+    expect(r.rentalSales).toBe(140000);
+    expect(r.rentalCount).toBe(1);
+    expect(r.salesRetail).toBe(130000); // sale + preorder
+    expect(r.salesRetail + r.rentalSales).toBe(r.sales);
+    expect(r.count).toBe(3);
+  });
+
+  it("tanpa nota sewa: rentalSales 0, salesRetail == sales", () => {
+    const r = computeReport([txs[0], txs[3]], null);
+    expect(r.rentalSales).toBe(0);
+    expect(r.rentalCount).toBe(0);
+    expect(r.salesRetail).toBe(r.sales);
+    expect(r.rentalProducts).toEqual([]);
+  });
+
+  it("baris sewa bukan 'tanpa modal' & tidak masuk produk terlaris; HPP tak bergeser", () => {
+    const r = computeReport(txs, null);
+    expect(r.unknownQty).toBe(0);
+    expect(r.hpp).toBe(80000 + 20000);
+    expect(r.bersih).toBe(270000 - 100000);
+    expect(r.topProducts.map(([n]) => n)).toEqual(["Anting", "Selendang"]);
+    expect(r.rentalProducts).toEqual([["Kebaya Pengantin", { qty: 2, rev: 140000 }]]);
+  });
+
+  it("trigger DB mengisi cost_price baris sewa dari modal varian → HPP sewa tetap diabaikan", () => {
+    const withFilledCost: Transaction[] = [
+      mk({ number: "R9", total: 105000, kind: "rental", items: [item("Jam", 1, 105000, 50000, 105000)] }),
+    ];
+    const r = computeReport(withFilledCost, null);
+    expect(r.hpp).toBe(0);
+    expect(r.bersih).toBe(105000);
+    expect(r.unknownQty).toBe(0);
+    expect(r.lines[0].hasCost).toBe(false);
+    expect(r.lines[0].unitCost).toBeNull();
+  });
+
+  it("byMethod & lines tetap mencakup sewa; kind baris benar", () => {
+    const r = computeReport(txs, null);
+    expect(Object.values(r.byMethod).reduce((a, b) => a + b, 0)).toBe(r.sales);
+    expect(r.byMethod.transfer).toBe(140000);
+    expect(r.lines.find((l) => l.number === "R1")?.kind).toBe("rental");
+    expect(r.lines.find((l) => l.number === "S1")?.kind).toBe("sale");
+    expect(r.lines.find((l) => l.number === "P1")?.kind).toBe("preorder");
+  });
+
+  it("buildSheets: Omzet total + rincian Penjualan/Sewa identik dgn report; baris detail bertanda Sewa", async () => {
+    const { buildSheets } = await import("./report-export");
+    const r = computeReport(txs, null);
+    for (const includeProfit of [true, false]) {
+      const { summary, detail } = buildSheets(r, { storeLabel: "SEMUA", from: "", to: "" }, includeProfit);
+      const find = (label: string) => (summary.find((row) => row[0] === label) ?? [])[1];
+      expect(find("Omzet")).toBe(r.sales);
+      expect(find("  Omzet Penjualan")).toBe(r.salesRetail);
+      expect(find("  Omzet Sewa")).toBe(r.rentalSales);
+      expect(find("  Jumlah Nota Sewa")).toBe(1);
+      expect(summary.some((row) => row[0] === "Sewa per Barang")).toBe(true);
+      const rentalRow = detail.find((row) => row[0] === "R1") as (string | number | Date | null)[];
+      expect(rentalRow[rentalRow.length - 1]).toBe("Sewa");
+    }
+  });
+});

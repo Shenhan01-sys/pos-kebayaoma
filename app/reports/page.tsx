@@ -65,7 +65,7 @@ export default function ReportsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [storeSel, from, to, all.length, expenses]
   );
-  const { sales, count, avg, discount, tax, hpp, bersih, unknownQty } = report;
+  const { sales, count, avg, discount, tax, hpp, bersih, unknownQty, rentalSales, rentalCount, salesRetail } = report;
   const inRange = { length: count };
 
   const byMethod = report.byMethod;
@@ -155,6 +155,10 @@ export default function ReportsPage() {
   // E12: laba/HPP hanya superadmin (FE-only v1; DB-level = plan U2).
   const kpis: { label: string; value: string; icon: IconName; bg: string }[] = [
     { label: "Omzet", value: formatRupiah(sales), icon: "wallet", bg: "bg-violet" },
+    // E19: omzet sewa dipisah dari penjualan (Omzet = Penjualan + Sewa)
+    ...(rentalCount > 0
+      ? [{ label: "Dari Sewa", value: formatRupiah(rentalSales), icon: "rental" as IconName, bg: "bg-apricot" }]
+      : []),
     ...(canSeeProfitData
       ? [
           { label: "HPP", value: formatRupiah(hpp), icon: "box", bg: "bg-olive" },
@@ -256,6 +260,14 @@ export default function ReportsPage() {
           ))}
         </div>
 
+        {/* E19: pemisahan omzet — terlihat semua peran yang melihat laporan */}
+        {rentalCount > 0 && (
+          <p className="mt-3 text-xs text-gray-600">
+            Omzet = Penjualan <b className="tnum text-ink">{formatRupiah(salesRetail)}</b> + Sewa{" "}
+            <b className="tnum text-ink">{formatRupiah(rentalSales)}</b> ({rentalCount} nota sewa). Deposit sewa tidak termasuk omzet.
+          </p>
+        )}
+
         {/* P&L ringkas — superadmin saja (E12); sama persis dgn PDF/xlsx (sumber: computeReport) */}
         {canSeeProfitData && (
           <div className="card card-pad mt-4 text-sm">
@@ -337,6 +349,33 @@ export default function ReportsPage() {
             </>
           )}
         </div>
+
+        {/* E19: sewa per barang (dipisah dari produk terlaris) */}
+        {report.rentalProducts.length > 0 && (
+          <div className="card card-pad mt-6">
+            <h2 className="section-title mb-2">Sewa per Barang</h2>
+            <div className="overflow-x-auto pretty-scroll">
+              <table className="w-full text-sm">
+                <thead className="text-left text-gray-600">
+                  <tr>
+                    <th className="py-2 font-semibold">Barang</th>
+                    <th className="py-2 text-right font-semibold">Unit disewa</th>
+                    <th className="py-2 text-right font-semibold">Pendapatan sewa</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {report.rentalProducts.map(([name, v]) => (
+                    <tr key={name} className="border-t border-black/5">
+                      <td className="py-2 font-medium text-ink">{name}</td>
+                      <td className="py-2 text-right tnum text-gray-600">{v.qty}</td>
+                      <td className="py-2 text-right font-semibold tnum text-olive">{formatRupiah(v.rev)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
         </>
         )}
       </div>

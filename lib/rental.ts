@@ -287,3 +287,27 @@ export function toRentalSpec(d: RentalDraft) {
     customerPhone: d.customerPhone,
   };
 }
+
+// ===== E19: struk sewa — label SEWA + tanggal kembali =====
+
+export interface ReceiptRentalInfo {
+  /** label tebal di bawah nomor nota */
+  label: string;
+  /** tanggal harus kembali, mis. "07 Okt 2026" (null bila nota tak membawa tanggal) */
+  returnDate: string | null;
+  /** pengganti kalimat "Barang tidak bisa dikembalikan" di kaki struk */
+  footer: string;
+}
+
+/** info tambahan struk untuk nota sewa; null untuk nota selain sewa (struk penjualan/PO tidak berubah) */
+export function receiptRentalInfo(tx: { kind?: string | null; dueDate?: string | null }): ReceiptRentalInfo | null {
+  if (tx.kind !== "rental") return null;
+  const returnDate = tx.dueDate ? formatDateId(tx.dueDate) : null;
+  return {
+    label: "*** SEWA ***",
+    returnDate,
+    footer: returnDate
+      ? `Barang sewa wajib dikembalikan paling lambat ${returnDate}`
+      : "Barang sewa wajib dikembalikan sesuai tanggal jatuh tempo",
+  };
+}

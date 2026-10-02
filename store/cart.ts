@@ -77,7 +77,7 @@ export const useCart = create<CartState>((set, get) => ({
           size: variant.size,
           color: variant.color,
           unitPrice: draft.rentPrice,
-          costPrice: 0, // sewa: tidak ada HPP per unit (cost_price null di item, sama seperti RPC create_rental)
+          costPrice: 0, // sewa: tak ada HPP per unit (disimpan null; trigger DB set_item_cost_price mengisinya dari modal varian — laporan mengabaikan HPP baris sewa, lib/report-data.ts)
           quantity: draft.qty,
           discount: 0,
           rental: true,

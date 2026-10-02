@@ -69,7 +69,9 @@ export async function exportPdf({ report, meta, chartNodes, includeProfit = true
     doc.setFont("helvetica", "bold").setFontSize(12).setTextColor(PALETTE.ink);
     doc.text("Ringkasan", M, y); y += 6;
     const money: [string, number, string?][] = [
-      ["Omzet (bersih penjualan)", report.sales],
+      report.rentalCount > 0
+        ? ["Omzet (penjualan + sewa)", report.sales, `Penjualan ${rupiah(report.salesRetail)} + Sewa ${rupiah(report.rentalSales)} (${report.rentalCount} nota sewa; deposit tidak termasuk)`]
+        : ["Omzet (bersih penjualan)", report.sales],
       ["HPP (harga pokok penjualan)", report.hpp],
       ["Pengeluaran", report.expenses],
     ];
@@ -128,6 +130,22 @@ export async function exportPdf({ report, meta, chartNodes, includeProfit = true
     if (y > 278) { doc.addPage(); y = 18; }
   });
 
+  // ---- E19: sewa per barang (dipisah dari penjualan) ----
+  if (report.rentalProducts.length > 0) {
+    if (y > 250) { doc.addPage(); y = 18; }
+    y += 4;
+    doc.setFont("helvetica", "bold").setFontSize(10).setTextColor(PALETTE.ink);
+    doc.text("Sewa per Barang", M, y); y += 5;
+    doc.setFontSize(8.5).setTextColor(PALETTE.gray);
+    report.rentalProducts.slice(0, 12).forEach(([name, v]) => {
+      doc.setFont("helvetica", "normal");
+      doc.text(`${name}  ·  ${v.qty} unit disewa`, M, y);
+      doc.text(rupiah(v.rev), W - M, y, { align: "right" });
+      y += 4.5;
+      if (y > 278) { doc.addPage(); y = 18; }
+    });
+  }
+
   // ---- Detail per nota (tabel multi-baris) ----
   doc.addPage();
   y = 18;
@@ -156,7 +174,7 @@ export async function exportPdf({ report, meta, chartNodes, includeProfit = true
     doc.text(showNo ? l.date.slice(0, 10) : "", cols[1], y);
     doc.text(showNo ? l.cashier : "", cols[2], y);
     doc.text(showNo ? l.method : "", cols[3], y);
-    doc.text(`${l.product}${l.unitCost == null ? " *" : ""}`, cols[4], y);
+    doc.text(`${l.product}${l.kind === "rental" ? " (sewa)" : l.unitCost == null ? " *" : ""}`, cols[4], y);
     doc.text(String(l.qty), cols[5], y, { align: "right" });
     doc.text(nf.format(l.lineTotal), cols[6], y, { align: "right" });
     y += 3.8;
@@ -207,6 +225,9 @@ export function buildSheets(report: Report, meta: ExportMeta, includeProfit = tr
     ["Outlet", meta.storeLabel],
     [],
     ["Omzet", report.sales],
+    ["  Omzet Penjualan", report.salesRetail], // E19
+    ["  Omzet Sewa", report.rentalSales], // E19
+    ["  Jumlah Nota Sewa", report.rentalCount], // E19
   ];
   if (includeProfit) {
     summary.push(
@@ -257,6 +278,11 @@ export function buildSheets(report: Report, meta: ExportMeta, includeProfit = tr
     }
   });
 
+  if (report.rentalProducts.length > 0) {
+    summary.push([], ["Sewa per Barang", "Unit disewa", "Pendapatan sewa"]);
+    report.rentalProducts.forEach(([name, v]) => summary.push([name, v.qty, v.rev]));
+  }
+
   let detail: (string | number | Date | null)[][];
   if (includeProfit) {
     detail = [[
@@ -267,7 +293,7 @@ export function buildSheets(report: Report, meta: ExportMeta, includeProfit = tr
       detail.push([
         l.number, new Date(l.date.length === 10 ? l.date + "T00:00:00" : l.date), l.cashier, l.method, l.product, l.sku, l.qty,
         l.unitPrice, l.unitCost, l.lineDiscount, l.lineTotal, l.margin,
-        l.hasCost ? "" : "Tanpa modal",
+        l.kind === "rental" ? "Sewa" : l.hasCost ? "" : "Tanpa modal",
       ]);
     });
   } else {
@@ -279,7 +305,7 @@ export function buildSheets(report: Report, meta: ExportMeta, includeProfit = tr
       detail.push([
         l.number, new Date(l.date.length === 10 ? l.date + "T00:00:00" : l.date), l.cashier, l.method, l.product, l.sku, l.qty,
         l.unitPrice, l.lineDiscount, l.lineTotal,
-        "",
+        l.kind === "rental" ? "Sewa" : "",
       ]);
     });
   }
