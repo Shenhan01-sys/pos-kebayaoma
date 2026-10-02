@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { QRCodeSVG } from "qrcode.react";
 import {
   formatRupiah,
@@ -17,6 +18,7 @@ import { printHtmlViaIframe } from "@/lib/print";
 import { buildThermalReceiptHtml } from "@/lib/thermal-receipt";
 import Receipt from "@/components/Receipt";
 import { inclusiveTax } from "@/lib/tax";
+import { formatDateId, rentalDraftDeposit, toRentalSpec } from "@/lib/rental";
 import { humanizeError } from "@/lib/errors";
 import { Icon } from "@/components/icons";
 
@@ -28,7 +30,10 @@ const methodMeta: Record<PaymentMethod, { label: string; icon: "qris" | "cash" |
 };
 
 export default function CheckoutModal({ onClose }: { onClose: () => void }) {
-  const { lines, discount, setDiscount, setUnitPrice, customerName, clear } = useCart();
+  const { lines, discount, setDiscount, setUnitPrice, customerName, clear, rental } = useCart();
+  // E18: mode sewa — keranjang berisi satu baris sewa dari /sewa; bayar lewat modal yang sama (tanpa diskon/nego/PO)
+  const router = useRouter();
+  const isRental = !!rental;
   const s = useSettings();
   const auth = useAuth();
   const cashierName = auth.staff?.name ?? s.cashierName;
@@ -220,6 +225,7 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
       createdAt: now,
       qrisRef: method === "qris" ? qr?.qrisRef : undefined,
       photoProof: photo ?? undefined,
+      ...(rental ? { kind: "rental" as const, dueDate: rental.dueDate, rental: toRentalSpec(rental) } : {}),
       items: lines.map((l) => ({
         productId: l.productId,
         variantId: l.variantId,
@@ -249,6 +255,12 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
 
   async function finish() {
     setError(null);
+
+    // E18: sewa wajib online (baris rentals disisipkan di tengah penyimpanan; tidak ada antrean offline)
+    if (isRental && typeof navigator !== "undefined" && !navigator.onLine) {
+      setError("Sewa butuh koneksi internet. Sambungkan dulu lalu coba lagi.");
+      return;
+    }
 
     const lacking = lines.filter((l) => {
       const p = products.find((p) => p.id === l.productId);
@@ -447,6 +459,7 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
               onClick={() => {
                 clear();
                 onClose();
+                if (isRental) router.push("/sewa");
               }}
               className="btn-ghost flex-1"
             >
@@ -523,6 +536,23 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
             </div>
           )}
 
+          {rental && (
+            <div className="mb-3 rounded-2xl bg-violet/5 p-3 text-sm text-ink ring-1 ring-violet/15">
+              <div className="mb-1 flex items-center gap-2 font-semibold text-violet">
+                <Icon name="rental" size={16} /> Sewa {rental.days} hari
+              </div>
+              <div className="text-xs text-gray-700">
+                Mulai {formatDateId(rental.startDate)} · harus kembali <b>{formatDateId(rental.dueDate)}</b>
+                {rental.customerPhone ? <> · HP {rental.customerPhone}</> : null}
+              </div>
+              {rentalDraftDeposit(rental) > 0 && (
+                <div className="mt-1.5 rounded-xl bg-warning/10 px-2.5 py-1.5 text-xs text-warning">
+                  Deposit {formatRupiah(rentalDraftDeposit(rental))} diterima kasir <b>terpisah</b> (tidak termasuk total bayar) — dicatat di data sewa.
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Breakdown */}
           <div className="mb-3 space-y-1 rounded-2xl bg-beige/60 p-3 text-sm">
             <div className="flex justify-between text-gray-600">
@@ -547,7 +577,9 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
             </div>
           </div>
 
- <div className="mb-1 flex items-center gap-2">
+ {!isRental && (
+<>
+<div className="mb-1 flex items-center gap-2">
  <label className="text-sm font-medium text-gray-600">Diskon Tambahan</label>
  <div className="relative ml-auto w-36">
  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-600">
@@ -569,7 +601,12 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
  </p>
  )}
 
-          {/* Price negotiation */}
+          </>
+)}
+
+          {!isRental && (
+<>
+{/* Price negotiation */}
           <button
             onClick={() => setNegoOpen((v) => !v)}
             className="mb-3 flex w-full items-center gap-2 rounded-2xl bg-violet/5 px-3 py-2.5 text-sm font-semibold text-violet transition hover:bg-violet/10"
@@ -627,6 +664,9 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
               })}
             </div>
           )}
+
+          </>
+)}
 
           {/* Method segmented control */}
           <div className="seg mb-4 w-full">
@@ -692,7 +732,9 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
             </p>
           )}
 
-          {/* E6 Pre-order */}
+          {!isRental && (
+<>
+{/* E6 Pre-order */}
           <button
             onClick={() => setPo((v) => !v)}
             className={`mb-3 flex w-full items-center gap-2 rounded-2xl px-3 py-2.5 text-sm font-semibold transition ${
@@ -719,6 +761,9 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
               </p>
             </div>
           )}
+
+          </>
+)}
 
           {error && (
             <div className="mt-3 flex items-center gap-2 rounded-2xl bg-danger/10 p-3 text-sm text-danger">

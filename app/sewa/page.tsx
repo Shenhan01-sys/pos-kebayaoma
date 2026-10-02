@@ -166,7 +166,7 @@ export default function SewaPage() {
         info (belum modul kas); kembalikan ke penyewa secara manual.
       </p>
 
-      {newOpen && <RentalNewModal cashierName={staffName} onClose={() => setNewOpen(false)} />}
+      {newOpen && <RentalNewModal onClose={() => setNewOpen(false)} />}
       {returning && (
         <ReturnDialog
           r={returning}
@@ -212,7 +212,7 @@ function RentalCard({ r, now, onReturn }: { r: RentalRow; now: Date; onReturn: (
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <span className={PILL[st]}>{STATUS_LABEL[st]}{r.returnedQty > 0 && out > 0 ? " · sebagian kembali" : ""}</span>
+            <span className={PILL[st]}>{STATUS_LABEL[st]}{r.returnedQty > 0 && out > 0 && (st === "lewat" || st === "jatuh-tempo") ? " · sebagian kembali" : ""}</span>
             <b className="text-ink">{r.productName}</b>
             <span className="text-sm text-gray-600">×{r.qty}{r.returnedQty > 0 ? ` · kembali ${r.returnedQty}/${r.qty}` : ""}</span>
           </div>

@@ -73,6 +73,17 @@ export interface TransactionItem {
   vendorId?: string | null; // E2: vendor asal lot saat scan barcode VO
 }
 
+/** E18: data sewa yang menempel pada transaksi kind='rental' (disisipkan ke tabel rentals oleh saveTransaction) */
+export interface RentalSpec {
+  productId: string;
+  qty: number;
+  rentPrice: number; // per unit
+  deposit: number | null; // per unit
+  startDate: string; // 'YYYY-MM-DD'
+  dueDate: string; // 'YYYY-MM-DD'
+  customerPhone?: string | null;
+}
+
 export interface Transaction {
   id: string;
   number: string;
@@ -98,6 +109,8 @@ export interface Transaction {
   dueDate?: string;      // 'YYYY-MM-DD'
   dpAmount?: number;
   dpMethod?: PaymentMethod | null;
+  // E18: sewa dibayar lewat checkout POS
+  rental?: RentalSpec;
 }
 
 export interface Shift {

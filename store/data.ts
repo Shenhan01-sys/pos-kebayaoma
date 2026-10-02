@@ -1391,13 +1391,15 @@ export const useData = create<DataState>()(
         try {
           const { data, error } = await supabase
             .from("rentals")
-            .select("*, customers(name, phone), transactions(number, store_id), products(name)")
+            .select("*, customers(name, phone), transactions(number, store_id, status), products(name)")
             .order("due_date", { ascending: true })
             .limit(200);
           if (error) throw error;
           set({
             rentals: (data ?? [])
               .filter((r: any) => !sid || r.transactions?.store_id === sid)
+              // E18: hanya sewa yang notanya LUNAS — QRIS yang masih pending / nota dibatalkan tidak tampil sebagai sewa aktif
+              .filter((r: any) => r.transactions?.status === "paid")
               .map((r: any) => ({
               id: r.id,
               transactionId: r.transaction_id,
@@ -2024,6 +2026,12 @@ export const useData = create<DataState>()(
             ? get().customers.find((c) => c.name === tx.customerName)
             : undefined;
 
+          // E18: sewa butuh koneksi server (baris rentals disisipkan di tengah penyimpanan, tak ada jalur antrean offline)
+          if (tx.rental && (!isSupabaseReady || (typeof navigator !== "undefined" && !navigator.onLine))) {
+            set({ error: "Sewa butuh koneksi internet. Sambungkan dulu lalu coba lagi." });
+            return null;
+          }
+
           // OFFLINE PATH â€” simpan ke local state + IndexedDB queue, flush saat online
           if (typeof navigator !== "undefined" && !navigator.onLine) {
             const localId = generateLocalId();
@@ -2092,6 +2100,40 @@ export const useData = create<DataState>()(
           // Nomor nota atomik dari server â€” aman untuk multi-kasir.
           // Preorder memakai prefix khusus PO- (E6).
           const isPo = (tx as Transaction).kind === "preorder";
+          const isRental = !!tx.rental && (tx as Transaction).kind === "rental";
+
+          // E18: sewa — guard stok server + pelanggan (auto-create) SEBELUM nomor nota/header dibuat
+          let rentalCustomerId: string | null = customer?.id ?? null;
+          if (isRental && tx.rental) {
+            const { data: prod, error: prodErr } = await supabase
+              .from('products')
+              .select('stock')
+              .eq('id', tx.rental.productId)
+              .single();
+            if (prodErr) throw prodErr;
+            if (Number(prod?.stock ?? 0) < tx.rental.qty) throw new Error("insufficient_stock");
+            if (!rentalCustomerId && tx.customerName) {
+              const nm = tx.customerName.trim();
+              const { data: found } = await supabase
+                .from('customers')
+                .select('id')
+                .eq('store_id', sid)
+                .ilike('name', nm.replace(/[\\%_]/g, (m) => "\\" + m))
+                .limit(1);
+              if (found && found.length > 0) {
+                rentalCustomerId = found[0].id as string;
+              } else {
+                const { data: created, error: custErr } = await supabase
+                  .from('customers')
+                  .insert([{ store_id: sid, name: nm, phone: tx.rental.customerPhone ?? null }])
+                  .select('id')
+                  .single();
+                if (custErr) throw custErr;
+                rentalCustomerId = created.id as string;
+              }
+            }
+          }
+
           const { data: serverNumber, error: numberError } = await supabase.rpc(
             isPo ? 'next_po_number' : 'next_tx_number',
             { p_store_id: sid }
@@ -2109,7 +2151,7 @@ export const useData = create<DataState>()(
               store_id: sid,
               number: serverNumber as string,
               cashier: tx.cashier,
-              customer_id: customer?.id ?? null,
+              customer_id: rentalCustomerId,
               customer_name: tx.customerName ?? null,
               status: 'pending',
               payment_method: tx.paymentMethod,
@@ -2122,7 +2164,7 @@ export const useData = create<DataState>()(
               change: tx.change,
               qris_ref: tx.qrisRef ?? null,
               photo_proof: (tx as any).photoProof ?? null,
-              kind: isPo ? 'preorder' : 'sale',
+              kind: isRental ? 'rental' : isPo ? 'preorder' : 'sale',
               due_date: (tx as Transaction).dueDate ?? null,
               dp_amount: (tx as Transaction).dpAmount ?? null,
               dp_method: (tx as Transaction).dpMethod ?? null,
@@ -2151,6 +2193,25 @@ export const useData = create<DataState>()(
              })));
 
           if (itemsError) throw itemsError;
+
+          // E18: baris sewa disisipkan SEBELUM status final (paid → trigger stok). Gagal ⇒ hapus nota (items ikut cascade):
+          // tidak ada nota terbayar tanpa catatan sewa, dan stok belum tersentuh.
+          if (isRental && tx.rental) {
+            const { error: rentalErr } = await supabase.from('rentals').insert([{
+              transaction_id: header.id,
+              customer_id: rentalCustomerId,
+              product_id: tx.rental.productId,
+              qty: tx.rental.qty,
+              rent_price: tx.rental.rentPrice,
+              deposit: tx.rental.deposit ?? null,
+              start_date: tx.rental.startDate,
+              due_date: tx.rental.dueDate,
+            }]);
+            if (rentalErr) {
+              await supabase.from('transactions').delete().eq('id', header.id);
+              throw rentalErr;
+            }
+          }
 
           // Terapkan status final â€” trigger pending->paid jalan di sini (items sudah ada)
           let finalStatus: Transaction["status"] = "pending";
@@ -2186,12 +2247,19 @@ export const useData = create<DataState>()(
             qrisRef: header.qris_ref ?? undefined,
             photoProof: (header as any).photo_proof ?? undefined,
             createdAt: header.created_at,
+            kind: (header.kind as Transaction["kind"]) ?? undefined,
+            dueDate: header.due_date ?? undefined,
             items: tx.items,
           };
 
           set((s) => ({
             transactions: [saved, ...s.transactions.filter((x) => x.id !== saved.id)],
           }));
+          if (isRental) {
+            // segarkan daftar sewa & pelanggan (non-blocking)
+            void get().fetchRentals();
+            void get().fetchCustomers();
+          }
 
           // Efek stok online dikerjakan trigger DB pending->paid (bukan client)
 

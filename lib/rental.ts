@@ -212,3 +212,78 @@ export function resolveRentalPrice(
   if ((rentalPrice ?? 0) > 0) return { price: rentalPrice as number, isDefault: false };
   return { price: rentalPriceFromPct(sellingPrice, pct), isDefault: true };
 }
+
+// ===== E18: sewa dibayar lewat checkout POS (draft dari /sewa → keranjang /pos → CheckoutModal) =====
+
+/** draft sewa yang dibawa dari halaman /sewa ke keranjang POS */
+export interface RentalDraft {
+  productId: string;
+  variantId: string;
+  qty: number;
+  /** tarif per unit */
+  rentPrice: number;
+  /** deposit per unit (info, tidak masuk total bayar) */
+  deposit: number | null;
+  days: number;
+  startDate: string; // YYYY-MM-DD
+  dueDate: string; // YYYY-MM-DD
+  customerName: string;
+  customerPhone: string | null;
+}
+
+/** buat draft dari isian form (jatuh tempo = mulai + hari); harga dibulatkan ke rupiah utuh */
+export function buildRentalDraft(input: {
+  productId: string;
+  variantId: string;
+  qty: number;
+  rentPrice: number;
+  deposit?: number | null;
+  days: number;
+  startDate: string;
+  customerName: string;
+  customerPhone?: string | null;
+}): RentalDraft {
+  const days = Math.max(1, Math.round(input.days));
+  return {
+    productId: input.productId,
+    variantId: input.variantId,
+    qty: Math.max(1, Math.round(input.qty)),
+    rentPrice: Math.round(input.rentPrice),
+    deposit: input.deposit && input.deposit > 0 ? Math.round(input.deposit) : null,
+    days,
+    startDate: input.startDate,
+    dueDate: addDays(input.startDate, days),
+    customerName: input.customerName.trim(),
+    customerPhone: input.customerPhone?.trim() ? input.customerPhone.trim() : null,
+  };
+}
+
+/** pesan kesalahan bila draft belum layak dibayar; null = layak */
+export function validateRentalDraft(d: RentalDraft, stock: number): string | null {
+  if (!d.customerName.trim()) return "Nama penyewa wajib diisi.";
+  if (!(d.rentPrice > 0)) return "Harga sewa harus lebih dari 0.";
+  if (!(d.qty >= 1)) return "Jumlah minimal 1.";
+  if (!(d.days >= 1)) return "Lama sewa minimal 1 hari.";
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d.startDate)) return "Tanggal mulai tidak valid.";
+  if (d.qty > stock) return `Stok hanya ${stock}.`;
+  return null;
+}
+
+/** total tagihan sewa (tarif × qty) — deposit TIDAK termasuk */
+export const rentalDraftTotal = (d: Pick<RentalDraft, "rentPrice" | "qty">) => rentTotal(d.rentPrice, d.qty);
+
+/** deposit total yang harus diterima kasir terpisah (per unit × qty) */
+export const rentalDraftDeposit = (d: Pick<RentalDraft, "deposit" | "qty">) => (d.deposit ?? 0) * d.qty;
+
+/** data yang disisipkan ke tabel rentals saat transaksi sewa disimpan */
+export function toRentalSpec(d: RentalDraft) {
+  return {
+    productId: d.productId,
+    qty: d.qty,
+    rentPrice: d.rentPrice,
+    deposit: d.deposit,
+    startDate: d.startDate,
+    dueDate: d.dueDate,
+    customerPhone: d.customerPhone,
+  };
+}

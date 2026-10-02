@@ -1,21 +1,26 @@
 "use client";
 
-// components/RentalNewModal.tsx — E17: sewa baru dari halaman /sewa (menggantikan RentalModal di POS).
+// components/RentalNewModal.tsx — E17/E18: sewa baru dari halaman /sewa. "Mulai sewa" TIDAK menyimpan di sini: draft dibawa ke
+// keranjang POS (/pos) → popup konfirmasi sewa → modal pembayaran yang sama dengan penjualan (QRIS/tunai/transfer + foto bukti).
 // Langkah 1: pilih barang (semua varian bertok; yang belum punya Harga Sewa memakai DEFAULT persen dari
 // harga jual — revisi 2). Langkah 2: harga sewa (bisa diubah, chip persen), data sewa & penyewa.
 // Tarif flat per unit + deposit per unit; jatuh tempo = mulai + hari; penyewa auto-create.
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { formatRupiah, type Product, type Variant } from "@/lib/dummy";
 import { useData } from "@/store/data";
+import { useCart } from "@/store/cart";
 import {
   DEFAULT_RENTAL_PCT,
   RENTAL_PCT_OPTIONS,
   addDays,
+  buildRentalDraft,
   formatDateId,
   rentTotal,
   rentalPriceFromPct,
   resolveRentalPrice,
+  validateRentalDraft,
 } from "@/lib/rental";
 import { Icon } from "@/components/icons";
 
@@ -34,17 +39,11 @@ const todayIso = () => {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; // tanggal LOKAL (bukan UTC)
 };
 
-export default function RentalNewModal({
-  cashierName,
-  onClose,
-}: {
-  cashierName: string;
-  onClose: () => void;
-}) {
+export default function RentalNewModal({ onClose }: { onClose: () => void }) {
   const products = useData((s) => s.products);
   const customers = useData((s) => s.customers);
   const activeStoreId = useData((s) => s.activeStoreId);
-  const createRental = useData((s) => s.createRental);
+  const router = useRouter();
 
   const [pick, setPick] = useState<Pick | null>(null);
   const [q, setQ] = useState("");
@@ -54,9 +53,7 @@ export default function RentalNewModal({
   const [price, setPrice] = useState(0);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
-  const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [done, setDone] = useState<{ number: string; item: string; due: string } | null>(null);
 
   // Barang yang bisa disewa: SEMUA varian bertok. Harga sewa belum diatur → default persen dari harga jual
   // (varian tanpa harga jual & tanpa harga sewa tidak bisa dihitung → tidak ditampilkan).
@@ -87,7 +84,6 @@ export default function RentalNewModal({
 
   function reset() {
     setPick(null);
-    setDone(null);
     setName("");
     setPhone("");
     setErr(null);
@@ -98,66 +94,45 @@ export default function RentalNewModal({
   const total = rentTotal(price, qty);
   const due = addDays(startDate, days);
 
-  async function submit() {
+  function submit() {
     if (!pick) return;
     if (!activeStoreId) { setErr("Pilih toko operasional (MJL/KTB) dulu."); return; }
-    if (!(price > 0)) { setErr("Harga sewa harus lebih dari 0."); return; }
-    if (!name.trim()) { setErr("Nama penyewa wajib diisi."); return; }
-    if (qty > pick.product.stock) { setErr(`Stok hanya ${pick.product.stock}.`); return; }
-    if (busy) return; // cegah klik ganda → sewa dobel
-    setBusy(true);
-    setErr(null);
-    const txId = await createRental({
-      storeId: activeStoreId,
+    const draft = buildRentalDraft({
       productId: pick.product.id,
       variantId: pick.variant.id,
       qty,
-      rentPrice: Math.round(price),
+      rentPrice: price,
       deposit: pick.variant.depositPrice ?? null,
-      startDate,
       days,
-      customerName: name.trim(),
-      customerPhone: phone.trim() || null,
-      cashier: cashierName,
-      paymentMethod: "cash",
+      startDate,
+      customerName: name,
+      customerPhone: phone,
     });
-    setBusy(false);
-    if (!txId) {
-      setErr(useData.getState().error ?? "Gagal menyimpan sewa.");
-      return;
+    const problem = validateRentalDraft(draft, pick.product.stock);
+    if (problem) { setErr(problem); return; }
+    const cart = useCart.getState();
+    if (cart.lines.length > 0 && !cart.rental) {
+      const ok = confirm(`Keranjang POS sedang berisi ${cart.lines.length} item. Memulai sewa akan MENGOSONGKAN keranjang itu. Lanjutkan?`);
+      if (!ok) return;
     }
-    // E14: transactions tidak di-load saat boot — fetch dulu agar nomor nota terisi.
-    await useData.getState().fetchTransactions();
-    const tx = useData.getState().transactions.find((t) => t.id === txId);
-    setDone({ number: tx?.number ?? "tersimpan", item: `${pick.product.name} ×${qty}`, due });
+    setErr(null);
+    // E18: bawa draft ke keranjang POS; pembayaran di /pos lewat modal pembayaran yang sama
+    cart.startRental(pick.product, pick.variant, draft);
+    onClose();
+    router.push("/pos");
   }
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4">
       <div className="flex max-h-[92vh] w-full max-w-[460px] flex-col rounded-t-4xl bg-white p-5 shadow-soft-xl sm:rounded-3xl">
         <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-lg font-bold text-ink">{pick && !done ? "Sewa baru" : done ? "Sewa tercatat" : "Pilih barang sewa"}</h3>
+          <h3 className="text-lg font-bold text-ink">{pick ? "Sewa baru" : "Pilih barang sewa"}</h3>
           <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-full bg-black/5 text-gray-600" aria-label="Tutup">
             <Icon name="close" size={16} />
           </button>
         </div>
 
-        {done ? (
-          <div className="text-center">
-            <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-success/15 text-success">
-              <Icon name="check" size={24} />
-            </div>
-            <p className="mb-1 font-bold text-ink">Nota {done.number}</p>
-            <p className="mb-1 text-sm text-gray-700">{done.item}</p>
-            <p className="mb-4 text-sm text-gray-600">
-              Stok sudah dikurangi · harus kembali <b>{formatDateId(done.due)}</b>.
-            </p>
-            <div className="flex gap-2">
-              <button onClick={reset} className="btn-violet flex-1 py-2.5">Sewa lagi</button>
-              <button onClick={onClose} className="btn-primary flex-1 py-2.5">Selesai</button>
-            </div>
-          </div>
-        ) : !pick ? (
+        {!pick ? (
           <>
             <input
               value={q}
@@ -290,11 +265,11 @@ export default function RentalNewModal({
               {deposit > 0 && (
                 <div className="flex justify-between text-xs text-gray-600"><span>Deposit ditahan ({qty} × {formatRupiah(deposit)}) — dicatat di buku</span><span className="tnum">{formatRupiah(deposit * qty)}</span></div>
               )}
-              <div className="flex justify-between text-xs text-gray-600"><span>Pembayaran</span><span>Tunai, lunas di muka</span></div>
+              <div className="flex justify-between text-xs text-gray-600"><span>Pembayaran</span><span>di kasir (POS): QRIS / tunai / transfer</span></div>
             </div>
             {err && <p role="alert" className="mb-3 rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{err}</p>}
-            <button onClick={submit} disabled={busy} className="btn-violet w-full py-3 disabled:opacity-50">
-              {busy ? "Menyimpan…" : `Mulai sewa — ${formatRupiah(total)}`}
+            <button onClick={submit} className="btn-violet w-full py-3">
+              {`Mulai sewa — ${formatRupiah(total)}`}
             </button>
           </div>
         )}

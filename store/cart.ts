@@ -6,6 +6,7 @@ import {
   type Transaction,
 } from "@/lib/dummy";
 import { useData } from "@/store/data";
+import type { RentalDraft } from "@/lib/rental";
 
 export interface CartLine {
   key: string; // variantId
@@ -22,12 +23,16 @@ export interface CartLine {
   discount: number;
   custom?: boolean;
   vendorId?: string | null; // E2: vendor asal lot (dari scan barcode VO:)
+  rental?: boolean; // E18: baris sewa (terkunci: qty/harga/diskon tidak bisa diubah di keranjang)
 }
 
 interface CartState {
   lines: CartLine[];
   customerName: string | null;
   discount: number;
+  /** E18: draft sewa aktif (dibawa dari /sewa). Ada ⇒ keranjang hanya berisi satu baris sewa & checkout memakai mode sewa */
+  rental: RentalDraft | null;
+  startRental: (product: Product, variant: Variant, draft: RentalDraft) => void;
   addVariant: (
     product: Product,
     variant: Variant,
@@ -57,8 +62,34 @@ export const useCart = create<CartState>((set, get) => ({
   lines: [],
   customerName: null,
   discount: 0,
+  rental: null,
+  // E18: mulai sewa — keranjang DIGANTI satu baris sewa (tarif per unit, tanpa modal), penyewa jadi pelanggan nota
+  startRental: (product, variant, draft) =>
+    set({
+      lines: [
+        {
+          key: variant.id,
+          productId: product.id,
+          variantId: variant.id,
+          name: product.name,
+          sku: variant.sku,
+          seriesName: variant.name,
+          size: variant.size,
+          color: variant.color,
+          unitPrice: draft.rentPrice,
+          costPrice: 0, // sewa: tidak ada HPP per unit (cost_price null di item, sama seperti RPC create_rental)
+          quantity: draft.qty,
+          discount: 0,
+          rental: true,
+        },
+      ],
+      customerName: draft.customerName,
+      discount: 0,
+      rental: draft,
+    }),
   addVariant: (product, variant, qty = 1, opts) =>
     set((state) => {
+      if (state.rental) return state; // E18: keranjang sewa terkunci
       const cap = Math.max(0, product.stock ?? 0);
       const existing = state.lines.find((l) => l.variantId === variant.id);
       if (existing) {
@@ -96,8 +127,9 @@ export const useCart = create<CartState>((set, get) => ({
       };
       return { lines: [...state.lines, line] };
     }),
- addCustomItem: (name, price, qty = 1, series, cost) =>
+  addCustomItem: (name, price, qty = 1, series, cost) =>
  set((state) => {
+ if (state.rental) return state; // E18
  const key = "custom-" + Date.now();
  const line: CartLine = {
  key,
@@ -117,13 +149,13 @@ export const useCart = create<CartState>((set, get) => ({
       return { lines: [...state.lines, line] };
     }),
   setUnitPrice: (key, price) =>
-    set((s) => ({
+    set((s) => s.rental ? s : ({
       lines: s.lines.map((l) =>
         l.variantId === key ? { ...l, unitPrice: Math.max(0, price) } : l
       ),
     })),
   inc: (key) =>
-    set((s) => ({
+    set((s) => s.rental ? s : ({
       lines: s.lines.map((l) => {
         if (l.variantId !== key) return l;
         if (l.custom && l.productId === "custom") return { ...l, quantity: l.quantity + 1 };
@@ -133,7 +165,7 @@ export const useCart = create<CartState>((set, get) => ({
       }),
     })),
   dec: (key) =>
-    set((s) => ({
+    set((s) => s.rental ? s : ({
       lines: s.lines
         .map((l) =>
           l.variantId === key ? { ...l, quantity: l.quantity - 1 } : l
@@ -141,7 +173,7 @@ export const useCart = create<CartState>((set, get) => ({
         .filter((l) => l.quantity > 0),
     })),
   setQty: (key, qty) =>
-    set((s) => ({
+    set((s) => s.rental ? s : ({
       lines: s.lines
         .map((l) => {
           if (l.variantId !== key) return l;
@@ -155,10 +187,15 @@ export const useCart = create<CartState>((set, get) => ({
         .filter((l) => l.quantity > 0),
     })),
   remove: (key) =>
-    set((s) => ({ lines: s.lines.filter((l) => l.variantId !== key) })),
-  setCustomer: (name) => set({ customerName: name }),
+    set((s) =>
+      s.rental
+        ? { lines: [], customerName: null, discount: 0, rental: null } // E18: menghapus baris sewa = batalkan sewa
+        : { lines: s.lines.filter((l) => l.variantId !== key) }
+    ),
+  setCustomer: (name) => set((s) => (s.rental ? s : { customerName: name })),
   setDiscount: (amount) =>
  set((s) => {
+ if (s.rental) return s; // E18: sewa tanpa diskon (harga sewa diatur di form Sewa)
  // Diskon global tidak boleh membuat pendapatan di bawah total modal.
  // Baris bonus (unitPrice === 0) dikecualikan — konvensi established.
  const netBase = s.lines.reduce((a, l) => a + l.unitPrice * l.quantity - l.discount, 0);
@@ -166,7 +203,7 @@ export const useCart = create<CartState>((set, get) => ({
  const max = Math.max(0, netBase - costTotal);
  return { discount: Math.max(0, Math.min(amount, max)) };
  }),
-  clear: () => set({ lines: [], customerName: null, discount: 0 }),
+  clear: () => set({ lines: [], customerName: null, discount: 0, rental: null }),
   subtotal: () =>
     get().lines.reduce((s, l) => s + l.unitPrice * l.quantity - l.discount, 0),
   total: () => Math.max(0, get().subtotal() - get().discount),

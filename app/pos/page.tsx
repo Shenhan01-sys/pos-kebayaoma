@@ -1,15 +1,18 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { formatRupiah, type Product, type Variant } from "@/lib/dummy";
 import { useCart } from "@/store/cart";
 import { useData } from "@/store/data";
 import CheckoutModal from "@/components/CheckoutModal";
+import RentalConfirmModal from "@/components/RentalConfirmModal";
 import BarcodeScanner from "@/components/BarcodeScanner";
 import { useAuth } from "@/store/auth";
 import { useSettings } from "@/store/settings";
 import { parseVoBarcode, resolveVoScan } from "@/lib/barcode";
 import { Icon } from "@/components/icons";
+import { formatDateId } from "@/lib/rental";
 
 const thumbStyle: Record<string, { grad: string; emoji: string }> = {
   "cat-kebaya": { grad: "bg-apricot", emoji: "👗" },
@@ -23,8 +26,14 @@ export default function PosPage() {
   const [picker, setPicker] = useState<Product | null>(null);
   const [checkout, setCheckout] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
-  const { lines, addVariant, addCustomItem, inc, dec, remove, total, customerName, setCustomer } =
+  const { lines, addVariant, addCustomItem, inc, dec, remove, total, customerName, setCustomer, rental, clear } =
     useCart();
+  // E18: sewa datang dari /sewa (draft di keranjang) → popup konfirmasi sewa → modal pembayaran yang sama
+  const router = useRouter();
+  const [rentalConfirmOpen, setRentalConfirmOpen] = useState(false);
+  useEffect(() => {
+    if (rental) setRentalConfirmOpen(true);
+  }, [rental]);
   const { products, categories, customers, addProduct, movements, vendors } = useData();
   const stores = useData((s) => s.stores);
   const activeStoreId = useData((s) => s.activeStoreId);
@@ -60,10 +69,10 @@ export default function PosPage() {
 
   // Re-focus hidden input when modals close
   useEffect(() => {
-    if (!picker && !checkout && !scannerOpen && !customOpen) {
+    if (!picker && !checkout && !scannerOpen && !customOpen && !rentalConfirmOpen) {
       focusScan();
     }
-  }, [picker, checkout, scannerOpen, customOpen]);
+  }, [picker, checkout, scannerOpen, customOpen, rentalConfirmOpen]);
 
   useEffect(() => {
     return () => {
@@ -191,6 +200,20 @@ export default function PosPage() {
             </div>
           </div>
         )}
+        {rental && (
+          <div className="mb-3 flex flex-wrap items-center gap-2 rounded-2xl bg-violet/10 px-3 py-2.5 text-sm font-medium text-violet" role="status">
+            <Icon name="rental" size={16} />
+            <span>
+              Mode sewa: {rental.customerName} · kembali {formatDateId(rental.dueDate)}. Selesaikan pembayaran atau batalkan sewa dulu untuk menjual item lain.
+            </span>
+            <button
+              onClick={() => { clear(); router.push("/sewa"); }}
+              className="btn-ghost ml-auto px-3 py-1.5 text-xs"
+            >
+              Batalkan sewa
+            </button>
+          </div>
+        )}
         {scanMsg && (
           <div
             className={`mb-3 flex items-center gap-2 rounded-2xl px-3 py-2.5 text-sm font-medium ${
@@ -228,9 +251,13 @@ export default function PosPage() {
           <select
             value={customerName ?? ""}
             onChange={(e) => setCustomer(e.target.value || null)}
-            className="input w-auto"
+            disabled={!!rental}
+            className="input w-auto disabled:opacity-70"
           >
             <option value="">Pelanggan: Umum</option>
+            {rental && !customers.some((c) => c.name === rental.customerName) && (
+              <option value={rental.customerName}>{rental.customerName}</option>
+            )}
             {customers.map((c) => (
               <option key={c.id} value={c.name}>
                 {c.name}
@@ -305,7 +332,7 @@ export default function PosPage() {
             // Jangan rebut fokus saat modal terbuka (picker/checkout/scanner/custom),
             // dan jangan rebut dari select/input/textarea — native dropdown akan
             // collapse sepersekian detik kalau fokus dicuri balik (bug dropdown series).
-            if (picker || checkout || scannerOpen || customOpen) return;
+            if (picker || checkout || scannerOpen || customOpen || rentalConfirmOpen) return;
             const el = document.activeElement as HTMLElement | null;
             if (el && (el.tagName === "SELECT" || el.tagName === "TEXTAREA" ||
               (el.tagName === "INPUT" && el !== scanInputRef.current))) return;
@@ -338,11 +365,14 @@ export default function PosPage() {
                   {l.custom && (
                     <span className="ml-1.5 rounded-full bg-violet/15 px-1.5 py-0.5 text-[10px] font-bold text-violet">CUSTOM</span>
                   )}
+                  {l.rental && (
+                    <span className="ml-1.5 rounded-full bg-violet/15 px-1.5 py-0.5 text-[10px] font-bold text-violet">SEWA</span>
+                  )}
                 </div>
                 <button
-                  onClick={() => remove(l.key)}
+                  onClick={() => (l.rental ? (clear(), router.push("/sewa")) : remove(l.key))}
                   className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-black/5 text-gray-600 transition hover:bg-danger/15 hover:text-danger"
-                  aria-label="Hapus"
+                  aria-label={l.rental ? "Batalkan sewa" : "Hapus"}
                 >
                   <Icon name="close" size={14} />
                 </button>
@@ -351,6 +381,9 @@ export default function PosPage() {
                 {l.seriesName} · {l.size} / {l.color}
               </div>
               <div className="mt-1.5 flex items-center justify-between">
+                {l.rental ? (
+                  <span className="text-xs font-semibold text-gray-600">{l.quantity} unit × {formatRupiah(l.unitPrice)}</span>
+                ) : (
                 <div className="flex items-center gap-1.5">
                   <button
                     onClick={() => dec(l.key)}
@@ -368,6 +401,7 @@ export default function PosPage() {
                     <Icon name="plus" size={14} />
                   </button>
                 </div>
+                )}
                 <span className="text-sm font-bold tnum text-olive">
                   {formatRupiah(l.unitPrice * l.quantity)}
                 </span>
@@ -376,12 +410,14 @@ export default function PosPage() {
           ))}
         </div>
 
+        {!rental && (
         <button
           onClick={() => { setCustomOpen(true); setCustomName(""); setCustomPrice(""); }}
           className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-2xl border-2 border-dashed border-black/15 py-2.5 text-sm font-semibold text-olive transition hover:border-violet hover:text-violet"
         >
           <Icon name="plus" size={16} /> Tambah Item Lain
         </button>
+        )}
 
         <div className="mt-3 border-t border-black/5 pt-3">
           <div className="flex items-baseline justify-between">
@@ -446,6 +482,15 @@ export default function PosPage() {
         </div>
       )}
 
+      {rental && rentalConfirmOpen && !checkout && (
+        <RentalConfirmModal
+          draft={rental}
+          itemName={lines[0]?.name ?? "Barang sewa"}
+          variantLabel={lines[0] ? [lines[0].seriesName, lines[0].size, lines[0].color].filter(Boolean).join(" · ") : ""}
+          onContinue={() => { setRentalConfirmOpen(false); setCheckout(true); }}
+          onCancel={() => { setRentalConfirmOpen(false); clear(); router.push("/sewa"); }}
+        />
+      )}
       {checkout && <CheckoutModal onClose={() => setCheckout(false)} />}
       {scannerOpen && <BarcodeScanner onScan={handleScan} onClose={() => setScannerOpen(false)} />}
 

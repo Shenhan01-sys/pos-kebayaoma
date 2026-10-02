@@ -596,7 +596,7 @@ ${labelHTML}
               <button
                 onClick={handleDirectPrint}
                 disabled={totalLabels === 0}
-                title="Print langsung ke printer thermal (Bluetooth/USB/WiFi) via browser print dialog"
+                title={labelSize === "xp420b" ? "Cetak langsung ke printer label XP-D4601B lewat print-bridge (jalankan npm run print-bridge di PC ini)" : "Print langsung ke printer thermal (Bluetooth/USB/WiFi) via browser print dialog"}
                 className="px-6 py-3 bg-white border-2 border-[#775533] text-[#775533] rounded-xl hover:bg-[#775533]/5 font-bold transition flex items-center gap-2 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

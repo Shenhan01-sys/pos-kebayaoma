@@ -237,3 +237,81 @@ describe("E17 default harga sewa", () => {
     expect(resolveRentalPrice(0, 50000)).toEqual({ price: 50000, isDefault: false });
   });
 });
+
+// ===== E18: draft sewa → keranjang POS → checkout =====
+import { buildRentalDraft, rentalDraftDeposit, rentalDraftTotal, toRentalSpec, validateRentalDraft } from "./rental";
+
+const base = {
+  productId: "p1",
+  variantId: "v1",
+  qty: 2,
+  rentPrice: 75000,
+  deposit: 20000,
+  days: 5,
+  startDate: "2026-10-02",
+  customerName: "  Sari  ",
+  customerPhone: " 0857-1111-2222 ",
+};
+
+describe("E18 draft sewa", () => {
+  it("jatuh tempo = mulai + hari; nama & HP dirapikan; deposit per unit dipertahankan", () => {
+    const d = buildRentalDraft(base);
+    expect(d.dueDate).toBe("2026-10-07");
+    expect(d.customerName).toBe("Sari");
+    expect(d.customerPhone).toBe("0857-1111-2222");
+    expect(d.deposit).toBe(20000);
+    expect(d.days).toBe(5);
+  });
+  it("HP kosong/spasi → null; deposit 0/null → null", () => {
+    expect(buildRentalDraft({ ...base, customerPhone: "   " }).customerPhone).toBeNull();
+    expect(buildRentalDraft({ ...base, deposit: 0 }).deposit).toBeNull();
+    expect(buildRentalDraft({ ...base, deposit: null }).deposit).toBeNull();
+  });
+  it("qty/hari minimal 1, desimal dibulatkan, harga ke rupiah utuh", () => {
+    const d = buildRentalDraft({ ...base, qty: 0, days: 0.2, rentPrice: 75000.6 });
+    expect(d.qty).toBe(1);
+    expect(d.days).toBe(1);
+    expect(d.rentPrice).toBe(75001);
+    expect(d.dueDate).toBe("2026-10-03");
+  });
+  it("tagihan = tarif × qty; deposit total = deposit/unit × qty (terpisah dari tagihan)", () => {
+    const d = buildRentalDraft(base);
+    expect(rentalDraftTotal(d)).toBe(150000);
+    expect(rentalDraftDeposit(d)).toBe(40000);
+    expect(rentalDraftDeposit(buildRentalDraft({ ...base, deposit: null }))).toBe(0);
+  });
+  it("toRentalSpec: hanya kolom yang disisipkan ke rentals", () => {
+    expect(toRentalSpec(buildRentalDraft(base))).toEqual({
+      productId: "p1",
+      qty: 2,
+      rentPrice: 75000,
+      deposit: 20000,
+      startDate: "2026-10-02",
+      dueDate: "2026-10-07",
+      customerPhone: "0857-1111-2222",
+    });
+  });
+});
+
+describe("E18 validateRentalDraft", () => {
+  const ok = buildRentalDraft(base);
+  it("draft layak → null", () => {
+    expect(validateRentalDraft(ok, 10)).toBeNull();
+    expect(validateRentalDraft(ok, 2)).toBeNull(); // stok pas
+  });
+  it("nama kosong", () => {
+    expect(validateRentalDraft({ ...ok, customerName: "  " }, 10)).toMatch(/penyewa/i);
+  });
+  it("harga 0 / negatif", () => {
+    expect(validateRentalDraft({ ...ok, rentPrice: 0 }, 10)).toMatch(/harga sewa/i);
+    expect(validateRentalDraft({ ...ok, rentPrice: -5 }, 10)).toMatch(/harga sewa/i);
+  });
+  it("stok kurang → menyebut stok", () => {
+    expect(validateRentalDraft({ ...ok, qty: 3 }, 2)).toBe("Stok hanya 2.");
+  });
+  it("hari < 1, qty < 1, tanggal mulai rusak", () => {
+    expect(validateRentalDraft({ ...ok, days: 0 }, 10)).toMatch(/lama sewa/i);
+    expect(validateRentalDraft({ ...ok, qty: 0 }, 10)).toMatch(/jumlah/i);
+    expect(validateRentalDraft({ ...ok, startDate: "02-10-2026" }, 10)).toMatch(/tanggal/i);
+  });
+});
