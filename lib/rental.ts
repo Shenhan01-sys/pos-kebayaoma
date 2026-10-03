@@ -50,6 +50,11 @@ export interface RentalItem {
   returnedQty: number;
   rentPrice: number; // tarif flat PER UNIT
   deposit?: number | null; // deposit PER UNIT (nilai varian apa adanya; total = deposit × qty)
+  // E20: pencatatan deposit (kolom baru rentals; undefined = data lama / belum ada migrasi → dianggap 0)
+  depositRefunded?: number | null; // uang deposit yang sudah dikembalikan ke penyewa
+  depositDeducted?: number | null; // potongan deposit (kerusakan/telat) — dicatat, bukan otomatis pendapatan
+  depositNote?: string | null;
+  depositSettledAt?: string | null;
   startDate: string;
   dueDate: string;
 }
@@ -112,17 +117,17 @@ export interface RentalSummary {
   overdue: number;
   dueToday: number;
   unitsOut: number; // unit yang sedang di luar
-  depositHeld: number; // deposit (per unit × unit yang belum kembali)
+  depositHeld: number; // E20: deposit yang MASIH DITAHAN di semua sewa (diterima − dikembalikan − dipotong), termasuk sewa yang barangnya sudah kembali
 }
 
 export function rentalSummary(list: RentalItem[], today: Date): RentalSummary {
   const s: RentalSummary = { open: 0, overdue: 0, dueToday: 0, unitsOut: 0, depositHeld: 0 };
   for (const r of list) {
+    s.depositHeld += depositHeld(r); // E20: ditahan sampai dikembalikan/dipotong, bukan sampai barang kembali
     if (!isOpenRental(r)) continue;
     const out = outstandingQty(r);
     s.open++;
     s.unitsOut += out;
-    s.depositHeld += (r.deposit ?? 0) * out;
     const dl = daysLeft(r.dueDate, today);
     if (dl < 0) s.overdue++;
     else if (dl === 0) s.dueToday++;
@@ -130,8 +135,69 @@ export function rentalSummary(list: RentalItem[], today: Date): RentalSummary {
   return s;
 }
 
-/** deposit total sewa ini (deposit per unit × qty) */
+/** deposit total sewa ini = deposit diterima kasir (deposit per unit × qty; tunai, terpisah dari total bayar & omzet) */
 export const depositTotal = (r: Pick<RentalItem, "deposit" | "qty">) => (r.deposit ?? 0) * r.qty;
+
+type DepositFields = Pick<RentalItem, "deposit" | "qty" | "depositRefunded" | "depositDeducted">;
+
+/** E20: deposit yang masih ditahan = diterima − dikembalikan − dipotong (tidak pernah negatif) */
+export const depositHeld = (r: DepositFields) =>
+  Math.max(0, depositTotal(r) - (r.depositRefunded ?? 0) - (r.depositDeducted ?? 0));
+
+export type DepositStatus = "none" | "held" | "partial" | "settled";
+
+/** none: sewa tanpa deposit · held: belum disentuh · partial: sebagian diselesaikan · settled: habis (dikembalikan/dipotong) */
+export function depositStatus(r: DepositFields): DepositStatus {
+  const total = depositTotal(r);
+  if (total <= 0) return "none";
+  const left = depositHeld(r);
+  if (left <= 0) return "settled";
+  return left < total ? "partial" : "held";
+}
+
+/** validasi form penyelesaian deposit (cermin aturan RPC settle_rental_deposit); null = layak */
+export function validateDepositSettle(r: DepositFields, refund: number, deduct: number): string | null {
+  if (!Number.isFinite(refund) || !Number.isFinite(deduct)) return "Jumlah harus berupa angka.";
+  if (refund < 0 || deduct < 0) return "Jumlah tidak boleh negatif.";
+  if (refund + deduct <= 0) return "Isi jumlah yang dikembalikan atau dipotong.";
+  const held = depositHeld(r);
+  if (refund + deduct > held) return `Melebihi deposit yang ditahan (${formatRupiahId(held)}).`;
+  return null;
+}
+
+const formatRupiahId = (n: number) => "Rp " + Math.round(n).toLocaleString("id-ID");
+
+export interface DepositSummary {
+  count: number; // jumlah sewa ber-deposit dalam cakupan
+  received: number; // deposit diterima (deposit × qty)
+  refunded: number;
+  deducted: number;
+  held: number; // masih ditahan saat ini
+}
+
+/**
+ * E20: ringkasan deposit sewa untuk laporan. Cakupan = sewa yang MULAI dalam [from, to] (tanggal 'YYYY-MM-DD', kosong = tanpa batas)
+ * dan (opsional) toko tertentu. Deposit tidak pernah ikut omzet; nilai dikembalikan/dipotong/ditahan adalah posisi SAAT INI.
+ */
+export function depositSummary(
+  list: (RentalItem & { storeId?: string | null })[],
+  opts: { from?: string; to?: string; storeId?: string | null } = {}
+): DepositSummary {
+  const s: DepositSummary = { count: 0, received: 0, refunded: 0, deducted: 0, held: 0 };
+  for (const r of list) {
+    if (opts.storeId && r.storeId !== opts.storeId) continue;
+    if (opts.from && r.startDate < opts.from) continue;
+    if (opts.to && r.startDate > opts.to) continue;
+    const total = depositTotal(r);
+    if (total <= 0) continue;
+    s.count++;
+    s.received += total;
+    s.refunded += r.depositRefunded ?? 0;
+    s.deducted += r.depositDeducted ?? 0;
+    s.held += depositHeld(r);
+  }
+  return s;
+}
 
 /** nomor HP Indonesia → format internasional tanpa "+" (08xx / +62 / 62 / 8xx), null bila tidak masuk akal */
 export function normalizePhoneId(raw: string | null | undefined): string | null {

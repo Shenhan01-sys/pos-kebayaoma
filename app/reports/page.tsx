@@ -9,6 +9,7 @@ import { canSeeProfit } from "@/lib/roles";
 import { humanizeError } from "@/lib/errors";
 import { Icon, type IconName } from "@/components/icons";
 import { computeReport } from "@/lib/report-data";
+import { depositSummary } from "@/lib/rental";
 import { exportPdf, exportXlsx, type ExportMeta } from "@/lib/report-export";
 import dynamic from "next/dynamic";
 import type { EChartsCoreOption } from "echarts/core";
@@ -50,7 +51,14 @@ export default function ReportsPage() {
   const expenses = useData((s) => s.expenses);
   useEffect(() => {
     useData.getState().fetchExpenses();
+    useData.getState().fetchRentals(); // E20: deposit sewa untuk kartu "Deposit sewa"
   }, []);
+  // E20: deposit sewa (di luar omzet) — sewa yang MULAI dalam periode; posisi dikembalikan/dipotong/ditahan = saat ini
+  const rentalRows = useData((s) => s.rentals);
+  const deposit = useMemo(
+    () => depositSummary(rentalRows, { from, to, storeId: storeSel === "semua" ? null : storeSel }),
+    [rentalRows, from, to, storeSel]
+  );
   const inRangeTxs = useMemo(
     () => getAllTransactions(dummyTx).filter((t) => {
       const d = new Date(t.createdAt);
@@ -173,6 +181,7 @@ export default function ReportsPage() {
     return {
       storeLabel: storeSel === "semua" ? "SEMUA" : stores.find((t) => t.id === storeSel)?.prefix ?? "MJL",
       from, to, storeName: "Kebaya Oma",
+      deposit: deposit.count > 0 ? deposit : null, // E20
     };
   }
   async function doExportPdf() {
@@ -266,6 +275,23 @@ export default function ReportsPage() {
             Omzet = Penjualan <b className="tnum text-ink">{formatRupiah(salesRetail)}</b> + Sewa{" "}
             <b className="tnum text-ink">{formatRupiah(rentalSales)}</b> ({rentalCount} nota sewa). Deposit sewa tidak termasuk omzet.
           </p>
+        )}
+
+        {/* E20: deposit sewa — uang titipan penyewa, TIDAK termasuk omzet/laba */}
+        {deposit.count > 0 && (
+          <div className="card card-pad mt-3 text-sm">
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-1">
+              <span className="font-semibold text-ink">Deposit sewa ({deposit.count} sewa)</span>
+              <span><span className="text-gray-600">Diterima</span> <b className="tnum text-ink">{formatRupiah(deposit.received)}</b></span>
+              <span>− <span className="text-gray-600">Dikembalikan</span> <b className="tnum text-ink">{formatRupiah(deposit.refunded)}</b></span>
+              <span>− <span className="text-gray-600">Dipotong</span> <b className="tnum text-ink">{formatRupiah(deposit.deducted)}</b></span>
+              <span>= <span className="text-gray-600">Masih ditahan</span> <b className="tnum text-warning">{formatRupiah(deposit.held)}</b></span>
+            </div>
+            <p className="mt-1 text-xs text-gray-600">
+              Sewa yang mulai dalam periode ini; angka dikembalikan/dipotong/ditahan = posisi saat ini. Deposit bukan omzet; potongan
+              hanya dicatat (bukan otomatis pendapatan).
+            </p>
+          </div>
         )}
 
         {/* P&L ringkas — superadmin saja (E12); sama persis dgn PDF/xlsx (sumber: computeReport) */}

@@ -145,10 +145,16 @@ export interface RentalRow {
   productName: string;
   customerName?: string | null;
   customerPhone?: string | null;
+  storeId?: string | null; // E20: untuk laporan deposit per toko
   qty: number;
   returnedQty: number;
   rentPrice: number;
   deposit?: number | null;
+  // E20: pencatatan deposit (kolom rentals hasil migrasi 20261003)
+  depositRefunded?: number | null;
+  depositDeducted?: number | null;
+  depositNote?: string | null;
+  depositSettledAt?: string | null;
   startDate: string;
   dueDate: string;
 }
@@ -245,6 +251,8 @@ interface DataState {
     customerName: string; customerPhone?: string | null; cashier: string; paymentMethod: string;
   }) => Promise<string | null>;
   returnRental: (id: string, qty: number, staff: string) => Promise<boolean>;
+  // E20: kembalikan / potong deposit (RPC atomik settle_rental_deposit)
+  settleRentalDeposit: (id: string, refund: number, deduct: number, note: string, staff: string) => Promise<boolean>;
 
   // expenses (E8 — petty cash, admin + superadmin)
   expenses: Expense[];
@@ -1410,10 +1418,15 @@ export const useData = create<DataState>()(
               productName: r.products?.name ?? "—",
               customerName: r.customers?.name ?? null,
               customerPhone: r.customers?.phone ?? null,
+              storeId: r.transactions?.store_id ?? null,
               qty: Number(r.qty),
               returnedQty: Number(r.returned_qty ?? 0),
               rentPrice: Number(r.rent_price),
               deposit: r.deposit != null ? Number(r.deposit) : null,
+              depositRefunded: Number(r.deposit_refunded ?? 0),
+              depositDeducted: Number(r.deposit_deducted ?? 0),
+              depositNote: r.deposit_note ?? null,
+              depositSettledAt: r.deposit_settled_at ?? null,
               startDate: r.start_date,
               dueDate: r.due_date,
             })),
@@ -1455,6 +1468,22 @@ export const useData = create<DataState>()(
           const { error } = await supabase.rpc("return_rental", { p_rental: id, p_qty: qty, p_staff: staff });
           if (error) throw error;
           await Promise.all([get().fetchProducts(), get().fetchRentals(), get().fetchMovements()]);
+          return true;
+        } catch (error: any) {
+          set({ error: humanizeError(error) });
+          return false;
+        }
+      },
+
+      // E20: kembalikan / potong deposit sewa — atomik di DB (cek toko + batas jumlah di RPC)
+      settleRentalDeposit: async (id, refund, deduct, note, staff) => {
+        if (!isSupabaseReady) { set({ error: "Deposit sewa butuh koneksi server." }); return false; }
+        try {
+          const { error } = await supabase.rpc("settle_rental_deposit", {
+            p_rental: id, p_refund: refund, p_deduct: deduct, p_note: note, p_staff: staff,
+          });
+          if (error) throw error;
+          await get().fetchRentals();
           return true;
         } catch (error: any) {
           set({ error: humanizeError(error) });

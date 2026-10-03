@@ -3,6 +3,7 @@
 // dynamic import SSR-off (pola FE1) agar bundle halaman tetap ramping.
 
 import type { Report } from "./report-data";
+import type { DepositSummary } from "./rental";
 
 export const PALETTE = {
   violet: "#290024",
@@ -20,6 +21,8 @@ export interface ExportMeta {
   from: string;
   to: string;
   storeName?: string;
+  /** E20: deposit sewa (di luar omzet) untuk periode/toko ini; null/kosong = tak ada sewa ber-deposit */
+  deposit?: DepositSummary | null;
 }
 
 const nf = new Intl.NumberFormat("id-ID");
@@ -94,6 +97,12 @@ export async function exportPdf({ report, meta, chartNodes, includeProfit = true
   doc.setFont("helvetica", "normal").setFontSize(9).setTextColor(PALETTE.gray);
   doc.text(`Jumlah nota: ${report.count} · Rata-rata/nota: ${rupiah(report.avg)} · Diskon: ${rupiah(report.discount)} · PPN tersirat: ${rupiah(report.tax)}`, M, y);
   y += 8;
+  if (meta.deposit && meta.deposit.count > 0) {
+    // E20: deposit sewa — titipan penyewa, bukan omzet
+    const d = meta.deposit;
+    doc.text(`Deposit sewa (${d.count} sewa, di luar omzet): diterima ${rupiah(d.received)} · dikembalikan ${rupiah(d.refunded)} · dipotong ${rupiah(d.deducted)} · masih ditahan ${rupiah(d.held)}`, M, y);
+    y += 8;
+  }
 
   // ---- Charts (PNG hasil html2canvas) ----
   if (chartNodes?.method) {
@@ -243,6 +252,17 @@ export function buildSheets(report: Report, meta: ExportMeta, includeProfit = tr
     ["PPN tersirat", report.tax],
   );
   if (includeProfit) summary.push(["Baris tanpa modal (qty)", report.unknownQty]);
+  if (meta.deposit && meta.deposit.count > 0) {
+    // E20: deposit sewa — di luar omzet; posisi dikembalikan/dipotong/ditahan = saat ini
+    summary.push(
+      [],
+      ["Deposit sewa — jumlah sewa", meta.deposit.count],
+      ["Deposit Diterima", meta.deposit.received],
+      ["Deposit Dikembalikan", meta.deposit.refunded],
+      ["Deposit Dipotong", meta.deposit.deducted],
+      ["Deposit Ditahan", meta.deposit.held],
+    );
+  }
   summary.push(
     [],
     ["Metode", "Jumlah"],

@@ -33,7 +33,11 @@ describe("rental (E7)", () => {
 
 // ===== E17: halaman /sewa =====
 import {
+  depositHeld,
+  depositStatus,
+  depositSummary,
   depositTotal,
+  validateDepositSettle,
   filterRentals,
   isOpenRental,
   matchesQuery,
@@ -130,8 +134,9 @@ describe("E17 ringkasan", () => {
     expect(s.overdue).toBe(2); // c e
     expect(s.dueToday).toBe(1); // b
     expect(s.unitsOut).toBe(1 + 1 + 2 + 1); // a1 b1 c(3-1)=2 e1
-    // deposit per unit × sisa unit: a 50k + b 50k + c 20k×2 + e 0
-    expect(s.depositHeld).toBe(50000 + 50000 + 40000 + 0);
+    // E20: ditahan = diterima − dikembalikan − dipotong, SEMUA sewa (termasuk yang barangnya sudah kembali):
+    // a 50k + b 50k + c 20k×3 + d 50k×2 (selesai tapi deposit belum diselesaikan) + e 0
+    expect(s.depositHeld).toBe(50000 + 50000 + 60000 + 100000 + 0);
   });
   it("daftar kosong", () => {
     expect(rentalSummary([], NOW)).toEqual({ open: 0, overdue: 0, dueToday: 0, unitsOut: 0, depositHeld: 0 });
@@ -336,5 +341,53 @@ describe("E19 receiptRentalInfo", () => {
     expect(receiptRentalInfo({ kind: "preorder", dueDate: "2026-10-07" })).toBeNull();
     expect(receiptRentalInfo({})).toBeNull();
     expect(receiptRentalInfo({ kind: null })).toBeNull();
+  });
+});
+
+// ===== E20: deposit tercatat =====
+describe("E20 deposit sewa", () => {
+  const dep = (o: Partial<RentalItem> = {}) => mk({ id: "x", qty: 2, deposit: 50000, ...o }); // total diterima 100.000
+
+  it("depositHeld = diterima − dikembalikan − dipotong; field kosong (data lama) dianggap 0; tak pernah negatif", () => {
+    expect(depositHeld(dep())).toBe(100000);
+    expect(depositHeld(dep({ depositRefunded: 60000 }))).toBe(40000);
+    expect(depositHeld(dep({ depositRefunded: 60000, depositDeducted: 40000 }))).toBe(0);
+    expect(depositHeld(dep({ depositRefunded: 90000, depositDeducted: 90000 }))).toBe(0); // data korup → clamp
+    expect(depositHeld(dep({ deposit: null }))).toBe(0);
+  });
+
+  it("depositStatus: none / held / partial / settled", () => {
+    expect(depositStatus(dep({ deposit: null }))).toBe("none");
+    expect(depositStatus(dep({ deposit: 0 }))).toBe("none");
+    expect(depositStatus(dep())).toBe("held");
+    expect(depositStatus(dep({ depositRefunded: 30000 }))).toBe("partial");
+    expect(depositStatus(dep({ depositRefunded: 70000, depositDeducted: 30000 }))).toBe("settled");
+  });
+
+  it("validateDepositSettle: layak → null; kosong/negatif/NaN/melebihi ditolak", () => {
+    const r = dep({ depositRefunded: 20000 }); // sisa 80.000
+    expect(validateDepositSettle(r, 80000, 0)).toBeNull();
+    expect(validateDepositSettle(r, 50000, 30000)).toBeNull();
+    expect(validateDepositSettle(r, 0, 0)).toMatch(/Isi jumlah/);
+    expect(validateDepositSettle(r, -1, 0)).toMatch(/negatif/);
+    expect(validateDepositSettle(r, NaN, 0)).toMatch(/angka/);
+    expect(validateDepositSettle(r, 50000, 30001)).toMatch(/Melebihi deposit yang ditahan/);
+  });
+
+  it("depositSummary: cakupan periode (mulai sewa) + toko; deposit nol dilewati", () => {
+    const list = [
+      dep({ id: "1", startDate: "2026-10-02", storeId: "KTB", depositRefunded: 100000 } as any), // settled
+      dep({ id: "2", startDate: "2026-10-05", storeId: "KTB", depositRefunded: 40000, depositDeducted: 10000 } as any), // sisa 50.000
+      dep({ id: "3", startDate: "2026-10-09", storeId: "MJL" } as any), // ditahan penuh, toko lain
+      dep({ id: "4", startDate: "2026-10-03", storeId: "KTB", deposit: null } as any), // tanpa deposit
+      dep({ id: "5", startDate: "2026-09-20", storeId: "KTB" } as any), // luar periode
+    ];
+    const all = depositSummary(list as any, { from: "2026-10-01", to: "2026-10-31" });
+    expect(all).toEqual({ count: 3, received: 300000, refunded: 140000, deducted: 10000, held: 150000 });
+    const ktb = depositSummary(list as any, { from: "2026-10-01", to: "2026-10-31", storeId: "KTB" });
+    expect(ktb).toEqual({ count: 2, received: 200000, refunded: 140000, deducted: 10000, held: 50000 });
+    // tanpa batas tanggal: ikut sewa 5
+    expect(depositSummary(list as any).count).toBe(4);
+    expect(depositSummary([])).toEqual({ count: 0, received: 0, refunded: 0, deducted: 0, held: 0 });
   });
 });

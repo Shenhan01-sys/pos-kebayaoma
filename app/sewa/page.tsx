@@ -4,7 +4,8 @@
 // "Barang diterima" (boleh sebagian), dan pengingat WhatsApp manual. Menggantikan tombol Sewa di POS
 // dan RentalPanel di /transactions (keputusan user 2026-10-02).
 // Aturan bisnis tetap (E7): tarif flat per unit, stok baru kembali saat DITERIMA (bukan otomatis),
-// status dihitung dari jatuh tempo vs jumlah kembali; deposit tercatat di buku (belum modul kas).
+// status dihitung dari jatuh tempo vs jumlah kembali; deposit (E20) ditahan sampai dicatat dikembalikan/dipotong
+// lewat RPC settle_rental_deposit (di luar omzet).
 
 import { useEffect, useMemo, useState } from "react";
 import { useData, type RentalRow } from "@/store/data";
@@ -13,7 +14,10 @@ import { useSettings } from "@/store/settings";
 import { formatRupiah } from "@/lib/dummy";
 import {
   daysLeft,
+  depositHeld,
+  depositStatus,
   depositTotal,
+  validateDepositSettle,
   filterRentals,
   formatDateId,
   matchesTab,
@@ -54,6 +58,7 @@ export default function SewaPage() {
   const rentals = useData((s) => s.rentals);
   const activeStoreId = useData((s) => s.activeStoreId);
   const returnRental = useData((s) => s.returnRental);
+  const settleRentalDeposit = useData((s) => s.settleRentalDeposit);
   const auth = useAuth();
   const cashierName = useSettings((s) => s.cashierName);
   const staffName = auth.staff?.name ?? cashierName ?? "";
@@ -62,6 +67,7 @@ export default function SewaPage() {
   const [query, setQuery] = useState("");
   const [newOpen, setNewOpen] = useState(false);
   const [returning, setReturning] = useState<RentalRow | null>(null);
+  const [depositId, setDepositId] = useState<string | null>(null); // E20: dialog deposit (id sewa; data segar dibaca dari store)
   const [loading, setLoading] = useState(true);
   const [flash, setFlash] = useState<string | null>(null);
   const [now, setNow] = useState(() => new Date());
@@ -119,7 +125,7 @@ export default function SewaPage() {
         <Stat label="Sedang disewa" value={String(summary.open)} sub={`${summary.unitsOut} unit di luar`} />
         <Stat label="Jatuh tempo hari ini" value={String(summary.dueToday)} tone={summary.dueToday ? "warning" : undefined} />
         <Stat label="Terlambat" value={String(summary.overdue)} tone={summary.overdue ? "danger" : undefined} />
-        <Stat label="Deposit ditahan" value={formatRupiah(summary.depositHeld)} sub="di buku, bukan kas" small />
+        <Stat label="Deposit ditahan" value={formatRupiah(summary.depositHeld)} sub="belum dikembalikan / dipotong" small />
       </div>
 
       <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -156,14 +162,14 @@ export default function SewaPage() {
       ) : (
         <div className="space-y-2.5">
           {list.map((r) => (
-            <RentalCard key={r.id} r={r} now={now} onReturn={() => setReturning(r)} />
+            <RentalCard key={r.id} r={r} now={now} onReturn={() => setReturning(r)} onDeposit={() => setDepositId(r.id)} />
           ))}
         </div>
       )}
 
       <p className="mt-3 text-[11px] text-gray-500">
-        Stok masuk kembali saat &quot;Terima barang&quot; ditekan — bukan otomatis saat tanggal lewat. Deposit hanya dicatat sebagai
-        info (belum modul kas); kembalikan ke penyewa secara manual.
+        Stok masuk kembali saat &quot;Terima barang&quot; ditekan — bukan otomatis saat tanggal lewat. Deposit diterima kasir terpisah
+        (tunai, bukan bagian omzet) dan ditahan sampai dicatat dikembalikan / dipotong lewat tombol &quot;Deposit&quot;.
       </p>
 
       {newOpen && <RentalNewModal onClose={() => setNewOpen(false)} />}
@@ -172,11 +178,25 @@ export default function SewaPage() {
           r={returning}
           staffName={staffName}
           onClose={() => setReturning(null)}
-          onDone={(msg) => {
+          onDone={(msg, openDeposit) => {
+            const id = returning.id;
             setReturning(null);
             showFlash(msg);
+            if (openDeposit) setDepositId(id); // sewa selesai & deposit masih ditahan → langsung tawarkan pencatatan
           }}
           returnRental={returnRental}
+        />
+      )}
+      {depositId && rentals.find((x) => x.id === depositId) && (
+        <DepositDialog
+          r={rentals.find((x) => x.id === depositId)!}
+          staffName={staffName}
+          onClose={() => setDepositId(null)}
+          onDone={(msg) => {
+            setDepositId(null);
+            showFlash(msg);
+          }}
+          settleRentalDeposit={settleRentalDeposit}
         />
       )}
     </div>
@@ -194,8 +214,12 @@ function Stat({ label, value, sub, tone, small }: { label: string; value: string
   );
 }
 
-function RentalCard({ r, now, onReturn }: { r: RentalRow; now: Date; onReturn: () => void }) {
+const DEPOSIT_LABEL: Record<string, string> = { held: "ditahan", partial: "sebagian diselesaikan", settled: "selesai" };
+
+function RentalCard({ r, now, onReturn, onDeposit }: { r: RentalRow; now: Date; onReturn: () => void; onDeposit: () => void }) {
   const rawStatus = statusOf(r, now);
+  const dStatus = depositStatus(r);
+  const dHeld = depositHeld(r);
   const dl = daysLeft(r.dueDate, now);
   const out = outstandingQty(r);
   // "sebagian" tidak boleh menutupi keterlambatan: urgensi dari sisa hari + sisa unit
@@ -225,17 +249,33 @@ function RentalCard({ r, now, onReturn }: { r: RentalRow; now: Date; onReturn: (
             Nota {r.txNumber} · mulai {formatDateId(r.startDate)} · sewa {formatRupiah(rentTotal(r.rentPrice, r.qty))}
             {depositTotal(r) > 0 ? ` · deposit ${formatRupiah(depositTotal(r))}` : ""}
           </div>
+          {dStatus !== "none" && (
+            <div className={`mt-0.5 text-xs ${dHeld > 0 ? "text-warning" : "text-gray-500"}`}>
+              Deposit {DEPOSIT_LABEL[dStatus]}
+              {(r.depositRefunded ?? 0) > 0 ? ` · dikembalikan ${formatRupiah(r.depositRefunded ?? 0)}` : ""}
+              {(r.depositDeducted ?? 0) > 0 ? ` · dipotong ${formatRupiah(r.depositDeducted ?? 0)}` : ""}
+              {dHeld > 0 ? ` · masih ditahan ${formatRupiah(dHeld)}` : ""}
+              {r.depositNote ? ` — ${r.depositNote}` : ""}
+            </div>
+          )}
         </div>
-        {st !== "selesai" && (
+        {(st !== "selesai" || dHeld > 0) && (
           <div className="flex shrink-0 items-center gap-2">
-            {wa ? (
-              <a href={wa} target="_blank" rel="noopener noreferrer" className="btn-success px-3 py-2 text-xs" title="Kirim pengingat via WhatsApp">
-                WhatsApp
-              </a>
-            ) : (
-              <span className="px-2 text-[11px] text-gray-400" title="Tidak ada nomor HP valid">tanpa HP</span>
+            {st !== "selesai" && (
+              wa ? (
+                <a href={wa} target="_blank" rel="noopener noreferrer" className="btn-success px-3 py-2 text-xs" title="Kirim pengingat via WhatsApp">
+                  WhatsApp
+                </a>
+              ) : (
+                <span className="px-2 text-[11px] text-gray-400" title="Tidak ada nomor HP valid">tanpa HP</span>
+              )
             )}
-            <button onClick={onReturn} className="btn-violet px-3 py-2 text-xs">Terima barang ({out})</button>
+            {dHeld > 0 && (
+              <button onClick={onDeposit} className="btn-ghost px-3 py-2 text-xs" title="Catat deposit dikembalikan / dipotong">Deposit</button>
+            )}
+            {st !== "selesai" && (
+              <button onClick={onReturn} className="btn-violet px-3 py-2 text-xs">Terima barang ({out})</button>
+            )}
           </div>
         )}
       </div>
@@ -253,10 +293,11 @@ function ReturnDialog({
   r: RentalRow;
   staffName: string;
   onClose: () => void;
-  onDone: (msg: string) => void;
+  onDone: (msg: string, openDeposit?: boolean) => void;
   returnRental: (id: string, qty: number, staff: string) => Promise<boolean>;
 }) {
   const out = outstandingQty(r);
+  const heldNow = depositHeld(r);
   const [qty, setQty] = useState(out);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -275,8 +316,9 @@ function ReturnDialog({
     }
     onDone(
       full
-        ? `${r.productName} diterima kembali — sewa selesai.${depositTotal(r) > 0 ? ` Deposit sewa ini ${formatRupiah(depositTotal(r))} — kembalikan ke ${r.customerName ?? "penyewa"} bila belum.` : ""}`
-        : `${qty} unit ${r.productName} diterima — sisa ${out - qty} unit masih di penyewa.`
+        ? `${r.productName} diterima kembali — sewa selesai.${heldNow > 0 ? ` Catat deposit ${formatRupiah(heldNow)} untuk ${r.customerName ?? "penyewa"} (dikembalikan / dipotong).` : ""}`
+        : `${qty} unit ${r.productName} diterima — sisa ${out - qty} unit masih di penyewa.`,
+      full && heldNow > 0
     );
   }
 
@@ -304,10 +346,10 @@ function ReturnDialog({
         <p className="mb-3 text-xs text-gray-600">
           {full ? "Semua unit kembali — sewa ditandai selesai." : `Sisa ${out - qty} unit tetap tercatat disewa.`} Stok produk bertambah {qty}.
         </p>
-        {full && depositTotal(r) > 0 && (
+        {full && heldNow > 0 && (
           <p className="mb-3 rounded-2xl bg-warning/10 px-3 py-2 text-xs text-warning">
-            Deposit sewa ini {formatRupiah(depositTotal(r))} ({formatRupiah(r.deposit ?? 0)} × {r.qty} unit) — kembalikan ke penyewa bila belum.
-            Pengembalian deposit belum dicatat oleh sistem.
+            Deposit sewa ini {formatRupiah(depositTotal(r))} ({formatRupiah(r.deposit ?? 0)} × {r.qty} unit), masih ditahan {formatRupiah(heldNow)}.
+            Setelah barang diterima, jendela pencatatan deposit (dikembalikan / dipotong) akan terbuka.
           </p>
         )}
         {err && <p role="alert" className="mb-3 rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{err}</p>}
@@ -315,6 +357,95 @@ function ReturnDialog({
           <button onClick={onClose} className="btn-ghost flex-1 py-2.5">Batal</button>
           <button onClick={confirm} disabled={busy} className="btn-violet flex-1 py-2.5 disabled:opacity-50">
             {busy ? "Menyimpan…" : `Terima ${qty} unit`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// E20: catat deposit dikembalikan / dipotong. Deposit diterima kasir tunai & terpisah dari omzet; potongan hanya dicatat
+// (tidak otomatis jadi pendapatan). Batas jumlah ditegakkan juga oleh RPC settle_rental_deposit.
+function DepositDialog({
+  r,
+  staffName,
+  onClose,
+  onDone,
+  settleRentalDeposit,
+}: {
+  r: RentalRow;
+  staffName: string;
+  onClose: () => void;
+  onDone: (msg: string) => void;
+  settleRentalDeposit: (id: string, refund: number, deduct: number, note: string, staff: string) => Promise<boolean>;
+}) {
+  const held = depositHeld(r);
+  const [refund, setRefund] = useState(String(held));
+  const [deduct, setDeduct] = useState("0");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const nRefund = Number(refund || 0);
+  const nDeduct = Number(deduct || 0);
+  const problem = validateDepositSettle(r, nRefund, nDeduct);
+  const after = held - (Number.isFinite(nRefund) ? nRefund : 0) - (Number.isFinite(nDeduct) ? nDeduct : 0);
+
+  async function confirm() {
+    if (busy || problem) return; // cegah klik ganda → tercatat dobel
+    setBusy(true);
+    setErr(null);
+    useData.setState({ error: null });
+    const ok = await settleRentalDeposit(r.id, nRefund, nDeduct, note.trim(), staffName);
+    setBusy(false);
+    if (!ok) {
+      setErr(useData.getState().error ?? "Gagal mencatat deposit.");
+      return;
+    }
+    const parts = [
+      nRefund > 0 ? `dikembalikan ${formatRupiah(nRefund)}` : "",
+      nDeduct > 0 ? `dipotong ${formatRupiah(nDeduct)}` : "",
+    ].filter(Boolean).join(", ");
+    onDone(`Deposit ${r.customerName ?? "penyewa"} ${parts} — ${after > 0 ? `sisa ditahan ${formatRupiah(after)}` : "selesai"}.`);
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4">
+      <div role="dialog" aria-label="Deposit sewa" className="w-full max-w-[400px] rounded-t-4xl bg-white p-5 shadow-soft-xl sm:rounded-3xl">
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="text-lg font-bold text-ink">Deposit sewa</h3>
+          <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-full bg-black/5 text-gray-600" aria-label="Tutup">
+            <Icon name="close" size={16} />
+          </button>
+        </div>
+        <p className="mb-1 font-semibold text-ink">{r.productName} ×{r.qty}</p>
+        <p className="mb-3 text-sm text-gray-600">
+          {r.customerName ?? "—"} · nota {r.txNumber} · diterima {formatRupiah(depositTotal(r))}
+          {(r.depositRefunded ?? 0) > 0 ? ` · dikembalikan ${formatRupiah(r.depositRefunded ?? 0)}` : ""}
+          {(r.depositDeducted ?? 0) > 0 ? ` · dipotong ${formatRupiah(r.depositDeducted ?? 0)}` : ""}
+        </p>
+        <div className="mb-3 rounded-2xl bg-beige/60 px-3 py-2 text-sm text-olive">
+          Masih ditahan <b className="tnum text-ink">{formatRupiah(held)}</b>
+        </div>
+        <label className="mb-1 block text-xs font-medium text-gray-600" htmlFor="dep-refund">Dikembalikan ke penyewa (Rp)</label>
+        <div className="mb-2 flex gap-2">
+          <input id="dep-refund" inputMode="numeric" value={refund} onChange={(e) => setRefund(e.target.value.replace(/[^\d]/g, ""))} className="input flex-1 tnum" />
+          <button type="button" onClick={() => { setRefund(String(held)); setDeduct("0"); }} className="btn-ghost px-3 text-xs">Kembalikan penuh</button>
+        </div>
+        <label className="mb-1 block text-xs font-medium text-gray-600" htmlFor="dep-deduct">Dipotong — kerusakan / telat (Rp)</label>
+        <div className="mb-2 flex gap-2">
+          <input id="dep-deduct" inputMode="numeric" value={deduct} onChange={(e) => setDeduct(e.target.value.replace(/[^\d]/g, ""))} className="input flex-1 tnum" />
+          <button type="button" onClick={() => { setDeduct(String(held)); setRefund("0"); }} className="btn-ghost px-3 text-xs">Potong semua</button>
+        </div>
+        <label className="mb-1 block text-xs font-medium text-gray-600" htmlFor="dep-note">Catatan (opsional)</label>
+        <input id="dep-note" value={note} onChange={(e) => setNote(e.target.value)} className="input mb-2" placeholder="mis. kancing hilang, potong 20.000" />
+        <p className="mb-3 text-xs text-gray-600">
+          {problem ? <span className="text-danger">{problem}</span> : <>Sisa ditahan setelah ini: <b className="tnum">{formatRupiah(after)}</b>. Potongan hanya dicatat — bukan otomatis pendapatan.</>}
+        </p>
+        {err && <p role="alert" className="mb-3 rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{err}</p>}
+        <div className="flex gap-2">
+          <button onClick={onClose} className="btn-ghost flex-1 py-2.5">Batal</button>
+          <button onClick={confirm} disabled={busy || !!problem} className="btn-violet flex-1 py-2.5 disabled:opacity-50">
+            {busy ? "Menyimpan…" : "Catat deposit"}
           </button>
         </div>
       </div>

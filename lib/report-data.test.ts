@@ -212,4 +212,23 @@ describe("computeReport pemisahan sewa (E19)", () => {
       expect(rentalRow[rentalRow.length - 1]).toBe("Sewa");
     }
   });
+
+  it("E20: buildSheets memuat baris Deposit hanya bila meta.deposit ada; omzet tak berubah", async () => {
+    const { buildSheets } = await import("./report-export");
+    const r = computeReport(txs, null);
+    const base = buildSheets(r, { storeLabel: "SEMUA", from: "", to: "" }).summary;
+    expect(base.some((row) => String(row[0]).startsWith("Deposit"))).toBe(false);
+    const deposit = { count: 2, received: 300000, refunded: 140000, deducted: 10000, held: 150000 };
+    const { summary } = buildSheets(r, { storeLabel: "SEMUA", from: "", to: "", deposit });
+    const find = (label: string) => (summary.find((row) => row[0] === label) ?? [])[1];
+    expect(find("Omzet")).toBe(r.sales); // deposit di luar omzet
+    expect(find("Deposit Diterima")).toBe(300000);
+    expect(find("Deposit Dikembalikan")).toBe(140000);
+    expect(find("Deposit Dipotong")).toBe(10000);
+    expect(find("Deposit Ditahan")).toBe(150000);
+    expect(find("Deposit sewa — jumlah sewa")).toBe(2);
+    // non-superadmin (tanpa HPP) tetap melihat deposit (bukan data laba)
+    const np = buildSheets(r, { storeLabel: "SEMUA", from: "", to: "", deposit }, false).summary;
+    expect((np.find((row) => row[0] === "Deposit Ditahan") ?? [])[1]).toBe(150000);
+  });
 });
