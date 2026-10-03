@@ -104,6 +104,7 @@ export interface Transaction {
   createdAt: string;
   qrisRef?: string;
   photoProof?: string;
+  hasProof?: boolean;    // E21: nota punya foto bukti (isi diambil saat dilihat — fetchPhotoProof)
   // E6 pre-order
   kind?: TransactionKind;
   dueDate?: string;      // 'YYYY-MM-DD'

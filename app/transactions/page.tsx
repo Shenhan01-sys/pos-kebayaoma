@@ -62,6 +62,20 @@ export default function TransactionsPage() {
     stores.find((t) => t.id === id)?.prefix ?? "—";
   const [showVoided, setShowVoided] = useState(false);
   const [photoView, setPhotoView] = useState<string | null>(null);
+  // E21: foto bukti tak ikut daftar — diambil saat tombol diklik
+  const [proofLoadingId, setProofLoadingId] = useState<string | null>(null);
+  const [proofMsg, setProofMsg] = useState<string | null>(null);
+  async function openProof(tx: Transaction) {
+    if (tx.photoProof) { setPhotoView(tx.photoProof); return; }
+    if (proofLoadingId) return; // cegah klik ganda
+    setProofLoadingId(tx.id);
+    setProofMsg(null);
+    useData.setState({ error: null });
+    const proof = await useData.getState().fetchPhotoProof(tx.id);
+    setProofLoadingId(null);
+    if (proof) setPhotoView(proof);
+    else setProofMsg(useData.getState().error ?? "Foto bukti tidak ditemukan.");
+  }
   const [confirm, setConfirm] = useState<{
     tx: Transaction;
     action: "cancelled" | "refunded";
@@ -364,11 +378,12 @@ export default function TransactionsPage() {
                     </td>
                     <td className="p-2.5 align-top">
                       {r.isFirstOfNota ? (
-                        r.tx.photoProof ? (
+                        r.tx.photoProof || r.tx.hasProof ? (
                           <button
-                            onClick={() => setPhotoView(r.tx.photoProof!)}
-                            className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-violet/10 text-violet transition hover:bg-violet/20"
-                            title="Lihat foto bukti"
+                            onClick={() => openProof(r.tx)}
+                            disabled={proofLoadingId === r.tx.id}
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-violet/10 text-violet transition hover:bg-violet/20 disabled:opacity-50"
+                            title={proofLoadingId === r.tx.id ? "Memuat foto…" : "Lihat foto bukti"}
                             aria-label="Lihat foto bukti"
                           >
                             <Icon name="photo" size={14} />
@@ -526,6 +541,12 @@ export default function TransactionsPage() {
           </div>
         </aside>
       </div>
+
+      {proofMsg && (
+        <div role="alert" className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-2xl bg-danger px-4 py-2 text-sm text-white shadow-soft-lg" onClick={() => setProofMsg(null)}>
+          {proofMsg}
+        </div>
+      )}
 
       {/* Photo proof viewer */}
       {photoView && (

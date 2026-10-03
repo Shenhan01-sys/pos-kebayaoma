@@ -178,6 +178,8 @@ interface DataState {
   fetchStaff: () => Promise<void>;
   fetchStores: () => Promise<void>;
   fetchTransactions: () => Promise<void>;
+  // E21: foto bukti (base64, sampai ±6 MB per nota) TIDAK ikut daftar transaksi — diambil per nota saat dilihat
+  fetchPhotoProof: (transactionId: string) => Promise<string | null>;
   fetchShifts: () => Promise<void>;
 
   // transactions
@@ -1772,26 +1774,57 @@ export const useData = create<DataState>()(
           return;
         }
         try {
+          // E21: kolom eksplisit TANPA photo_proof — `select *` mengunduh semua foto bukti base64 (±34 MB untuk 47 nota)
+          // setiap kali daftar dimuat (boros bandwidth/egress Supabase + lambat). Foto diambil saat dilihat (fetchPhotoProof).
           let query: any = supabase
             .from('transactions')
             .select(`
-              *,
+              id, number, store_id, cashier, customer_id, customer_name, status, payment_method, payment_status,
+              subtotal, tax, discount, total, amount_paid, change, qris_ref, kind, due_date, dp_amount, dp_method, created_at,
               transaction_items (*)
             `)
             .order('created_at', { ascending: false })
             .limit(200);
           if (sid) query = query.eq('store_id', sid);
-          const { data, error } = await query;
+          // Penanda "ada foto bukti" tanpa mengunduh isinya: hanya id baris yang photo_proof-nya tidak null.
+          let proofQuery: any = supabase.from('transactions').select('id').not('photo_proof', 'is', null).limit(1000);
+          if (sid) proofQuery = proofQuery.eq('store_id', sid);
+          const [{ data, error }, proofRes] = await Promise.all([query, proofQuery]);
 
           if (error) throw error;
+          const proofIds = new Set<string>(((proofRes?.data ?? []) as { id: string }[]).map((r) => r.id));
 
-          const transactions = data.map((t: any) =>
-            mapTransactionRow(t, (t.transaction_items ?? []).map(mapTransactionItemRow))
-          );
+          const transactions = data.map((t: any) => ({
+            ...mapTransactionRow(t, (t.transaction_items ?? []).map(mapTransactionItemRow)),
+            hasProof: proofIds.has(t.id),
+          }));
 
           set({ transactions, loading: false });
         } catch (error: any) {
           set({ error: humanizeError(error), loading: false });
+        }
+      },
+
+      // E21: ambil foto bukti satu nota saat dilihat (disimpan di memori store; persist tak menyimpan photoProof)
+      fetchPhotoProof: async (transactionId) => {
+        const cached = get().transactions.find((t) => t.id === transactionId)?.photoProof;
+        if (cached) return cached;
+        if (!isSupabaseReady) return null;
+        try {
+          const { data, error } = await supabase
+            .from('transactions')
+            .select('photo_proof')
+            .eq('id', transactionId)
+            .maybeSingle();
+          if (error) throw error;
+          const proof = ((data as { photo_proof?: string | null } | null)?.photo_proof) ?? null;
+          if (proof) {
+            set((s) => ({ transactions: s.transactions.map((t) => (t.id === transactionId ? { ...t, photoProof: proof } : t)) }));
+          }
+          return proof;
+        } catch (error: any) {
+          set({ error: humanizeError(error) });
+          return null;
         }
       },
 
