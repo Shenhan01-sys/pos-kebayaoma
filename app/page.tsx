@@ -9,6 +9,7 @@ import { useSettings } from "@/store/settings";
 import { useData } from "@/store/data";
 import { useAuth } from "@/store/auth";
 import { Icon, type IconName } from "@/components/icons";
+import { computeDashboard } from "@/lib/dashboard-data";
 import type { EChartsCoreOption } from "echarts/core";
 
 const EChart = dynamic(() => import("@/components/EChart"), { ssr: false });
@@ -54,25 +55,11 @@ export default function DashboardPage() {
   }, [activeStoreId]);
 
   const all = live;
-  const sales = all.reduce((sum, t) => sum + (t.status === "paid" ? t.total : 0), 0);
-  const count = all.filter((t) => t.status === "paid").length;
-
-  const paid = all.filter((t) => t.status === "paid");
-  const byMethod: Record<string, number> = {};
-  paid.forEach((t) => {
-    byMethod[t.paymentMethod] = (byMethod[t.paymentMethod] ?? 0) + t.total;
-  });
-  const methodTotal = Object.values(byMethod).reduce((a, b) => a + b, 0);
-
-  const top: Record<string, number> = {};
-  paid.forEach((t) =>
-    t.items.forEach((it) => {
-      top[it.name] = (top[it.name] ?? 0) + it.quantity;
-    })
-  );
-  const topProducts = Object.entries(top)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5);
+  // B2: sewa dipisah dari penjualan — KPI omzet tetap TOTAL (penjualan + sewa, sub-label rincian);
+  // donut metode bayar & Produk Terlaris hanya penjualan murni (paritas semantik E19/E6).
+  const d = computeDashboard(all);
+  const { sales, count, byMethod, methodTotal, rental } = d;
+  const topProducts = d.topProducts.slice(0, 5);
 
   const lowStock = products
     .filter((p) => p.stock <= 5)
@@ -136,7 +123,7 @@ export default function DashboardPage() {
   };
 
   const cards = [
-    { key: "sales", label: "Penjualan Hari Ini", value: formatRupiah(sales), href: "/transactions", sub: "Total nilai transaksi lunas" },
+    { key: "sales", label: "Penjualan Hari Ini", value: formatRupiah(sales), href: "/transactions", sub: rental.count > 0 ? `Termasuk ${rental.count} nota sewa ${formatRupiah(rental.total)}` : "Total nilai transaksi lunas" },
     { key: "count", label: "Transaksi", value: String(count), href: "/transactions", sub: "Pesanan berstatus lunas" },
     { key: "low", label: "Stok Menipis", value: String(lowStock.length), href: "/products", sub: "Produk ≤ 5 unit" },
     { key: "open", label: "Buka Kasir", value: "Mulai", href: "/pos", sub: "Lanjut ke layar POS" },
