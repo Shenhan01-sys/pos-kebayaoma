@@ -403,68 +403,73 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
   if (paid) {
     return (
       <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4">
-        <div className="max-h-full w-full max-w-[380px] overflow-auto rounded-t-4xl bg-white p-5 shadow-soft-xl sm:rounded-3xl">
-          <div className="mb-3 flex flex-col items-center text-center">
-            <span className="flex h-14 w-14 items-center justify-center rounded-full bg-success text-white shadow-glow">
-              <Icon name="check" size={30} />
-            </span>
-            <div className="mt-2 text-lg font-extrabold text-ink">Pembayaran Berhasil</div>
-            <div className="text-sm text-gray-600 tnum">{formatRupiah(grand)}</div>
-          </div>
-          <Receipt tx={paid} />
-
-          {customPrompt.length > 0 && (
-            <div className="mt-4 rounded-2xl bg-apricot/10 p-3">
-              <div className="mb-2 flex items-center gap-2 text-sm font-bold text-olive">
-                <Icon name="alert" size={16} /> Simpan item custom ke catalog?
-              </div>
-              <p className="mb-3 text-xs text-gray-600">
-                Item berikut tidak ada di catalog. Transaksi sudah tersimpan. Mau simpan untuk pakai lagi?
-              </p>
-              <div className="space-y-2">
-                {customPrompt.map((item, idx) => (
-                  <div key={idx} className="flex items-center justify-between rounded-2xl bg-white p-2.5 shadow-soft">
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-semibold text-ink">{item.name}</div>
-                      <div className="text-xs text-gray-600 tnum">{formatRupiah(item.unitPrice)} · qty {item.quantity}</div>
-                    </div>
-                    <div className="flex shrink-0 gap-1.5">
-                      <button
-                        onClick={async () => {
-                          await recordCustomItem(item);
-                          setCustomPrompt((prev) => prev.filter((_, i) => i !== idx));
-                        }}
-                        className="btn-violet px-3 py-1.5 text-xs"
-                      >
-                        Simpan
-                      </button>
-                      <button
-                        onClick={() => setCustomPrompt((prev) => prev.filter((_, i) => i !== idx))}
-                        className="btn-ghost px-3 py-1.5 text-xs"
-                      >
-                        Lewati
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
+        {/* E23a: panel muat viewport, tombol pinned, struk yang scroll */}
+        <div className="flex max-h-full w-full max-w-[380px] flex-col overflow-hidden rounded-t-4xl bg-white shadow-soft-xl sm:rounded-3xl">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-5">
+            <div className="mb-3 flex flex-col items-center text-center">
+              <span className="flex h-14 w-14 items-center justify-center rounded-full bg-success text-white shadow-glow">
+                <Icon name="check" size={30} />
+              </span>
+              <div className="mt-2 text-lg font-extrabold text-ink">Pembayaran Berhasil</div>
+              <div className="text-sm text-gray-600 tnum">{formatRupiah(grand)}</div>
             </div>
-          )}
+            <Receipt tx={paid} />
 
-          <div className="mt-4 flex gap-2">
-            <button onClick={printThermal} className="btn-violet flex-1">
-              <Icon name="printer" size={16} /> Print Nota
-            </button>
-            <button
-              onClick={() => {
-                clear();
-                onClose();
-                if (isRental) router.push("/sewa");
-              }}
-              className="btn-ghost flex-1"
-            >
-              Selesai
-            </button>
+            {customPrompt.length > 0 && (
+              <div className="mt-4 rounded-2xl bg-apricot/10 p-3">
+                <div className="mb-2 flex items-center gap-2 text-sm font-bold text-olive">
+                  <Icon name="alert" size={16} /> Simpan item custom ke catalog?
+                </div>
+                <p className="mb-3 text-xs text-gray-600">
+                  Item berikut tidak ada di catalog. Transaksi sudah tersimpan. Mau simpan untuk pakai lagi?
+                </p>
+                <div className="space-y-2">
+                  {customPrompt.map((item, idx) => (
+                    <div key={idx} className="flex items-center justify-between rounded-2xl bg-white p-2.5 shadow-soft">
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm font-semibold text-ink">{item.name}</div>
+                        <div className="text-xs text-gray-600 tnum">{formatRupiah(item.unitPrice)} · qty {item.quantity}</div>
+                      </div>
+                      <div className="flex shrink-0 gap-1.5">
+                        <button
+                          onClick={async () => {
+                            await recordCustomItem(item);
+                            setCustomPrompt((prev) => prev.filter((_, i) => i !== idx));
+                          }}
+                          className="btn-violet px-3 py-1.5 text-xs"
+                        >
+                          Simpan
+                        </button>
+                        <button
+                          onClick={() => setCustomPrompt((prev) => prev.filter((_, i) => i !== idx))}
+                          className="btn-ghost px-3 py-1.5 text-xs"
+                        >
+                          Lewati
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="shrink-0 border-t border-black/5 p-5">
+            <div className="flex gap-2">
+              <button onClick={printThermal} className="btn-violet flex-1">
+                <Icon name="printer" size={16} /> Print Nota
+              </button>
+              <button
+                onClick={() => {
+                  clear();
+                  onClose();
+                  if (isRental) router.push("/sewa");
+                }}
+                className="btn-ghost flex-1"
+              >
+                Selesai
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -474,38 +479,43 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
   if (pendingId) {
     return (
       <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4">
-        <div className="w-full max-w-[380px] overflow-hidden rounded-t-4xl bg-white p-5 text-center shadow-soft-xl sm:rounded-3xl">
-          <div className="mb-3 flex flex-col items-center">
-            <span className="flex h-12 w-12 animate-pulse items-center justify-center rounded-full bg-apricot/20 text-apricot">
-              <Icon name="qris" size={28} />
-            </span>
-            <h2 className="mt-3 text-lg font-extrabold text-ink">Menunggu Pembayaran QRIS</h2>
-            <p className="text-sm text-gray-600">{txNumber}</p>
+        {/* E23a: panel muat viewport, tombol pinned */}
+        <div className="flex max-h-full w-full max-w-[380px] flex-col overflow-hidden rounded-t-4xl bg-white p-0 text-center shadow-soft-xl sm:rounded-3xl">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-5">
+            <div className="mb-3 flex flex-col items-center">
+              <span className="flex h-12 w-12 animate-pulse items-center justify-center rounded-full bg-apricot/20 text-apricot">
+                <Icon name="qris" size={28} />
+              </span>
+              <h2 className="mt-3 text-lg font-extrabold text-ink">Menunggu Pembayaran QRIS</h2>
+              <p className="text-sm text-gray-600">{txNumber}</p>
+            </div>
+
+            {qr && (
+              <div className="mx-auto mb-3 w-fit rounded-2xl bg-white p-3 shadow-soft">
+                <QRCodeSVG value={qr.qrString} size={176} level="M" />
+              </div>
+            )}
+
+            <p className="text-sm text-gray-600">
+              Minta pelanggan scan QR di atas. Transaksi akan otomatis terkonfirmasi setelah pembayaran diterima.
+            </p>
+            {qr?.expiry && (
+              <p className="mt-1 text-xs text-olive">
+                Berlaku s.d. {new Date(qr.expiry).toLocaleTimeString("id-ID")}
+              </p>
+            )}
+            <p className="mt-2 flex items-center justify-center gap-1.5 text-[11px] text-gray-400">
+              <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-success" />
+              Memeriksa status pembayaran…
+            </p>
           </div>
 
-          {qr && (
-            <div className="mx-auto mb-3 w-fit rounded-2xl bg-white p-3 shadow-soft">
-              <QRCodeSVG value={qr.qrString} size={176} level="M" />
+          <div className="shrink-0 border-t border-black/5 p-5">
+            <div className="flex gap-2">
+              <button onClick={cancelPending} className="btn-ghost flex-1">
+                Batalkan
+              </button>
             </div>
-          )}
-
-          <p className="text-sm text-gray-600">
-            Minta pelanggan scan QR di atas. Transaksi akan otomatis terkonfirmasi setelah pembayaran diterima.
-          </p>
-          {qr?.expiry && (
-            <p className="mt-1 text-xs text-olive">
-              Berlaku s.d. {new Date(qr.expiry).toLocaleTimeString("id-ID")}
-            </p>
-          )}
-          <p className="mt-2 flex items-center justify-center gap-1.5 text-[11px] text-gray-400">
-            <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-success" />
-            Memeriksa status pembayaran…
-          </p>
-
-          <div className="mt-5 flex gap-2">
-            <button onClick={cancelPending} className="btn-ghost flex-1">
-              Batalkan
-            </button>
           </div>
         </div>
       </div>
@@ -514,8 +524,10 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4">
-      <div className="w-full max-w-[440px] overflow-hidden rounded-t-4xl bg-white shadow-soft-xl sm:rounded-3xl">
-        <div className="flex items-center justify-between bg-beige px-5 py-4">
+      {/* E23a: panel maksimum setinggi viewport (ikut dvh saat keyboard virtual muncul);
+          header & tombol aksi pinned, konten tengah yang scroll */}
+      <div className="flex max-h-full w-full max-w-[440px] flex-col overflow-hidden rounded-t-4xl bg-white shadow-soft-xl sm:rounded-3xl">
+        <div className="flex shrink-0 items-center justify-between bg-beige px-5 py-4">
           <div>
             <div className="text-xs font-medium text-olive">Total Bayar</div>
             <div className="text-2xl font-extrabold text-ink tnum">{formatRupiah(grand)}</div>
@@ -529,7 +541,7 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
           </button>
         </div>
 
-        <div className="card-pad">
+        <div className="card-pad min-h-0 flex-1 overflow-y-auto overscroll-contain">
           {customerName && (
             <div className="mb-3 flex items-center gap-2 rounded-2xl bg-beige/60 px-3 py-2 text-sm text-olive">
               <Icon name="customers" size={16} /> Pelanggan: {customerName}
@@ -797,8 +809,10 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
               </label>
             )}
           </div>
+        </div>
 
-          <button onClick={finish} className="btn-primary mt-4 w-full py-3 text-base">
+        <div className="shrink-0 border-t border-black/5 bg-white px-5 pb-5 pt-3">
+          <button onClick={finish} className="btn-primary w-full py-3 text-base">
             {method === "qris"
               ? qr?.mock
                 ? "Simulasikan Pembayaran"
