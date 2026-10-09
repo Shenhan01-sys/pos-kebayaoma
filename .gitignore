@@ -27,6 +27,17 @@ research_*.log
 .env*.local
 .env
 
+# second brain vault & dokumen bisnis privat (pindahan dari POS-KebayaOma root, di luar git)
+/POSkebaya-Vault
+/QnA
+/Resources
+/KiloCode
+/*.xlsx
+/barcode-labels.pdf
+/session-ses_*.md
+/2026-10-04-*.txt
+/.claude
+
 # vercel
 .vercel
 
