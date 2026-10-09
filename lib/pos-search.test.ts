@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { Product, Variant } from "./dummy";
-import { filterProductsByQuery, findExactVariantMatch, matchesPriceToken } from "./pos-search";
+import {
+  filterProductsByQuery,
+  findExactVariantMatch,
+  findMatchingVariants,
+  matchesPriceToken,
+} from "./pos-search";
 
 const v = (over: Partial<Variant>): Variant => ({
   id: "vid",
@@ -97,6 +102,68 @@ describe("E22 filterProductsByQuery", () => {
 
   it("produk tanpa varian tetap bisa dicari via nama", () => {
     expect(filterProductsByQuery(catalog, "tulis").map((x) => x.id)).toEqual(["p3"]);
+  });
+});
+
+describe("E22 lanjutan findMatchingVariants (kartu varian langsung)", () => {
+  it("'kebaya 60' → hanya varian 'kebaya 60', bukan kakaknya 'kebaya 110'", () => {
+    const cat: Product[] = [
+      p({
+        id: "p1",
+        name: "Kebaya",
+        variants: [
+          v({ id: "v110", sku: "11111111", name: "kebaya 110", sellingPrice: 110000 }),
+          v({ id: "v60", sku: "60606060", name: "kebaya 60", sellingPrice: 60000 }),
+        ],
+      }),
+    ];
+    const hits = findMatchingVariants(cat, "kebaya 60");
+    expect(hits).toHaveLength(1);
+    expect(hits[0].variant.id).toBe("v60");
+  });
+
+  it("token harga: 'kebaya 60' kena varian 60.000 walau namanya beda", () => {
+    const cat: Product[] = [
+      p({
+        id: "p1",
+        name: "Kebaya",
+        variants: [
+          v({ id: "va", name: "brokat", sellingPrice: 110000 }),
+          v({ id: "vb", name: "polos", sellingPrice: 60000 }),
+        ],
+      }),
+    ];
+    expect(findMatchingVariants(cat, "kebaya 60").map((h) => h.variant.id)).toEqual(["vb"]);
+  });
+
+  it("token hanya match fields produk (mis. 'batik') → 0 kartu varian (cukup kartu produk)", () => {
+    const cat: Product[] = [p({ id: "p9", name: "Batik", variants: [v({ id: "vx" })] })];
+    expect(findMatchingVariants(cat, "batik")).toHaveLength(0);
+  });
+
+  it("semua token harus match (AND) sebelum cek fields varian", () => {
+    const cat: Product[] = [
+      p({ id: "p1", name: "Kebaya", variants: [v({ id: "v60", name: "kebaya 60", sellingPrice: 60000 })] }),
+    ];
+    expect(findMatchingVariants(cat, "kebaya 999")).toHaveLength(0);
+  });
+
+  it("query kosong → kosong (grid produk biasa saja)", () => {
+    expect(findMatchingVariants(catalog, "   ")).toHaveLength(0);
+  });
+
+  it("multiple varian cocok → semua tercantum berurutan", () => {
+    const cat: Product[] = [
+      p({
+        id: "p1",
+        name: "Kebaya",
+        variants: [
+          v({ id: "v1", name: "kebaya 60 merah", sellingPrice: 60000 }),
+          v({ id: "v2", name: "kebaya 60 biru", sellingPrice: 60000 }),
+        ],
+      }),
+    ];
+    expect(findMatchingVariants(cat, "kebaya 60").map((h) => h.variant.id)).toEqual(["v1", "v2"]);
   });
 });
 

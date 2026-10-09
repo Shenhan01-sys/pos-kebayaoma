@@ -11,7 +11,7 @@ import BarcodeScanner from "@/components/BarcodeScanner";
 import { useAuth } from "@/store/auth";
 import { useSettings } from "@/store/settings";
 import { parseVoBarcode, resolveVoScan } from "@/lib/barcode";
-import { filterProductsByQuery, findExactVariantMatch } from "@/lib/pos-search";
+import { filterProductsByQuery, findExactVariantMatch, findMatchingVariants } from "@/lib/pos-search";
 import { Icon } from "@/components/icons";
 import { formatDateId } from "@/lib/rental";
 
@@ -164,10 +164,16 @@ export default function PosPage() {
 
   // E22: filter multi-token sampai level varian — nama varian, size/warna, harga
   // (token numerik), selain nama/SKU/tags produk & SKU/barcode varian (jalur lama).
-  const filtered = filterProductsByQuery(
-    products.filter((p) => (cat === "all" ? true : p.categoryId === cat)),
-    query
-  );
+  const scopedProducts = products.filter((p) => (cat === "all" ? true : p.categoryId === cat));
+  const filtered = filterProductsByQuery(scopedProducts, query);
+  // E22 lanjutan (feedback user): hasil search langsung tampil sebagai kartu varian
+  // dengan tombol tambah — tak perlu buka picker lalu scroll satu-satu.
+  const variantHits = findMatchingVariants(scopedProducts, query);
+
+  function addFromVariantHit(product: Product, variant: Variant) {
+    addVariant(product, variant);
+    flashScanMsg(`${product.name} · ${variant.name || variant.sku} masuk keranjang`, "info");
+  }
 
   // Enter di search bar: barcode/SKU varian persis-match → langsung masuk keranjang
   // (flow HID scanner yang mengetik ke search bar tetap bekerja tanpa pilih manual).
@@ -307,6 +313,42 @@ export default function PosPage() {
             </button>
           ))}
         </div>
+
+        {/* E22 lanjutan: kartu varian hasil search — langsung bisa ditambahkan */}
+        {variantHits.length > 0 && (
+          <div className="mb-3">
+            <div className="mb-1.5 text-xs font-bold uppercase tracking-wide text-gray-500">
+              Varian cocok ({variantHits.length})
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {variantHits.map(({ product, variant }) => (
+                <div
+                  key={variant.id}
+                  className="flex w-full items-center gap-3 rounded-2xl bg-white p-2.5 shadow-soft ring-1 ring-black/5 sm:w-[calc(50%-0.25rem)] xl:w-[calc(33.333%-0.5rem)]"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-semibold text-ink">
+                      {product.name} · {variant.name || variant.sku}
+                    </div>
+                    <div className="truncate text-xs text-gray-600">
+                      {[variant.size, variant.color].filter(Boolean).join(" / ") || "One Size"} ·{" "}
+                      <span className="tnum font-bold text-olive">{formatRupiah(variant.sellingPrice)}</span>
+                      <span className={product.stock > 0 ? " text-gray-500" : " text-danger"}> · stok {product.stock}</span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => addFromVariantHit(product, variant)}
+                    disabled={product.stock <= 0}
+                    className="flex h-9 shrink-0 items-center gap-1 rounded-full bg-violet px-3 text-xs font-bold text-white shadow-soft transition hover:bg-violet/85 active:scale-95 disabled:opacity-40"
+                    aria-label={`Tambah ${product.name} ${variant.name || variant.sku} ke keranjang`}
+                  >
+                    <Icon name="plus" size={14} /> Keranjang
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="flex flex-1 flex-wrap content-start gap-2 overflow-auto pretty-scroll sm:gap-3">
           {filtered.map((p) => (

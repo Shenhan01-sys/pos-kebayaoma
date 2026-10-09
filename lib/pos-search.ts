@@ -51,6 +51,53 @@ export function filterProductsByQuery(products: Product[], query: string): Produ
   return products.filter((p) => tokens.every((t) => tokenMatches(t, p)));
 }
 
+/** Satu token cocok di fields varian saja (bukan fields produk)? */
+function tokenMatchesVariantFields(token: string, v: Product["variants"][number]): boolean {
+  const q = token.toLowerCase();
+  return (
+    (v.name ?? "").toLowerCase().includes(q) ||
+    (v.size ?? "").toLowerCase() === q ||
+    (v.color ?? "").toLowerCase().includes(q) ||
+    v.sku.toLowerCase().includes(q) ||
+    (v.barcode ?? "").toLowerCase() === q ||
+    matchesPriceToken(token, v.sellingPrice)
+  );
+}
+
+/** Semua token cocok di gabungan fields produk + varian ini, DAN minimal satu token khusus kena varian? */
+function variantQualifies(tokens: string[], p: Product, v: Product["variants"][number]): boolean {
+  const allMatch = tokens.every(
+    (t) =>
+      tokenMatchesVariantFields(t, v) ||
+      p.name.toLowerCase().includes(t.toLowerCase()) ||
+      p.sku.toLowerCase().includes(t.toLowerCase()) ||
+      p.tags.some((tag) => tag.toLowerCase().includes(t.toLowerCase()))
+  );
+  if (!allMatch) return false;
+  return tokens.some((t) => tokenMatchesVariantFields(t, v));
+}
+
+/**
+ * E22 lanjutan (feedback user 2026-10-08): hasil pencarian langsung ke level varian —
+ * daftar varian yang spesifik kena query (minimal satu token match ke fields varian,
+ * mis. nama "kebaya 60" atau harga 60.000), agar bisa langsung dimasukkan ke keranjang
+ * tanpa membuka picker dan scroll satu-satu.
+ */
+export function findMatchingVariants(
+  products: Product[],
+  query: string
+): { product: Product; variant: Product["variants"][number] }[] {
+  const tokens = query.trim().split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return [];
+  const out: { product: Product; variant: Product["variants"][number] }[] = [];
+  for (const p of products) {
+    for (const v of p.variants) {
+      if (variantQualifies(tokens, p, v)) out.push({ product: p, variant: v });
+    }
+  }
+  return out;
+}
+
 /**
  * Cari varian yang cocok persis dengan satu string query (untuk Enter di search bar):
  * barcode/SKU varian exact → prioritas; lalu nama varian/nama produk+nama varian
