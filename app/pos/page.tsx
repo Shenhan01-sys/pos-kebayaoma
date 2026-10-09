@@ -51,8 +51,24 @@ export default function PosPage() {
   // HID barcode scanner support — auto-focus hidden input
   const scanInputRef = useRef<HTMLInputElement>(null);
   const [scanBuffer, setScanBuffer] = useState("");
+  // E23b: keyboard virtual Android jangan muncul otomatis (inputMode="none");
+  // kasir bisa menyalakannya manual lewat toggle untuk mode ketik manual/SKU.
+  const [kbOn, setKbOn] = useState(false);
   const [scanMsg, setScanMsg] = useState<{ text: string; kind: "error" | "info" } | null>(null);
   const scanMsgTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function toggleKb() {
+    setKbOn((v) => {
+      const next = !v;
+      if (next) {
+        // tunggu inputMode berubah dulu, lalu fokus → keyboard virtual muncul
+        setTimeout(() => scanInputRef.current?.focus(), 0);
+      } else {
+        scanInputRef.current?.blur();
+      }
+      return next;
+    });
+  }
 
   function focusScan() {
     // Jangan rebut fokus dari input/select yang sedang dipakai kasir
@@ -248,6 +264,14 @@ export default function PosPage() {
           >
             <Icon name="qris" size={18} /> Scan
           </button>
+          <button
+            onClick={toggleKb}
+            aria-pressed={kbOn}
+            title={kbOn ? "Keyboard aktif — klik untuk mematikan" : "Aktifkan keyboard untuk ketik manual"}
+            className={`btn-ghost shrink-0 ${kbOn ? "text-violet ring-2 ring-violet/40" : ""}`}
+          >
+            <Icon name="keyboard" size={18} /> Keyboard
+          </button>
           <select
             value={customerName ?? ""}
             onChange={(e) => setCustomer(e.target.value || null)}
@@ -328,6 +352,7 @@ export default function PosPage() {
           value={scanBuffer}
           onChange={(e) => setScanBuffer(e.target.value)}
           onKeyDown={onScanKeyDown}
+          inputMode={kbOn ? "text" : "none"}
           onBlur={() => setTimeout(() => {
             // Jangan rebut fokus saat modal terbuka (picker/checkout/scanner/custom),
             // dan jangan rebut dari select/input/textarea — native dropdown akan
