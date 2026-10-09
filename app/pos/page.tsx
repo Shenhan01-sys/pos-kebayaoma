@@ -11,6 +11,7 @@ import BarcodeScanner from "@/components/BarcodeScanner";
 import { useAuth } from "@/store/auth";
 import { useSettings } from "@/store/settings";
 import { parseVoBarcode, resolveVoScan } from "@/lib/barcode";
+import { filterProductsByQuery, findExactVariantMatch } from "@/lib/pos-search";
 import { Icon } from "@/components/icons";
 import { formatDateId } from "@/lib/rental";
 
@@ -161,25 +162,17 @@ export default function PosPage() {
     flashScanMsg(`Barcode tidak dikenal: ${code}`);
   };
 
-  const filtered = products
-    .filter((p) => (cat === "all" ? true : p.categoryId === cat))
-    .filter((p) =>
-      query
-        ? p.name.toLowerCase().includes(query.toLowerCase()) ||
-          p.sku.toLowerCase().includes(query.toLowerCase()) ||
-          p.tags.some((t) => t.toLowerCase().includes(query.toLowerCase())) ||
-          // FIX uji tablet 2026-09-18: scanner mengetik SKU VARIAN (mis. ANTING-ANTING)
-          // ke search bar — filter lama hanya cek SKU produk → produk tak muncul.
-          p.variants.some(
-            (v) =>
-              v.sku.toLowerCase().includes(query.toLowerCase()) ||
-              (v.barcode ?? "").toLowerCase() === query.toLowerCase()
-          )
-        : true
-    );
+  // E22: filter multi-token sampai level varian — nama varian, size/warna, harga
+  // (token numerik), selain nama/SKU/tags produk & SKU/barcode varian (jalur lama).
+  const filtered = filterProductsByQuery(
+    products.filter((p) => (cat === "all" ? true : p.categoryId === cat)),
+    query
+  );
 
   // Enter di search bar: barcode/SKU varian persis-match → langsung masuk keranjang
   // (flow HID scanner yang mengetik ke search bar tetap bekerja tanpa pilih manual).
+  // E22: bila tidak ada barcode/SKU exact tapi query = tepat SATU varian (mis. nama
+  // varian unik "kebaya 150"), Enter juga langsung memasukkannya.
   function onSearchKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key !== "Enter") return;
     const code = query.trim();
@@ -193,6 +186,12 @@ export default function PosPage() {
           return;
         }
       }
+    }
+    const hit = findExactVariantMatch(products, code);
+    if (hit) {
+      addVariant(hit.product, hit.variant);
+      setQuery("");
+      flashScanMsg(`${hit.product.name} · ${hit.variant.name || hit.variant.sku} masuk keranjang`, "info");
     }
   }
 
