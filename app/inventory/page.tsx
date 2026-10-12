@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useData } from "@/store/data";
 import { useAuth } from "@/store/auth";
 import { useSettings } from "@/store/settings";
-import { formatRupiah } from "@/lib/dummy";
+import { formatRupiah, toLocalDayKey } from "@/lib/dummy";
 import { encodeVoBarcode } from "@/lib/barcode";
 import { canSendTransfer, canCancelTransfer, groupBySku } from "@/lib/transfer";
 import { maxTransferMsg } from "@/lib/errors";
@@ -33,6 +33,19 @@ export default function InventoryPage() {
   const [newVendor, setNewVendor] = useState("");
   const [unitCost, setUnitCost] = useState("");
   const [printPreset, setPrintPreset] = useState<{ productId: string; variantId: string; copies: number; content: string; vendorName: string } | null>(null);
+  // E26: rentang tanggal riwayat pergerakan stok (ala /reports) — kosong = tanpa batas
+  const [logFrom, setLogFrom] = useState("");
+  const [logTo, setLogTo] = useState("");
+  const logRows = useMemo(() => {
+    return movements
+      .filter((m) => {
+        const day = toLocalDayKey(m.createdAt);
+        if (logFrom && day < logFrom) return false;
+        if (logTo && day > logTo) return false;
+        return true;
+      })
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt)); // terbaru di atas
+  }, [movements, logFrom, logTo]);
   const busyRef = useRef(false);
   // Transfer (E1)
   const [trFrom, setTrFrom] = useState("");
@@ -314,6 +327,25 @@ export default function InventoryPage() {
 
       {tab === "log" && (
         <div className="card overflow-auto">
+          {/* E26: rentang tanggal ala /reports — kosong = tanpa batas */}
+          <div className="flex flex-wrap items-center gap-2 border-b border-black/5 px-3 py-2.5">
+            <Icon name="shifts" size={16} className="text-gray-600" />
+            <label className="flex items-center gap-1 text-xs text-gray-600">
+              Dari
+              <input type="date" value={logFrom} onChange={(e) => setLogFrom(e.target.value)} className="input w-auto border-0 bg-transparent px-1 py-0.5" aria-label="Tanggal mulai riwayat" />
+            </label>
+            <span className="text-xs text-gray-500">s.d</span>
+            <label className="flex items-center gap-1 text-xs text-gray-600">
+              Sampai
+              <input type="date" value={logTo} onChange={(e) => setLogTo(e.target.value)} className="input w-auto border-0 bg-transparent px-1 py-0.5" aria-label="Tanggal akhir riwayat" />
+            </label>
+            {(logFrom || logTo) && (
+              <button onClick={() => { setLogFrom(""); setLogTo(""); }} className="btn-ghost px-2 py-1 text-xs">
+                Reset
+              </button>
+            )}
+            <span className="ml-auto text-xs text-gray-500">{logRows.length} pergerakan</span>
+          </div>
           <table className="w-full text-sm">
             <thead className="bg-beige/70 text-left text-olive">
               <tr>
@@ -328,10 +360,10 @@ export default function InventoryPage() {
               </tr>
             </thead>
             <tbody>
-              {movements.length === 0 && (
-                <tr><td className="p-4 text-center text-gray-600" colSpan={8}>Belum ada pergerakan stok.</td></tr>
+              {logRows.length === 0 && (
+                <tr><td className="p-4 text-center text-gray-600" colSpan={8}>Belum ada pergerakan stok pada rentang ini.</td></tr>
               )}
-              {movements.map((m) => (
+              {logRows.map((m) => (
                 <tr key={m.id} className="border-t border-black/5">
                   <td className="p-3 text-xs text-gray-600">{new Date(m.createdAt).toLocaleString("id-ID")}</td>
                   <td className="p-3 font-medium text-ink">{m.productName} <span className="text-gray-600">({m.sku})</span></td>

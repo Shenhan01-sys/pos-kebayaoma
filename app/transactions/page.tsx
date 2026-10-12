@@ -51,7 +51,10 @@ export default function TransactionsPage() {
   const isStaff = auth.staff?.role === "kasir" || auth.staff?.role === "admin";
   const canManage = canManageTransactions(auth.staff?.role);
   const [all, setAll] = useState<Transaction[]>([]);
-  const [dateFilter, setDateFilter] = useState<string>(todayStr());
+  // E26: rentang tanggal ala /reports (Dari–s.d–Sampai) menggantikan filter 1 hari.
+  // Default hari ini; staff (kasir/admin) tetap terkunci hari berjalan (aturan E11).
+  const [from, setFrom] = useState<string>(todayStr());
+  const [to, setTo] = useState<string>(todayStr());
   const [methodFilter, setMethodFilter] = useState<PaymentMethod | "all">("all");
   const [storeFilter, setStoreFilter] = useState<string | "all">("all");
   const stores = useData((s) => s.stores);
@@ -108,18 +111,22 @@ export default function TransactionsPage() {
   }, [activeStoreId]);
 
   const dayTx = useMemo(() => {
-    const effectiveDate = isStaff ? todayStr() : dateFilter;
+    const effectiveFrom = isStaff ? todayStr() : from;
+    const effectiveTo = isStaff ? todayStr() : to;
     return all
       .filter((t) => {
         if (!showVoided && (t.status === "cancelled" || t.status === "refunded"))
           return false;
-        if (effectiveDate && toLocalDayKey(t.createdAt) !== effectiveDate) return false;
+        // E26: kunci hari lokal WIB — batas inklusif dua sisi (bisa kosong = tanpa batas)
+        const day = toLocalDayKey(t.createdAt);
+        if (effectiveFrom && day < effectiveFrom) return false;
+        if (effectiveTo && day > effectiveTo) return false;
         if (methodFilter !== "all" && t.paymentMethod !== methodFilter) return false;
         if (storeFilter !== "all" && t.storeId !== storeFilter) return false;
         return true;
       })
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt)); // terbaru di atas
-  }, [all, dateFilter, methodFilter, storeFilter, showVoided, isStaff]);
+  }, [all, from, to, methodFilter, storeFilter, showVoided, isStaff]);
 
   const rows = useMemo<ItemRow[]>(() => {
     const out: ItemRow[] = [];
@@ -179,11 +186,22 @@ export default function TransactionsPage() {
         </h1>
         <div className="flex flex-wrap items-end gap-2">
           <label className="text-xs text-gray-600">
-            Tanggal
+            Dari
             <input
               type="date"
-              value={isStaff ? todayStr() : dateFilter}
-              onChange={(e) => setDateFilter(e.target.value)}
+              value={isStaff ? todayStr() : from}
+              onChange={(e) => setFrom(e.target.value)}
+              disabled={isStaff}
+              className="input ml-2 py-1.5 text-sm disabled:opacity-60"
+            />
+          </label>
+          <span className="pb-2 text-xs text-gray-500">s.d</span>
+          <label className="text-xs text-gray-600">
+            Sampai
+            <input
+              type="date"
+              value={isStaff ? todayStr() : to}
+              onChange={(e) => setTo(e.target.value)}
               disabled={isStaff}
               className="input ml-2 py-1.5 text-sm disabled:opacity-60"
             />
@@ -443,7 +461,7 @@ export default function TransactionsPage() {
                     className="p-4 text-center text-gray-600"
                     colSpan={15}
                   >
-                    Tidak ada transaksi pada {dateFilter || "filter ini"}.
+                    Tidak ada transaksi pada rentang {from || "…"} s.d. {to || "…"}.
                   </td>
                 </tr>
               )}

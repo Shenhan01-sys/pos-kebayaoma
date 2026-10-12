@@ -15,6 +15,7 @@
     "cap:open": "npx cap open android",
     "cap:run": "npx cap run android",
     "test:unit": "vitest run",
+    "test:e2e": "vitest run --config vitest.e2e.config.ts",
     "print-bridge": "node scripts/print-bridge.mjs"
   },
   "dependencies": {
