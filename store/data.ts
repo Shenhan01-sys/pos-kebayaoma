@@ -174,8 +174,11 @@ interface DataState {
   // Scope toko runtime: id toko operasional, atau null = semua toko (manager-all).
   // Ditentukan saat login dari staff.store_id; staff terkunci selalu terisi.
   activeStoreId: string | null;
+  // E24: true setelah user memilih toko manual (switcher/banner/geofence) —
+  // dipakai syncStoreScope agar event auth yang menyala ulang tidak menimpanya.
+  storePickedManually: boolean;
   setActiveStore: (id: string | null) => Promise<void>;
-  syncStoreScope: (storeId: string | null) => Promise<void>;
+  syncStoreScope: (storeId: string | null, opts?: { force?: boolean }) => Promise<void>;
 
   // fetch
   fetchProducts: () => Promise<void>;
@@ -368,10 +371,13 @@ export const useData = create<DataState>()(
       error: null,
       // Default = store env (perilaku single-store lama) sampai login menentukan scope.
       activeStoreId: process.env.NEXT_PUBLIC_STORE_ID ?? null,
+      storePickedManually: false,
 
       setActiveStore: async (id) => {
         if (get().activeStoreId === id) return;
-        set({ activeStoreId: id });
+        // E24: pilihan manual (switcher/banner) dicatat — syncStoreScope tidak boleh
+        // menimpanya balik ke "Semua" saat event auth menyala ulang.
+        set({ activeStoreId: id, storePickedManually: id !== null });
         // E14: fetchTransactions tidak di sini — halaman pemakai (/transactions,
         // dashboard) fetch sendiri saat activeStoreId berubah.
         await Promise.all([
@@ -387,11 +393,23 @@ export const useData = create<DataState>()(
         ]);
       },
 
-      syncStoreScope: async (storeId) => {
+      syncStoreScope: async (storeId, opts) => {
         // Dipanggil auth setelah profil termuat: staff terkunci -> storeId terisi,
         // manager-all -> null (semua toko). Lalu refetch dengan scope baru.
         // E14: fetchTransactions dikeluarkan dari boot (payload 500 tx + items
         // paling berat, tidak dibutuhkan POS) — halaman pemakai fetch sendiri.
+        // E24: SIGNED_IN bisa menyala ulang di tengah sesi (sinkron lintas-tab,
+        // pemulihan sesi). Kalau user SUDAH memilih toko secara manual, jangan
+        // ditimpa balik ke "Semua" — pilihan manual menang. logout pakai force.
+        if (
+          storeId === null &&
+          !opts?.force &&
+          get().storePickedManually &&
+          get().activeStoreId !== null
+        ) {
+          return;
+        }
+        if (opts?.force) set({ storePickedManually: false });
         set({ activeStoreId: storeId });
         await Promise.all([
           get().fetchStores(),

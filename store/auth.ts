@@ -48,7 +48,7 @@ async function applyLoginScope(profile: Staff | null) {
   await useData.getState().syncStoreScope(profile?.storeId ?? null);
 }
 
-export const useAuth = create<AuthState>()((set) => ({
+export const useAuth = create<AuthState>()((set, get) => ({
   initialized: false,
   session: null,
   staff: null,
@@ -83,8 +83,13 @@ export const useAuth = create<AuthState>()((set) => ({
           await supabase.auth.signOut();
           set({ session: null, staff: null });
         } else {
+          // E24: SIGNED_IN bisa menyala ulang di tengah sesi (sinkron lintas-tab,
+          // pemulihan sesi setelah token refresh) — bukan hanya saat login eksplisit.
+          // Re-apply scope untuk user yang SAMA akan menimpa pilihan toko manual
+          // (Glori pilih MJL → balik "Semua" → checkout ditolak "Pilih toko…").
+          const sameUser = get().staff?.id === profile.id;
           set({ session: next, staff: profile });
-          await applyLoginScope(profile);
+          if (!sameUser) await applyLoginScope(profile);
         }
       } else if (event === "TOKEN_REFRESHED" && next) {
         // Token diperbarui — jangan log out staff; sesi tetap valid.
@@ -113,7 +118,10 @@ export const useAuth = create<AuthState>()((set) => ({
       await supabase.auth.signOut();
     }
     // Kembalikan scope default agar data toko sebelumnya tidak bocor ke login berikut.
-    await useData.getState().syncStoreScope(process.env.NEXT_PUBLIC_STORE_ID ?? null);
+    // E24: force = reset juga flag pilihan manual user (sesi baru mulai dari nol).
+    await useData
+      .getState()
+      .syncStoreScope(process.env.NEXT_PUBLIC_STORE_ID ?? null, { force: true });
     set({ session: null, staff: null });
   },
 }));
