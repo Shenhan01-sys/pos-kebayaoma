@@ -4,6 +4,7 @@
 // penjualan murni (preorder lunas dihitung penjualan — omzet penuh saat lunas, aturan E6).
 
 import type { Transaction } from "./dummy";
+import { toLocalDayKey } from "./dummy";
 
 export interface DashboardSummary {
   /** omzet lunas total (penjualan + sewa) — KPI utama, disertai rincian sewa */
@@ -24,8 +25,16 @@ export interface DashboardSummary {
 
 const isRental = (t: Transaction) => t.kind === "rental";
 
-export function computeDashboard(txs: Transaction[]): DashboardSummary {
-  const paid = txs.filter((t) => t.status === "paid");
+/**
+ * Agregasi dashboard. B2: sewa dipisah dari penjualan.
+ * E25: `today` (kunci hari lokal, mis. "2026-10-12") — bila diisi, seluruh
+ * agregasi HANYA atas nota hari itu (KPI berlabel "Hari Ini"; semula terlanjur
+ * menjumlah 200 nota terakhir lintas bulan sehingga angka terasa tak berubah).
+ * `today` tidak diisi = semua waktu (kompatibel pemanggil lama & unit test).
+ */
+export function computeDashboard(txs: Transaction[], today?: string): DashboardSummary {
+  const scoped = today ? txs.filter((t) => toLocalDayKey(t.createdAt) === today) : txs;
+  const paid = scoped.filter((t) => t.status === "paid");
   const salesTx = paid.filter((t) => !isRental(t));
   const rentalTx = paid.filter(isRental);
 

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import { transactions as dummyTx, formatRupiah, type Transaction } from "@/lib/dummy";
+import { transactions as dummyTx, formatRupiah, todayLocalKey, type Transaction } from "@/lib/dummy";
 import { getAllTransactions, subscribeTransactions } from "@/store/cart";
 import { useSettings } from "@/store/settings";
 import { useData } from "@/store/data";
@@ -55,9 +55,10 @@ export default function DashboardPage() {
   }, [activeStoreId]);
 
   const all = live;
-  // B2: sewa dipisah dari penjualan — KPI omzet tetap TOTAL (penjualan + sewa, sub-label rincian);
-  // donut metode bayar & Produk Terlaris hanya penjualan murni (paritas semantik E19/E6).
-  const d = computeDashboard(all);
+  // E25: KPI berlabel "Hari Ini" — agregasi difilter ke hari lokal kasir (WIB),
+  // bukan 200 nota terakhir lintas bulan (sebelumnya angka terasa tak berubah).
+  // Realtime tetap: event DB → refetch debounce 4 dtk → subscribe → recompute.
+  const d = computeDashboard(all, todayLocalKey());
   const { sales, count, byMethod, methodTotal, rental } = d;
   const topProducts = d.topProducts.slice(0, 5);
 

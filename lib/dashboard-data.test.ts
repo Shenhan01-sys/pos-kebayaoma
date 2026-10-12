@@ -96,3 +96,54 @@ describe("B2 computeDashboard — sewa terpisah dari penjualan", () => {
     });
   });
 });
+
+describe("E25 computeDashboard(today) — KPI hanya nota hari itu", () => {
+  const TODAY = "2026-10-12";
+
+  it("nota hari ini + kemarin + bulan lalu: hanya hari ini yang dihitung (WIB)", () => {
+    const d = computeDashboard(
+      [
+        mk({ total: 150000, paymentMethod: "cash", items: [item("Kebaya", 1)], createdAt: "2026-10-12T04:30:00Z" }), // 11:30 WIB — hari ini
+        mk({ total: 200000, paymentMethod: "qris", items: [item("Batik", 1)], createdAt: "2026-10-12T00:30:00Z" }), // 07:30 WIB — hari ini
+        mk({ total: 999000, paymentMethod: "cash", items: [item("Lama", 1)], createdAt: "2026-10-11T10:00:00Z" }), // kemarin
+        mk({ total: 5000000, paymentMethod: "transfer", items: [item("BulanLalu", 1)], createdAt: "2026-09-15T10:00:00Z" }),
+      ],
+      TODAY
+    );
+    expect(d.sales).toBe(350000); // 150rb + 200rb — nota 17:30 UTC ikut (00:30 WIB 12 Okt)
+    expect(d.count).toBe(2);
+    expect(d.byMethod).toEqual({ cash: 150000, qris: 200000 });
+    expect(d.topProducts).toEqual([["Kebaya", 1], ["Batik", 1]]); // tie qty → urutan masuk
+  });
+
+  it("tanpa nota hari ini → semua nol (bukan total lintas bulan)", () => {
+    const d = computeDashboard(
+      [mk({ total: 5000000, paymentMethod: "cash", items: [item("Lama", 1)], createdAt: "2026-09-15T10:00:00Z" })],
+      TODAY
+    );
+    expect(d.sales).toBe(0);
+    expect(d.count).toBe(0);
+  });
+
+  it("sewa hari ini masuk KPI total, tak masuk donut (semantik B2 tetap)", () => {
+    const d = computeDashboard(
+      [
+        mk({ total: 100000, paymentMethod: "cash", items: [item("A", 1)], createdAt: "2026-10-12T02:00:00Z" }),
+        mk({ kind: "rental", total: 105000, paymentMethod: "cash", items: [item("Sewa", 1)], createdAt: "2026-10-12T03:00:00Z" }),
+      ],
+      TODAY
+    );
+    expect(d.sales).toBe(205000);
+    expect(d.rental).toEqual({ total: 105000, count: 1 });
+    expect(d.byMethod).toEqual({ cash: 100000 });
+  });
+
+  it("tanpa argumen today = semua waktu (kompatibel pemanggil lama)", () => {
+    const d = computeDashboard([
+      mk({ total: 100000, paymentMethod: "cash", items: [item("A", 1)], createdAt: "2026-09-01T10:00:00Z" }),
+      mk({ total: 200000, paymentMethod: "cash", items: [item("B", 1)], createdAt: "2026-10-12T10:00:00Z" }),
+    ]);
+    expect(d.sales).toBe(300000);
+    expect(d.count).toBe(2);
+  });
+});
