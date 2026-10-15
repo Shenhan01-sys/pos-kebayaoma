@@ -8,6 +8,7 @@ import BarcodeLabel from "./BarcodeLabel";
 import { useData } from "@/store/data";
 import { buildTsplJob } from "@/lib/tspl";
 import { bytesToBase64, canvasTextRenderer } from "@/lib/tspl-text";
+import { RAWBT_MAX_ROWS, rawbtIntentUrl, shouldUseRawbt } from "@/lib/rawbt";
 
 // E15: jembatan lokal (npm run print-bridge) → TSPL langsung ke printer, tanpa dialog/halaman browser
 const PRINT_BRIDGE_URL = "http://127.0.0.1:9100";
@@ -274,9 +275,28 @@ ${labelHTML}
     }
   };
 
+  // E27: tablet Android → job TSPL yang sama dikirim ke app RawBT (Bluetooth), tanpa print-bridge.
+  // Tanpa fetch ke 127.0.0.1 (tidak ada bridge di tablet; menghindari popup izin jaringan lokal).
+  const xp420bRawbtPrint = (labels: ReturnType<typeof collectLabels>) => {
+    const rows = Math.ceil(labels.length / XP_COLS);
+    if (rows > RAWBT_MAX_ROWS) {
+      alert(
+        `Dari tablet maksimal ${RAWBT_MAX_ROWS * XP_COLS} label (${RAWBT_MAX_ROWS} baris) per cetak.\n` +
+          `Terpilih ${labels.length} label — kurangi jumlahnya lalu cetak bertahap.`
+      );
+      return;
+    }
+    if (!confirm(`Print ${labels.length} label (${rows} baris × 3) ke printer label lewat RawBT?`)) return;
+    window.location.href = rawbtIntentUrl(bytesToBase64(buildTsplJob(labels, canvasTextRenderer())));
+    onClose();
+  };
+
   const handleDirectPrint = () => {
     const labels = collectLabels();
     if (labels.length === 0) return;
+    if (labelSize === "xp420b" && shouldUseRawbt(navigator.userAgent, navigator.maxTouchPoints ?? 0)) {
+      return xp420bRawbtPrint(labels);
+    }
     if (labelSize === "xp420b") return void xp420bBridgePrint(labels);
     return legacyDirectPrint(labels, LABEL_DIMS[labelSize]);
   };
@@ -526,7 +546,8 @@ ${labelHTML}
               {labelSize === "xp420b" && (
                 <p className="mt-2 text-xs text-gray-600">
                   Roll die-cut siap pakai: 3 label per baris, liner 10,8 cm. <b>Direct Print</b> = langsung ke printer
-                  via <code>npm run print-bridge</code> (jumlah baris tepat, tanpa dialog). Tombol PDF = pratinjau.
+                  via <code>npm run print-bridge</code> di PC, atau lewat app <b>RawBT</b> di tablet (XP-D4601B jadi
+                  default di RawBT). Jumlah baris tepat, tanpa dialog. Tombol PDF = pratinjau.
                 </p>
               )}
             </div>
@@ -596,7 +617,7 @@ ${labelHTML}
               <button
                 onClick={handleDirectPrint}
                 disabled={totalLabels === 0}
-                title={labelSize === "xp420b" ? "Cetak langsung ke printer label XP-D4601B lewat print-bridge (jalankan npm run print-bridge di PC ini)" : "Print langsung ke printer thermal (Bluetooth/USB/WiFi) via browser print dialog"}
+                title={labelSize === "xp420b" ? "Cetak langsung ke printer label XP-D4601B: PC lewat print-bridge (npm run print-bridge), tablet lewat app RawBT" : "Print langsung ke printer thermal (Bluetooth/USB/WiFi) via browser print dialog"}
                 className="px-6 py-3 bg-white border-2 border-[#775533] text-[#775533] rounded-xl hover:bg-[#775533]/5 font-bold transition flex items-center gap-2 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
