@@ -286,7 +286,8 @@ ${labelHTML}
       );
       return;
     }
-    if (!confirm(`Print ${labels.length} label (${rows} baris × 3) ke printer label lewat RawBT?`)) return;
+    // Tanpa confirm(): Chrome Android hanya membuka intent app lain bila masih dalam gesture klik,
+    // dan dialog confirm() menghabiskan gesture itu (terbukti: RawBT tidak terbuka, uji 2026-10-15).
     window.location.href = rawbtIntentUrl(bytesToBase64(buildTsplJob(labels, canvasTextRenderer())));
     onClose();
   };
