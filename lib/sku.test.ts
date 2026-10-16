@@ -8,10 +8,10 @@ const seq = (values: number[]) => {
 };
 
 describe("generateSkuCode", () => {
-  it("8 digit angka, digit pertama 1–9", () => {
+  it("6 digit angka, digit pertama 1–9", () => {
     for (let n = 0; n < 200; n++) {
       const c = generateSkuCode(new Set());
-      expect(c).toMatch(/^[1-9]\d{7}$/);
+      expect(c).toMatch(/^[1-9]\d{5}$/);
       expect(c).toHaveLength(SKU_LENGTH);
     }
   });
@@ -23,10 +23,10 @@ describe("generateSkuCode", () => {
     expect(taken.size).toBe(500);
   });
   it("kode bentrok → mencoba lagi sampai unik", () => {
-    // RNG: percobaan 1 menghasilkan 10000000 (bentrok), percobaan 2 menghasilkan 15555555
-    const r = seq([0, 0, 0, 0, 0, 0, 0, 0, 0.1, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]);
-    const taken = new Set(["10000000"]);
-    expect(generateSkuCode(taken, r)).toBe("15555555");
+    // RNG: percobaan 1 menghasilkan 100000 (bentrok), percobaan 2 menghasilkan 155555
+    const r = seq([0, 0, 0, 0, 0, 0, 0.1, 0.5, 0.5, 0.5, 0.5, 0.5]);
+    const taken = new Set(["100000"]);
+    expect(generateSkuCode(taken, r)).toBe("155555");
   });
 });
 
@@ -49,8 +49,8 @@ describe("takenCodes", () => {
 describe("fillVariantSkus — penyebab 409 (SKU varian kosong/kembar)", () => {
   it("dua varian SKU kosong (kasus 409) → dua kode berbeda", () => {
     const out = fillVariantSkus([{ sku: "" }, { sku: "" }], new Set());
-    expect(out[0].sku).toMatch(/^\d{8}$/);
-    expect(out[1].sku).toMatch(/^\d{8}$/);
+    expect(out[0].sku).toMatch(/^\d{6}$/);
+    expect(out[1].sku).toMatch(/^\d{6}$/);
     expect(out[0].sku).not.toBe(out[1].sku);
   });
   it("SKU kembar dalam satu produk → yang kedua diganti, yang pertama dipertahankan", () => {
@@ -77,8 +77,8 @@ describe("fillVariantSkus — penyebab 409 (SKU varian kosong/kembar)", () => {
 
 describe("ensureProductSku", () => {
   it("kosong → kode otomatis", () => {
-    expect(ensureProductSku("", new Set())).toMatch(/^\d{8}$/);
-    expect(ensureProductSku("   ", new Set())).toMatch(/^\d{8}$/);
+    expect(ensureProductSku("", new Set())).toMatch(/^\d{6}$/);
+    expect(ensureProductSku("   ", new Set())).toMatch(/^\d{6}$/);
   });
   it("unik → dipertahankan; bentrok → diganti", () => {
     expect(ensureProductSku("ANTING", new Set())).toBe("ANTING");

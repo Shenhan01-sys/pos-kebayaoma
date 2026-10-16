@@ -258,6 +258,17 @@ describe("barcode adaptive (default) — modul bulat, tanpa distorsi", () => {
     }
     expect(widths.size).toBe(1);
   });
+  it("kode otomatis 6 digit (E28) → modul 3 dot, 68 modul = 204 dot = 25,5 mm, lebar sama", () => {
+    const widths = new Set<number>();
+    for (const code of ["123456", "987654", "100001", "555555", "732304"]) {
+      const b = code128BitmapAdaptive(code, 40)!;
+      expect(widthDots(code)).toBe(68);
+      expect(b.w).toBe(68 * 3);
+      widths.add(b.w);
+    }
+    expect(widths.size).toBe(1);
+    expect(68 * 3 / 8).toBe(25.5);
+  });
   it("kode > sel 33 mm (>264 modul) → null (jatuh ke BARCODE native)", () => {
     expect(code128BitmapAdaptive("KEBAYA-BROKAT-PREMIUM-EDISI-KHUSUS", 40)).toBeNull();
   });

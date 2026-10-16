@@ -1,10 +1,12 @@
-// lib/sku.ts — E16: kode SKU/barcode otomatis (8 digit angka, unik) — user tidak mengisi SKU manual.
-// Alasan: SKU varian kosong/kembar → 409 (unique product_id+sku) di Supabase; kode angka 8 digit =
-// Code128 subset C = 79 modul → barcode 3 dot (0,375 mm), lebar seragam, paling andal di scanner.
+// lib/sku.ts — E16: kode SKU/barcode otomatis (angka, unik) — user tidak mengisi SKU manual.
+// Alasan: SKU varian kosong/kembar → 409 (unique product_id+sku) di Supabase; kode angka = Code128
+// subset C → barcode 3 dot (0,375 mm), lebar seragam, paling andal di scanner.
+// E28 (2026-10-16, keputusan user): 8 → 6 digit = 68 modul × 3 dot = 204 dot = 25,5 mm (8 digit = 29,6 mm).
+// Jumlah digit wajib genap — ganjil (mis. 7) butuh pindah subset → 90 modul, malah lebih panjang.
 
-export const SKU_LENGTH = 8;
+export const SKU_LENGTH = 6;
 
-/** 8 digit angka (digit pertama 1–9), unik terhadap `taken`; kode baru otomatis dimasukkan ke `taken`. */
+/** SKU_LENGTH digit angka (digit pertama 1–9), unik terhadap `taken`; kode baru otomatis dimasukkan ke `taken`. */
 export function generateSkuCode(taken: Set<string>, rnd: () => number = Math.random): string {
   for (let attempt = 0; attempt < 1000; attempt++) {
     let s = String(1 + Math.floor(rnd() * 9));

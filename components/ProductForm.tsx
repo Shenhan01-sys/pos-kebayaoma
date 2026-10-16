@@ -136,7 +136,7 @@ export default function ProductForm({
         <Labeled label="Nama Produk">
           <input value={name} onChange={(e) => setName(e.target.value)} className="input" />
         </Labeled>
-        {/* E16: SKU tidak diisi manual lagi — dibuat otomatis (8 digit, unik) saat simpan */}
+        {/* E16: SKU tidak diisi manual lagi — dibuat otomatis (6 digit, unik) saat simpan */}
         {product && (
           <Labeled label="Kode produk (otomatis)">
             <div className="input bg-black/5 text-gray-600">{sku || "—"}</div>

@@ -749,7 +749,7 @@ export const useData = create<DataState>()(
           const seedQty = seed ?? pRest.stock ?? 0;
 
           // E16: SKU otomatis & unik (produk + varian). SKU kosong/kembar tidak lagi memicu 409
-          // (unique product_id+sku) dan kode angka 8 digit = barcode 3-dot yang andal di scanner.
+          // (unique product_id+sku) dan kode angka 6 digit (E28) = barcode 3-dot 25,5 mm yang andal di scanner.
           const taken = takenCodes(get().products);
           const productSku = ensureProductSku(pRest.sku, taken);
           taken.add(productSku);
