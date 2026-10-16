@@ -48,7 +48,8 @@ export const XP_GAP_MM = 3;
 export const XP_ORIGIN_MM = 1.0;
 /** jarak tepi-kiri antar kolom (diukur: 36,0 dan 36,5 → rata-rata) */
 export const XP_PITCH_MM = 36.25;
-export const XP_LEFT_OFFSET_MM = 0;
+/** geser kanan 1 mm — isi label kurang ke kanan dibanding label fisik (ukur user, cetak RawBT 2026-10-16) */
+export const XP_LEFT_OFFSET_MM = 1;
 /** naik 1 mm dari 2,5 — hasil uji cetak fisik 2026-10-02 */
 export const XP_TOP_OFFSET_MM = 1.5;
 /** BITMAP TSPL: bit 0 = titik hitam (tercetak), bit 1 = putih */

@@ -11,6 +11,7 @@ import {
   fitText,
   tsplSafe,
   XP_COLS,
+  XP_LEFT_OFFSET_MM,
   type TextRenderer,
 } from "./tspl";
 
@@ -91,7 +92,8 @@ describe("buildTsplJob — jumlah baris tepat (tanpa label kosong)", () => {
 
 describe("posisi — tiap objek di-center sendiri terhadap sel 33 mm (264 dot)", () => {
   const cells = [8, 298, 588];
-  const job = (labels: Parameters<typeof buildTsplJob>[0], o = {}) => parse(buildTsplJob(labels, fake, { topOffsetMm: 0, ...o }));
+  // geometri relatif sel diuji tanpa kalibrasi (leftOffsetMm 0) — offset default diuji terpisah
+  const job = (labels: Parameters<typeof buildTsplJob>[0], o = {}) => parse(buildTsplJob(labels, fake, { topOffsetMm: 0, leftOffsetMm: 0, ...o }));
 
   it("pitch kolom 290 dot (36,25 mm hasil ukur)", () => {
     const x = job(mk(3), { leftOffsetMm: 0 }).filter((c) => c.cmd === "BARCODE");
@@ -100,6 +102,12 @@ describe("posisi — tiap objek di-center sendiri terhadap sel 33 mm (264 dot)",
     expect(same[1].x! - same[0].x!).toBe(290);
     expect(same[2].x! - same[1].x!).toBe(290);
     expect(x.length).toBe(3);
+  });
+  it("default XP_LEFT_OFFSET_MM = 1 mm → semua isi geser kanan 8 dot (kalibrasi 2026-10-16)", () => {
+    const a = job(mk(3)).filter((c) => c.cmd === "BARCODE").map((c) => c.x!);
+    const d = parse(buildTsplJob(mk(3), fake, { topOffsetMm: 0 })).filter((c) => c.cmd === "BARCODE").map((c) => c.x!);
+    expect(XP_LEFT_OFFSET_MM).toBe(1);
+    expect(d.map((x, i) => x - a[i])).toEqual([8, 8, 8]);
   });
   it("leftOffsetMm menggeser kanan 8 dot per mm", () => {
     const a = job(mk(1), { leftOffsetMm: 0 }).find((c) => c.cmd === "BARCODE")!.x!;
@@ -212,7 +220,7 @@ describe("barcode lebar seragam (fixedBarcode)", () => {
     expect(c.filter((x) => x.cmd === "BITMAP" && x.wb === 30 && x.h === 40).length).toBe(3);
   });
   it("barcode fixed di-center di sel 33 mm: margin kiri == kanan", () => {
-    const c = parse(buildRaw(mk(1), fake, { barcodeMode: "fixed", topOffsetMm: 0 }));
+    const c = parse(buildRaw(mk(1), fake, { barcodeMode: "fixed", topOffsetMm: 0, leftOffsetMm: 0 }));
     const bm = c.find((x) => x.cmd === "BITMAP" && x.h === 40)!;
     expect(bm.x! - 8).toBe(264 - (bm.x! - 8) - 240);
   });
@@ -273,7 +281,7 @@ describe("barcode adaptive (default) — modul bulat, tanpa distorsi", () => {
     expect(code128BitmapAdaptive("KEBAYA-BROKAT-PREMIUM-EDISI-KHUSUS", 40)).toBeNull();
   });
   it("job default: tanpa perintah BARCODE; barcode = BITMAP; di-center di sel", () => {
-    const c = parse(buildRaw(mk(1), fake, { topOffsetMm: 0 }));
+    const c = parse(buildRaw(mk(1), fake, { topOffsetMm: 0, leftOffsetMm: 0 }));
     expect(count(c, "BARCODE")).toBe(0);
     const bm = c.find((x) => x.cmd === "BITMAP" && x.h === 40)!;
     expect(Math.abs(bm.x! - 8 - (264 - (bm.x! - 8) - bm.w!))).toBeLessThanOrEqual(8);
