@@ -5,8 +5,9 @@ import jsPDF from "jspdf";
 import JsBarcode from "jsbarcode";
 import { Dialog, DialogPanel, DialogTitle } from "@headlessui/react";
 import BarcodeLabel from "./BarcodeLabel";
+import RawbtSetupPanel from "./RawbtSetupPanel";
 import { useData } from "@/store/data";
-import { buildTsplJob } from "@/lib/tspl";
+import { buildCalibrationJob, buildTsplJob } from "@/lib/tspl";
 import { bytesToBase64, canvasTextRenderer } from "@/lib/tspl-text";
 import { RAWBT_MAX_ROWS, rawbtIntentUrl, shouldUseRawbt } from "@/lib/rawbt";
 
@@ -43,6 +44,8 @@ export default function PrintBarcodeModal({
   // Satuan baris = 1,5 label + 0,3 gap = 1,8 cm → page break wajib kelipatan 1,8.
   // 40x20/50x25/60x30 = jalur RPP02N (single label per halaman).
   const [labelSize, setLabelSize] = useState<"60x30" | "50x25" | "40x20" | "xp420b">("xp420b");
+  // E29: panel siapkan printer (tablet/RawBT) — muncul saat Direct Print diklik
+  const [showRawbtSetup, setShowRawbtSetup] = useState(false);
   const LABEL_DIMS: Record<string, { w: number; h: number }> = {
     "60x30": { w: 60, h: 30 },
     "50x25": { w: 50, h: 25 },
@@ -67,6 +70,7 @@ export default function PrintBarcodeModal({
   // Auto-check all variants on open (preset → varian & copies dari restock)
   useEffect(() => {
     if (isOpen) {
+      setShowRawbtSetup(false);
       if (preset) {
         setSelectedVariants({ [preset.variantId]: preset.copies });
         return;
@@ -296,7 +300,8 @@ ${labelHTML}
     const labels = collectLabels();
     if (labels.length === 0) return;
     if (labelSize === "xp420b" && shouldUseRawbt(navigator.userAgent, navigator.maxTouchPoints ?? 0)) {
-      return xp420bRawbtPrint(labels);
+      // E29: cetak hanya lewat panel, setelah RawBT terbuka & printer terbukti tersambung
+      return setShowRawbtSetup(true);
     }
     if (labelSize === "xp420b") return void xp420bBridgePrint(labels);
     return legacyDirectPrint(labels, LABEL_DIMS[labelSize]);
@@ -547,8 +552,9 @@ ${labelHTML}
               {labelSize === "xp420b" && (
                 <p className="mt-2 text-xs text-gray-600">
                   Roll die-cut siap pakai: 3 label per baris, liner 10,8 cm. <b>Direct Print</b> = langsung ke printer
-                  via <code>npm run print-bridge</code> di PC, atau lewat app <b>RawBT</b> di tablet (XP-D4601B jadi
-                  default di RawBT). Jumlah baris tepat, tanpa dialog. Tombol PDF = pratinjau.
+                  via <code>npm run print-bridge</code> di PC, atau lewat app <b>RawBT</b> di tablet (profil
+                  XP-D4601B_RAW, driver raw transfer, jadi default — Direct Print membuka panel siapkan printer dulu).
+                  Jumlah baris tepat, tanpa dialog. Tombol PDF = pratinjau.
                 </p>
               )}
             </div>
@@ -582,6 +588,22 @@ ${labelHTML}
                   )}
                 </div>
               </div>
+            )}
+
+            {/* E29: siapkan printer label di tablet (RawBT) */}
+            {showRawbtSetup && labelSize === "xp420b" && (
+              <RawbtSetupPanel
+                labelCount={totalLabels}
+                rows={Math.ceil(totalLabels / XP_COLS)}
+                onPrint={() => {
+                  const labels = collectLabels();
+                  if (labels.length > 0) xp420bRawbtPrint(labels);
+                }}
+                onPrintCalibration={() => {
+                  window.location.href = rawbtIntentUrl(bytesToBase64(buildCalibrationJob()));
+                }}
+                onClose={() => setShowRawbtSetup(false)}
+              />
             )}
 
             {/* Total */}

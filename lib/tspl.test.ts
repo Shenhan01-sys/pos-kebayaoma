@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   BITMAP_INK_BIT,
+  buildCalibrationJob,
   buildTsplJob as buildRaw,
   code128Bitmap,
   code128BitmapAdaptive,
@@ -306,5 +307,30 @@ describe("helper", () => {
   });
   it("code128Modules satu karakter", () => {
     expect(code128Modules("A")).toBe((1 + 2) * 11 + 13);
+  });
+});
+
+describe("E29 — 1 baris kalibrasi", () => {
+  const lines = (o = {}) => new TextDecoder().decode(buildCalibrationJob(o)).split("\r\n").filter(Boolean);
+  it("tepat 1 baris (1× PRINT), 3 kotak + 3 garis tengah, tanpa BITMAP/teks", () => {
+    const l = lines();
+    expect(l.filter((x) => x.startsWith("PRINT")).length).toBe(1);
+    expect(l.filter((x) => x.startsWith("BOX")).length).toBe(3);
+    expect(l.filter((x) => x.startsWith("BAR")).length).toBe(3);
+    expect(l.some((x) => /BITMAP|TEXT|BARCODE/.test(x))).toBe(false);
+  });
+  it("kotak = area isi label asli: lebar 240 dot, pitch 290, di-center di sel 264", () => {
+    const boxes = lines({ leftOffsetMm: 0, topOffsetMm: 0 }).filter((x) => x.startsWith("BOX")).map((x) => x.slice(4).split(",").map(Number));
+    expect(boxes.map((b) => b[0])).toEqual([8 + 12, 8 + 290 + 12, 8 + 580 + 12]);
+    for (const [x0, y0, x1, y1] of boxes) {
+      expect(x1 - x0).toBe(240);
+      expect([y0, y1]).toEqual([14, 99]);
+    }
+  });
+  it("ikut kalibrasi default (kiri 1 mm, atas 2,5 mm) dan tetap di dalam label 120 dot", () => {
+    const [x0, y0, , y1] = lines().find((x) => x.startsWith("BOX"))!.slice(4).split(",").map(Number);
+    expect(x0).toBe(8 + 8 + 12);
+    expect(y0).toBe(20 + 14);
+    expect(y1).toBeLessThanOrEqual(120);
   });
 });

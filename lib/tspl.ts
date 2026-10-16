@@ -72,6 +72,8 @@ const Y_NAME = 60;
 const Y_PRICE = 76;
 const NAME_PX = { max: 13, min: 10 };
 const PRICE_PX = { max: 18, min: 13 };
+/** batas bawah isi (relatif atas sel): harga ukuran maksimum = Y_PRICE + tinggi bitmap teks */
+const Y_CONTENT_END = Y_PRICE + Math.ceil(PRICE_PX.max * 1.25); // 99
 
 /** hanya ASCII cetak, tanda kutip dibuang (kutip memecah string TSPL) */
 export function tsplSafe(s: string): string {
@@ -256,4 +258,24 @@ export function buildTsplJob(labels: TsplLabel[], render: TextRenderer, opts: Ts
   let o = 0;
   for (const p of parts) { out.set(p, o); o += p.length; }
   return out;
+}
+
+/**
+ * E29: 1 baris kalibrasi — tiap kolom: kotak = area isi yang sama dengan label asli (barcode s/d harga,
+ * lebar aman 240 dot) + garis tengah vertikal. Kotak harus tampak di tengah label fisik; bila tidak,
+ * setel XP_LEFT_OFFSET_MM / XP_TOP_OFFSET_MM. Tanpa teks/bitmap → tidak bergantung font.
+ */
+export function buildCalibrationJob(opts: Pick<TsplOptions, "leftOffsetMm" | "topOffsetMm"> = {}): Uint8Array {
+  const left = mm(XP_ORIGIN_MM + (opts.leftOffsetMm ?? XP_LEFT_OFFSET_MM));
+  const top = mm(opts.topOffsetMm ?? XP_TOP_OFFSET_MM);
+  const y0 = top + Y_BARCODE;
+  const y1 = top + Y_CONTENT_END;
+  let job = `SIZE 108 mm,${XP_LABEL_H_MM} mm\r\nGAP ${XP_GAP_MM} mm,0 mm\r\nDIRECTION 1\r\nCLS\r\n`;
+  for (let c = 0; c < XP_COLS; c++) {
+    const x = left + c * CELL_PITCH;
+    job += `BOX ${x + 12},${y0},${x + CELL_W - 12},${y1},2\r\n`;
+    job += `BAR ${x + CELL_W / 2 - 1},${y0},2,${y1 - y0}\r\n`;
+  }
+  job += "PRINT 1,1\r\n";
+  return enc.encode(job);
 }

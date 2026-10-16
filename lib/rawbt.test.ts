@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { RAWBT_MAX_ROWS, RAWBT_PACKAGE, rawbtIntentUrl, shouldUseRawbt } from "./rawbt";
+import {
+  RAWBT_BEEP_JOB,
+  RAWBT_LAUNCH_URL,
+  RAWBT_MAX_ROWS,
+  RAWBT_PACKAGE,
+  RAWBT_READY_TTL_MS,
+  rawbtIntentUrl,
+  rawbtReadiness,
+  shouldUseRawbt,
+} from "./rawbt";
 import { buildTsplJob, XP_COLS, type TextRenderer } from "./tspl";
 
 const UA_WIN = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/154.0 Safari/537.36";
@@ -44,5 +53,39 @@ describe("rawbtIntentUrl", () => {
     }));
     const b64 = Buffer.from(buildTsplJob(labels, fake)).toString("base64");
     expect(rawbtIntentUrl(b64).length).toBeLessThan(300_000);
+  });
+});
+
+describe("E29 — siapkan printer (RawBT)", () => {
+  const T = 1_000_000;
+  it("belum ada bukti → tidak siap", () => {
+    expect(rawbtReadiness({}, T)).toEqual({ app: false, printer: false, ready: false, remainingMs: 0 });
+  });
+  it("RawBT terbuka saja → app ✓, printer ✗, cetak terkunci", () => {
+    const r = rawbtReadiness({ appAt: T }, T + 1000);
+    expect([r.app, r.printer, r.ready]).toEqual([true, false, false]);
+  });
+  it("bip printer tanpa RawBT terbuka → tetap tidak siap", () => {
+    expect(rawbtReadiness({ printerAt: T }, T + 1000).ready).toBe(false);
+  });
+  it("keduanya ✓ → siap; sisa waktu dihitung dari bukti tertua", () => {
+    const r = rawbtReadiness({ appAt: T, printerAt: T + 60_000 }, T + 120_000);
+    expect(r.ready).toBe(true);
+    expect(r.remainingMs).toBe(RAWBT_READY_TTL_MS - 120_000);
+  });
+  it("kedaluwarsa setelah TTL → kembali terkunci", () => {
+    const r = rawbtReadiness({ appAt: T, printerAt: T }, T + RAWBT_READY_TTL_MS);
+    expect([r.app, r.ready]).toEqual([false, false]);
+  });
+  it("waktu di masa depan (jam perangkat mundur) tidak dianggap bukti", () => {
+    expect(rawbtReadiness({ appAt: T + 5000, printerAt: T + 5000 }, T).ready).toBe(false);
+  });
+  it("URL buka RawBT memakai skema app402d (BROWSABLE), bukan MAIN/LAUNCHER", () => {
+    expect(RAWBT_LAUNCH_URL).toBe(`intent://${RAWBT_PACKAGE}#Intent;scheme=app402d;package=${RAWBT_PACKAGE};end`);
+    expect(RAWBT_LAUNCH_URL).not.toContain("LAUNCHER");
+  });
+  it("perintah bip = TSPL SOUND saja (tanpa PRINT → tidak mengeluarkan label)", () => {
+    expect(RAWBT_BEEP_JOB).toBe("SOUND 5,300\r\n");
+    expect(RAWBT_BEEP_JOB).not.toMatch(/PRINT|FEED|FORMFEED/);
   });
 });
