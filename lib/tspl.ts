@@ -50,8 +50,8 @@ export const XP_ORIGIN_MM = 1.0;
 export const XP_PITCH_MM = 36.25;
 /** geser kanan 1 mm — isi label kurang ke kanan dibanding label fisik (ukur user, cetak RawBT 2026-10-16) */
 export const XP_LEFT_OFFSET_MM = 1;
-/** naik 1 mm dari 2,5 — hasil uji cetak fisik 2026-10-02 */
-export const XP_TOP_OFFSET_MM = 1.5;
+/** 2,5 → 1,5 (uji fisik 2026-10-02, roll lama) → 2,5 lagi: turun 1 mm, uji cetak RawBT 2026-10-16 (roll baru) */
+export const XP_TOP_OFFSET_MM = 2.5;
 /** BITMAP TSPL: bit 0 = titik hitam (tercetak), bit 1 = putih */
 export const BITMAP_INK_BIT = 0;
 /** default mode barcode — user: mode "fixed" (modul pecahan) tidak terbaca scanner (2026-10-02) */

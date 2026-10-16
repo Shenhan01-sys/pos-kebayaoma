@@ -147,9 +147,12 @@ describe("posisi — tiap objek di-center sendiri terhadap sel 33 mm (264 dot)",
       }
     }
   });
-  it("tinggi blok isi ≤ 12 mm & offset atas default 1,5 mm (12 dot)", () => {
+  it("tinggi blok isi ≤ 12 mm & offset atas default 2,5 mm (20 dot)", () => {
     const y0 = (o: object) => Math.min(...parse(buildTsplJob(mk(1), fake, o)).filter((c) => c.y !== undefined).map((c) => c.y!));
-    expect(y0({}) - y0({ topOffsetMm: 0 })).toBe(12);
+    expect(y0({}) - y0({ topOffsetMm: 0 })).toBe(20);
+    // isi terbawah (harga) tetap di dalam label 15 mm = 120 dot
+    const all = parse(buildTsplJob(mk(1), fake));
+    expect(Math.max(...all.filter((c) => c.cmd === "BITMAP").map((c) => c.y! + c.h!))).toBeLessThanOrEqual(120);
     const ys = parse(buildTsplJob(mk(1), fake, { topOffsetMm: 0 }));
     const bottom = Math.max(...ys.filter((c) => c.cmd === "BITMAP").map((c) => c.y! + c.h!));
     expect(bottom - Math.min(...ys.filter((c) => c.y !== undefined).map((c) => c.y!))).toBeLessThanOrEqual(104);
