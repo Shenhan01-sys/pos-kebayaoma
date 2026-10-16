@@ -10,6 +10,7 @@ import { useData } from "@/store/data";
 import { buildCalibrationJob, buildTsplJob } from "@/lib/tspl";
 import { bytesToBase64, canvasTextRenderer } from "@/lib/tspl-text";
 import { RAWBT_MAX_ROWS, rawbtIntentUrl, shouldUseRawbt } from "@/lib/rawbt";
+import { isCode128Printable } from "@/lib/barcode";
 
 // E15: jembatan lokal (npm run print-bridge) → TSPL langsung ke printer, tanpa dialog/halaman browser
 const PRINT_BRIDGE_URL = "http://127.0.0.1:9100";
@@ -112,6 +113,8 @@ export default function PrintBarcodeModal({
     allVariants.forEach(({ product, variant }) => {
       const count = selectedVariants[variant.id] || 0;
       if (count === 0) return;
+      // varian tanpa kode barcode valid dilewati (dulu menjatuhkan halaman) — diperingatkan di UI
+      if (!isCode128Printable(barcodeFor(variant))) return;
       for (let c = 0; c < count; c++) {
         labels.push({
           name: product.name,
@@ -312,7 +315,9 @@ ${labelHTML}
     const XP_TOP_OFFSET = 5;
     const rows = Math.ceil(labels.length / XP_COLS);
     const doc = new jsPDF({
-      orientation: "portrait",
+      // jsPDF menukar sisi bila orientasi tak cocok: [108, 23] + "portrait" → halaman 23×108 berdiri,
+      // label kolom 2–3 di luar halaman (temuan 2026-10-15) → orientasi ikut sisi terpanjang
+      orientation: SHEET_W > XP_TOP_OFFSET + rows * ROW_PITCH ? "landscape" : "portrait",
       unit: "mm",
       format: [SHEET_W, XP_TOP_OFFSET + rows * ROW_PITCH],
     });
@@ -423,15 +428,23 @@ ${labelHTML}
     return legacyPdf(labels, LABEL_DIMS[labelSize]);
   };
 
-  // Calculate total labels
-  const totalLabels = Object.values(selectedVariants).reduce((a, b) => a + b, 0);
-
   // Get all variants from selected products
   const allVariants = productsToPrint.flatMap((p) =>
     p.variants.map((v) => ({
       product: p,
       variant: v,
     }))
+  );
+
+  // Varian terpilih yang tidak punya kode barcode valid → tidak ikut dicetak
+  const skippedNoCode = allVariants.filter(
+    ({ variant }) => selectedVariants[variant.id] && !isCode128Printable(barcodeFor(variant))
+  );
+
+  // Calculate total labels (hanya yang benar-benar bisa dicetak)
+  const totalLabels = allVariants.reduce(
+    (n, { variant }) => n + (isCode128Printable(barcodeFor(variant)) ? selectedVariants[variant.id] || 0 : 0),
+    0
   );
 
   return (
@@ -558,6 +571,17 @@ ${labelHTML}
                 </p>
               )}
             </div>
+
+            {skippedNoCode.length > 0 && (
+              <div className="mb-6 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800">
+                <b>{skippedNoCode.length} varian dilewati — tidak punya kode barcode/SKU yang valid:</b>{" "}
+                {skippedNoCode
+                  .slice(0, 5)
+                  .map(({ product, variant }) => `${product.name}${variant.color ? ` (${variant.color})` : ""}`)
+                  .join(", ")}
+                {skippedNoCode.length > 5 && ` +${skippedNoCode.length - 5} lainnya`}. Isi barcode di Edit produk agar bisa dicetak.
+              </div>
+            )}
 
             {/* Preview */}
             {Object.keys(selectedVariants).length > 0 && (

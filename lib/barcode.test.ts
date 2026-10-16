@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { encodeVoBarcode, parseVoBarcode, resolveVoScan } from "./barcode";
+import { encodeVoBarcode, isCode128Printable, parseVoBarcode, resolveVoScan } from "./barcode";
 
 const UUID_A = "11111111-1111-4111-8111-111111111111";
 const UUID_B = "22222222-2222-4222-8222-222222222222";
@@ -44,5 +44,18 @@ describe("resolveVoScan", () => {
 
   it("ref tak dikenal → null", () => {
     expect(resolveVoScan({ refId: "nope", vendorId: "X" }, candidates)).toBeNull();
+  });
+});
+
+describe("isCode128Printable", () => {
+  it("kosong / spasi / null → tidak bisa dicetak", () => {
+    for (const c of ["", "   ", null, undefined]) expect(isCode128Printable(c)).toBe(false);
+  });
+  it("kode angka & teks ASCII → bisa", () => {
+    for (const c of ["652544", "ANTING-ANTING-S", "VO:abc:def"]) expect(isCode128Printable(c)).toBe(true);
+  });
+  it("karakter non-ASCII (mis. é, ·) → tidak bisa (JsBarcode CODE128 menolak)", () => {
+    expect(isCode128Printable("KEBAYA-É")).toBe(false);
+    expect(isCode128Printable("A·B")).toBe(false);
   });
 });

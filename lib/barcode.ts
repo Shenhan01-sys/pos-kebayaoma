@@ -34,3 +34,13 @@ export function resolveVoScan<T extends ScanCandidate>(
   if (byVariant) return byVariant;
   return lines.find((l) => l.productId === vo.refId) ?? null;
 }
+
+/**
+ * Kode yang bisa dibuat barcode Code128 (JsBarcode): tidak kosong & hanya ASCII 0–127.
+ * Selain itu JsBarcode melempar error ("" is not a valid input) — dulu menjatuhkan seluruh halaman
+ * Print Barcode saat varian tanpa SKU & barcode dicentang (temuan 2026-10-16).
+ */
+export function isCode128Printable(code: string | null | undefined): code is string {
+  const c = (code ?? "").trim();
+  return c.length > 0 && /^[\x00-\x7F]+$/.test(c);
+}

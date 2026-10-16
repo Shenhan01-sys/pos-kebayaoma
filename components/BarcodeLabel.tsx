@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useRef, useEffect } from "react";
+import React, { useRef, useEffect, useState } from "react";
 import JsBarcode from "jsbarcode";
+import { isCode128Printable } from "@/lib/barcode";
 
 interface BarcodeLabelProps {
   barcode: string; // Barcode value (e.g., "8995501S")
@@ -25,9 +26,16 @@ export default function BarcodeLabel({
   height = 30,
 }: BarcodeLabelProps) {
   const svgRef = useRef<SVGSVGElement>(null);
+  // kode kosong / tak valid → tampil "tanpa barcode", bukan crash seluruh halaman (temuan 2026-10-16)
+  const [invalid, setInvalid] = useState(!isCode128Printable(barcode));
 
   useEffect(() => {
-    if (svgRef.current) {
+    if (!svgRef.current) return;
+    if (!isCode128Printable(barcode)) {
+      setInvalid(true);
+      return;
+    }
+    try {
       JsBarcode(svgRef.current, barcode, {
         format: "CODE128",
         width: 1.5,
@@ -35,6 +43,9 @@ export default function BarcodeLabel({
         displayValue: false,
         margin: 0,
       });
+      setInvalid(false);
+    } catch {
+      setInvalid(true);
     }
   }, [barcode]);
 
@@ -49,8 +60,12 @@ export default function BarcodeLabel({
     >
       {/* Barcode */}
       <div className="flex-1">
-        <svg ref={svgRef} className="w-full" style={{ height: "60%" }} />
-        <div className="text-[8px] text-center mt-1">{barcode}</div>
+        <svg ref={svgRef} className={invalid ? "hidden" : "w-full"} style={{ height: "60%" }} />
+        {invalid ? (
+          <div className="text-[9px] text-center text-red-600 font-semibold">Tanpa barcode</div>
+        ) : (
+          <div className="text-[8px] text-center mt-1">{barcode}</div>
+        )}
       </div>
 
       {/* Product Info */}
