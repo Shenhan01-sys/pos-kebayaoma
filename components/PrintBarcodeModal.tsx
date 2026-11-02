@@ -11,6 +11,7 @@ import { buildCalibrationJob, buildTsplJob } from "@/lib/tspl";
 import { bytesToBase64, canvasTextRenderer } from "@/lib/tspl-text";
 import { RAWBT_MAX_ROWS, rawbtIntentUrl, shouldUseRawbt } from "@/lib/rawbt";
 import { isCode128Printable } from "@/lib/barcode";
+import { labelColor, labelSize as labelSizeText, labelTitle } from "@/lib/label-text";
 
 // E15: jembatan lokal (npm run print-bridge) → TSPL langsung ke printer, tanpa dialog/halaman browser
 const PRINT_BRIDGE_URL = "http://127.0.0.1:9100";
@@ -115,11 +116,12 @@ export default function PrintBarcodeModal({
       if (count === 0) return;
       // varian tanpa kode barcode valid dilewati (dulu menjatuhkan halaman) — diperingatkan di UI
       if (!isCode128Printable(barcodeFor(variant))) return;
+      const name = labelTitle(product.name, variant.name);
       for (let c = 0; c < count; c++) {
         labels.push({
-          name: product.name,
-          color: variant.color,
-          size: variant.size,
+          name,
+          color: labelColor(variant.color, name),
+          size: labelSizeText(variant.size),
           price: variant.sellingPrice,
           barcode: barcodeFor(variant),
           vendor: vendorFor(variant.id),
@@ -163,7 +165,7 @@ export default function PrintBarcodeModal({
             <div class="label-name">${label.name}</div>
             ${label.color ? `<div class="label-color">${label.color}</div>` : ""}
             ${label.vendor ? `<div class="label-color">Vend: ${label.vendor}</div>` : ""}
-            <div class="label-size">Size: ${label.size}</div>
+            ${label.size ? `<div class="label-size">Size: ${label.size}</div>` : ""}
             <div class="label-price">Rp ${label.price.toLocaleString("id-ID")}</div>
           </div>
         </div>`;
@@ -411,7 +413,7 @@ ${labelHTML}
       let textY = y + 4 + nameLines.length * 3.5;
       if (label.color) { doc.text(label.color, infoX, textY); textY += 3.5; }
       if (label.vendor) { doc.text(`Vend: ${label.vendor}`, infoX, textY); textY += 3.5; }
-      doc.text(`Size: ${label.size}`, infoX, textY);
+      if (label.size) doc.text(`Size: ${label.size}`, infoX, textY);
 
       doc.setFont("helvetica", "bold").setFontSize(8).setTextColor(119, 85, 51);
       doc.text(`Rp ${label.price.toLocaleString("id-ID")}`, infoX, y + dims.h - 4);
@@ -597,9 +599,9 @@ ${labelHTML}
                       <BarcodeLabel
                         key={variant.id}
                         barcode={variant.barcode || variant.sku}
-                        productName={product.name}
-                        color={variant.color}
-                        size={variant.size}
+                        productName={labelTitle(product.name, variant.name)}
+                        color={labelColor(variant.color, labelTitle(product.name, variant.name))}
+                        size={labelSizeText(variant.size)}
                         price={variant.sellingPrice}
                         width={LABEL_DIMS[labelSize].w}
                         height={LABEL_DIMS[labelSize].h}

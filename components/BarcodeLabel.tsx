@@ -76,10 +76,12 @@ export default function BarcodeLabel({
             : productName}
         </div>
         {color && <div className="text-gray-600" style={{ fontSize: "9px" }}>{color}</div>}
-        <div style={{ fontSize: "9px" }}>
-          Size: {size}
-          {chestCircumference && ` | ${chestCircumference}`}
-        </div>
+        {(size || chestCircumference) && (
+          <div style={{ fontSize: "9px" }}>
+            {size && `Size: ${size}`}
+            {chestCircumference && `${size ? " | " : ""}${chestCircumference}`}
+          </div>
+        )}
         <div className="font-semibold text-[#775533]" style={{ fontSize: "11px", marginTop: "2px" }}>
           Rp {price.toLocaleString("id-ID")}
         </div>
