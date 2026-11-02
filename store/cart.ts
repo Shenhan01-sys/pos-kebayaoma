@@ -91,13 +91,13 @@ export const useCart = create<CartState>((set, get) => ({
     set((state) => {
       if (state.rental) return state; // E18: keranjang sewa terkunci
       const cap = Math.max(0, product.stock ?? 0);
-      const existing = state.lines.find((l) => l.variantId === variant.id);
+      const existing = state.lines.find((l) => l.variantId === variant.id && !l.custom);
       if (existing) {
         const nextQty = Math.min(existing.quantity + qty, cap);
         if (nextQty <= 0 || nextQty === existing.quantity) return state;
         return {
           lines: state.lines.map((l) =>
-            l.variantId === variant.id
+            l.variantId === variant.id && !l.custom
               ? {
                   ...l,
                   quantity: nextQty,
@@ -151,13 +151,13 @@ export const useCart = create<CartState>((set, get) => ({
   setUnitPrice: (key, price) =>
     set((s) => s.rental ? s : ({
       lines: s.lines.map((l) =>
-        l.variantId === key ? { ...l, unitPrice: Math.max(0, price) } : l
+        l.key === key ? { ...l, unitPrice: Math.max(0, price) } : l
       ),
     })),
   inc: (key) =>
     set((s) => s.rental ? s : ({
       lines: s.lines.map((l) => {
-        if (l.variantId !== key) return l;
+        if (l.key !== key) return l;
         if (l.custom && l.productId === "custom") return { ...l, quantity: l.quantity + 1 };
         const stock = useData.getState().products.find((p) => p.id === l.productId)?.stock;
         if (stock !== undefined && l.quantity + 1 > stock) return l; // mentok stok
@@ -168,7 +168,7 @@ export const useCart = create<CartState>((set, get) => ({
     set((s) => s.rental ? s : ({
       lines: s.lines
         .map((l) =>
-          l.variantId === key ? { ...l, quantity: l.quantity - 1 } : l
+          l.key === key ? { ...l, quantity: l.quantity - 1 } : l
         )
         .filter((l) => l.quantity > 0),
     })),
@@ -176,7 +176,7 @@ export const useCart = create<CartState>((set, get) => ({
     set((s) => s.rental ? s : ({
       lines: s.lines
         .map((l) => {
-          if (l.variantId !== key) return l;
+          if (l.key !== key) return l;
           let next = Math.max(0, qty);
           if (!(l.custom && l.productId === "custom")) {
             const stock = useData.getState().products.find((p) => p.id === l.productId)?.stock;
@@ -190,7 +190,7 @@ export const useCart = create<CartState>((set, get) => ({
     set((s) =>
       s.rental
         ? { lines: [], customerName: null, discount: 0, rental: null } // E18: menghapus baris sewa = batalkan sewa
-        : { lines: s.lines.filter((l) => l.variantId !== key) }
+        : { lines: s.lines.filter((l) => l.key !== key) }
     ),
   setCustomer: (name) => set((s) => (s.rental ? s : { customerName: name })),
   setDiscount: (amount) =>
