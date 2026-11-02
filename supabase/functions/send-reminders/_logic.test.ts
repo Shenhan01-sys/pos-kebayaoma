@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { poStage, rentalStage, normalizePhone, dayProgress, poReminderOffsets, poEventParts } from "./_logic.ts";
+import { poStage, rentalStage, normalizePhone, dayProgress, poReminderOffsets, poEventParts, rentalEventParts } from "./_logic.ts";
 
 const day = (s: string) => new Date(s + "T12:00:00+07:00");
 
@@ -91,3 +91,23 @@ describe("poEventParts (info PO lengkap di judul+deskripsi)", () => {
 });
 
 
+
+describe("rentalEventParts (event sewa saat dibayar)", () => {
+  it("judul + deskripsi memuat penyewa, item, deposit, tempo", () => {
+    const q = rentalEventParts({
+      number: "MJL20261102-001", customer_name: "Bu Ani", due_date: "2026-11-05", deposit: 200000,
+      transaction_items: [{ name: "Kebaya Encim", quantity: 2 }],
+    });
+    expect(q.summary).toBe("Kembali sewa Bu Ani · Kebaya Encim x2 (tempo 2026-11-05)");
+    expect(q.description).toContain("Nota: MJL20261102-001");
+    expect(q.description).toContain("Deposit: Rp 200.000");
+    expect(q.description).toContain("Jatuh tempo pengembalian: 2026-11-05");
+  });
+
+  it("tanpa nama/deposit/item → 'Umum', baris deposit hilang", () => {
+    const q = rentalEventParts({ number: "X-1", due_date: "2026-11-05" });
+    expect(q.summary).toBe("Kembali sewa Umum (tempo 2026-11-05)");
+    expect(q.description).not.toContain("Deposit");
+    expect(q.description).toContain("Isi: -");
+  });
+});

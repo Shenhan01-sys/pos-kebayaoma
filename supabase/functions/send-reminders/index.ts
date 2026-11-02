@@ -10,7 +10,7 @@
 // verify_jwt=false; otorisasi internal via header x-reminder-secret.
 
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { poStage, rentalStage, normalizePhone, rupiahInt, dayProgress, daysUntil, poReminderOffsets, poEventParts } from "./_logic.ts";
+import { poStage, rentalStage, normalizePhone, rupiahInt, dayProgress, daysUntil, poReminderOffsets, poEventParts, rentalEventParts, RENTAL_REMINDER_OFFSETS } from "./_logic.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -54,16 +54,27 @@ async function createPoEvent(apiKey: string, account: string, userId: string, ca
   return data?.data?.response_data?.id ?? null;
 }
 
-// Event sewederhana (hari-H pengembalian) + popup standar.
-async function createRentEvent(apiKey: string, account: string, userId: string, calId: string, summary: string, dueISO: string, desc: string): Promise<void> {
+// Event sewa (hari-H pengembalian 08:00) + popup H-1 & 4 jam sebelum. Mengembalikan event id (atau null).
+async function createRentEvent(apiKey: string, account: string, userId: string, calId: string, summary: string, dueISO: string, desc: string): Promise<string | null> {
   const args = {
     summary, description: desc,
     start_datetime: `${dueISO}T08:00:00+07:00`,
     end_datetime: `${dueISO}T09:00:00+07:00`,
     calendar_id: calId, timezone: "Asia/Jakarta", create_meeting_room: false,
-    reminders: { useDefault: false, overrides: [{ method: "popup", minutes: 1440 }, { method: "popup", minutes: 240 }] },
+    reminders: { useDefault: false, overrides: RENTAL_REMINDER_OFFSETS.map((m) => ({ method: "popup", minutes: m })) },
   };
-  await calExecute(apiKey, Deno.env.get("COMPOSIO_CAL_TOOL_SLUG") || "GOOGLECALENDAR_CREATE_EVENT", account, userId, args);
+  const data = await calExecute(apiKey, Deno.env.get("COMPOSIO_CAL_TOOL_SLUG") || "GOOGLECALENDAR_CREATE_EVENT", account, userId, args);
+  return data?.data?.response_data?.id ?? null;
+}
+
+// Event untuk nota sewa (kind='rental', paid): buat + simpan transactions.calendar_event_id. Idempoten (caller cek id kosong).
+async function createRentalTxEvent(supabase: any, apiKey: string, account: string, userId: string, calId: string, t: any): Promise<string | null> {
+  const { data: rs } = await supabase.from("rentals").select("deposit").eq("transaction_id", t.id);
+  const deposit = (rs ?? []).reduce((n: number, r: { deposit?: number | null }) => n + Number(r.deposit ?? 0), 0);
+  const { summary, description } = rentalEventParts({ ...t, deposit });
+  const evId = await createRentEvent(apiKey, account, userId, calId, summary, t.due_date, description);
+  if (evId) await supabase.from("transactions").update({ calendar_event_id: evId }).eq("id", t.id);
+  return evId;
 }
 
 Deno.serve(async (req) => {
@@ -110,6 +121,16 @@ Deno.serve(async (req) => {
       } catch (e) { log.push(`PO ${t.number} delete event FAIL ${String(e)}`); return jsonOk({ ok: false, log }); }
     }
     if (t.calendar_event_id) return jsonOk({ ok: true, skipped: "event-sudah-ada" });
+    if (t.kind === "rental" && t.due_date && t.status === "paid") {
+      try {
+        const evId = await createRentalTxEvent(supabase, calKey!, calAcc!, calUser!, calId, t);
+        log.push(`sewa ${t.number} event dibuat${evId ? " + id disimpan" : " (tanpa id)"}`);
+        return jsonOk({ ok: true, log, eventId: evId });
+      } catch (e) {
+        log.push(`sewa ${t.number} event FAIL ${String(e)}`); // cron akan catch-up
+        return jsonOk({ ok: false, log });
+      }
+    }
     if (t.kind !== "preorder" || !t.due_date) return jsonOk({ ok: true, skipped: "bukan-PO-bergelar" });
     const { summary, description: desc } = poEventParts(t);
     try {
@@ -158,10 +179,34 @@ Deno.serve(async (req) => {
     } catch (e) { log.push(`PO ${t.number} WA-${stage} FAIL ${String(e)}`); }
   }
 
+  // ---- Sewa: catch-up event kalender (trigger gagal / sewa sebelum fitur ini) ----
+  if (calOn) {
+    const todayISO = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    const { data: open } = await supabase.from("rentals").select("transaction_id").is("returned_at", null).gte("due_date", todayISO);
+    const openIds = [...new Set((open ?? []).map((r: { transaction_id: string }) => r.transaction_id))];
+    if (openIds.length) {
+      const { data: miss } = await supabase.from("transactions")
+        .select("id, number, customer_name, due_date, transaction_items(name, quantity)")
+        .in("id", openIds).eq("kind", "rental").eq("status", "paid").is("calendar_event_id", null).not("due_date", "is", null);
+      for (const t of miss ?? []) {
+        try {
+          const evId = await createRentalTxEvent(supabase, calKey!, calAcc!, calUser!, calId, t);
+          log.push(`sewa ${t.number} event catch-up${evId ? " ok" : " (tanpa id)"}`);
+        } catch (e) { log.push(`sewa ${t.number} event catch-up FAIL ${String(e)}`); }
+      }
+    }
+  }
+
   // ---- Sewa (H-20%, H-0, overdue) ----
   const { data: rent } = await supabase.from("rentals")
-    .select("id, due_date, start_date, returned_qty, qty, reminded_at_20, reminded_at_0, overdue_reminded_at, customers(name, phone)")
+    .select("id, transaction_id, due_date, start_date, returned_qty, qty, reminded_at_20, reminded_at_0, overdue_reminded_at, customers(name, phone)")
     .is("returned_at", null);
+  // nota sewa yang sudah punya event kalender (popup H-1/4 jam) → tak perlu event cadangan
+  const rentTxIds = [...new Set((rent ?? []).map((r: { transaction_id: string }) => r.transaction_id))];
+  const { data: rentTx } = rentTxIds.length
+    ? await supabase.from("transactions").select("id, calendar_event_id").in("id", rentTxIds)
+    : { data: [] as { id: string; calendar_event_id: string | null }[] };
+  const hasEvent = new Set((rentTx ?? []).filter((x: { calendar_event_id: string | null }) => x.calendar_event_id).map((x: { id: string }) => x.id));
   for (const r of rent ?? []) {
     const stage = rentalStage(r, today);
     if (!stage) continue;
@@ -175,6 +220,7 @@ Deno.serve(async (req) => {
       : `Sewa ${who} (${r.qty} pcs) jatuh tempo ${r.due_date} (${daysLeft} hari lagi). — Kebaya Oma`;
     let done = false;
     if (fonnte && phone) { try { await sendWa(fonnte, phone, msg); done = true; log.push(`rent ${r.id} WA-${stage} ok`); } catch (e) { log.push(`rent ${r.id} WA-${stage} FAIL ${String(e)}`); } }
+    if (!done && hasEvent.has(r.transaction_id)) { done = true; log.push(`rent ${r.id} event-ada-${stage}`); }
     if (!done && calOn) { try { await createRentEvent(calKey!, calAcc!, calUser!, calId, `Kembali sewa ${who} (${r.qty} pcs)`, r.due_date, msg); done = true; log.push(`rent ${r.id} cal-${stage} ok`); } catch (e) { log.push(`rent ${r.id} cal FAIL ${String(e)}`); } }
     if (done) {
       const col = stage === "20" ? "reminded_at_20" : stage === "0" ? "reminded_at_0" : "overdue_reminded_at";

@@ -117,3 +117,28 @@ export function poReminderOffsets(createdISO: string, dueDateISO: string): numbe
     Math.min(40320, Math.max(0, (total - elapsed) * 1440 + START_MIN));
   return [mk(Math.round(total * 0.5)), mk(Math.round(total * 0.8)), mk(total)];
 }
+
+// Event sewa (dibuat saat sewa dibayar): hari-H pengembalian 08:00 + popup H-1 & 4 jam sebelum.
+export const RENTAL_REMINDER_OFFSETS = [1440, 240];
+
+export function rentalEventParts(t: {
+  number: string; customer_name?: string | null; due_date: string; deposit?: number | null;
+  transaction_items?: { name?: string | null; quantity?: number | null }[] | null;
+}) {
+  const who = t.customer_name?.trim() || "Umum";
+  const items = poItemsSummary(t.transaction_items);
+  const first = items.split(",")[0]?.trim() || "";
+  const prodShort = first ? (first.length > 28 ? first.slice(0, 25) + "…" : first) : "";
+  const summary = `Kembali sewa ${who}${prodShort ? ` · ${prodShort}` : ""} (tempo ${t.due_date})`;
+  const lines = [
+    `Nota: ${t.number}`,
+    `Penyewa: ${who}`,
+    `Isi: ${items || "-"}`,
+    ...(t.deposit && t.deposit > 0 ? [`Deposit: Rp ${rupiahInt(t.deposit)}`] : []),
+    `Jatuh tempo pengembalian: ${t.due_date}`,
+    "",
+    "Reminder: H-1 dan 4 jam sebelum 08:00 hari pengembalian.",
+    "— Kebaya Oma",
+  ];
+  return { summary, description: lines.join("\n") };
+}
