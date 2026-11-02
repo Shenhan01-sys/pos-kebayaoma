@@ -564,7 +564,7 @@ export default function PosPage() {
         <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4">
           <div className="w-full max-w-[380px] rounded-t-4xl bg-white p-5 shadow-soft-xl sm:rounded-3xl">
             <h3 className="mb-3 text-lg font-bold text-ink">Tambah Item Custom</h3>
-            <label className="mb-1 block text-sm text-olive">Series (dari catalog)</label>
+            <label className="mb-1 block text-sm text-olive">Series (dari catalog) <span className="text-danger">*wajib</span></label>
             <select
               value={customSeriesId}
               onChange={(e) => {
@@ -577,7 +577,7 @@ export default function PosPage() {
               }}
               className="input mb-3"
             >
-              <option value="">— Pilih series (opsional) —</option>
+              <option value="">— Pilih series —</option>
               {allSeries.map((s) => (
                 <option key={s.variantId} value={s.variantId}>
                   {s.productName} · {s.seriesName} ({s.size}/{s.color})
@@ -626,6 +626,8 @@ export default function PosPage() {
  if (!name) return;
  if (!customBonus && price <= 0) return;
  const series = allSeries.find((x) => x.variantId === customSeriesId);
+ // Series wajib: tanpa series, id produk/varian placeholder ("custom") ditolak kolom uuid di DB saat checkout.
+ if (!series) return;
  // Modal custom tidak boleh di atas harga jual — kecuali bonus Rp0 (modal 0).
  const cost = customBonus ? 0 : Math.min(Number(customCost) || 0, price);
  addCustomItem(name, price, 1, series, cost);
@@ -636,7 +638,7 @@ export default function PosPage() {
                   setCustomSeriesId("");
                   setCustomBonus(false);
                 }}
-                disabled={!customName.trim() || (!customBonus && (Number(customPrice) || 0) <= 0)}
+                disabled={!customSeriesId || !customName.trim() || (!customBonus && (Number(customPrice) || 0) <= 0)}
                 className="btn-violet flex-1 disabled:opacity-40"
               >
                 Tambah ke Keranjang
