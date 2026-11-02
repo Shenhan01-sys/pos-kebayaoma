@@ -16,9 +16,10 @@ import { useAuth } from "@/store/auth";
 import { canSeeProfit } from "@/lib/roles";
 import { printHtmlViaIframe } from "@/lib/print";
 import { buildThermalReceiptHtml } from "@/lib/thermal-receipt";
+import { resolveReceiptStore } from "@/lib/store-info";
 import Receipt from "@/components/Receipt";
 import { inclusiveTax } from "@/lib/tax";
-import { formatDateId, rentalDraftDeposit, toRentalSpec } from "@/lib/rental";
+import { formatDateId, rentalDraftDeposit, renterPhone, toRentalSpec } from "@/lib/rental";
 import { humanizeError } from "@/lib/errors";
 import { Icon } from "@/components/icons";
 
@@ -396,7 +397,13 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
         qrPng = ""; // fallback aman: struk tanpa QR
       }
     }
-    const html = buildThermalReceiptHtml(paid, { storeName: s.storeName, address: s.address, phone: s.phone }, qrPng || undefined);
+    const st = useData.getState();
+    const html = buildThermalReceiptHtml(
+      paid,
+      resolveReceiptStore(s, st.stores, paid.storeId ?? st.activeStoreId),
+      qrPng || undefined,
+      { renterPhone: renterPhone(paid, st.customers) }
+    );
     printHtmlViaIframe(html);
   }
 

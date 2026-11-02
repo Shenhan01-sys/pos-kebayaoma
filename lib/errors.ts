@@ -19,6 +19,8 @@ const DICT: { code: string; build: (ctx: HumanizeCtx) => string }[] = [
   { code: "product_not_found", build: () => "Produk tidak ditemukan — mungkin baru dihapus. Muat ulang halaman lalu coba lagi." },
   { code: "variant_not_found", build: () => "Varian produk tidak ditemukan — muat ulang halaman lalu coba lagi." },
   { code: "transfer_not_found", build: () => "Pengajuan transfer sudah tidak ada — mungkin sudah diproses orang lain. Muat ulang halaman." },
+  { code: "proof_required", build: () => "Foto bukti pengiriman wajib dilampirkan sebelum transfer dikirim." },
+  { code: "proof_too_large", build: () => "Foto bukti terlalu besar. Ambil ulang fotonya (otomatis dikompres) lalu coba lagi." },
   { code: "transfer_not_pending", build: () => "Transfer ini sudah diproses (terkirim/dibatalkan), jadi tidak bisa dikirim dua kali." },
   { code: "rental_not_found", build: () => "Data sewa tidak ditemukan — muat ulang halaman." },
   { code: "too_many_returned", build: () => "Jumlah diterima melebihi qty sewa — periksa kembali angka yang dimasukkan." },

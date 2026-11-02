@@ -5,7 +5,9 @@ import { useAuth } from "@/store/auth";
 import { useData } from "@/store/data";
 import { supabase } from "@/lib/supabase";
 import { getPosition } from "@/lib/geo";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { lateFee } from "@/lib/rental";
+import { formatRupiah } from "@/lib/dummy";
 import dynamic from "next/dynamic";
 import { Icon } from "@/components/icons";
 
@@ -76,10 +78,10 @@ export default function SettingsPage() {
         <Field label="Nama Toko">
           <input value={s.storeName} onChange={(e) => s.update({ storeName: e.target.value })} className="input" />
         </Field>
-        <Field label="Alamat">
+        <Field label="Alamat (cadangan perangkat ini — alamat nota per toko diatur di kartu bawah)">
           <input value={s.address} onChange={(e) => s.update({ address: e.target.value })} className="input" />
         </Field>
-        <Field label="Telepon">
+        <Field label="Telepon (cadangan perangkat ini)">
           <input value={s.phone} onChange={(e) => s.update({ phone: e.target.value })} className="input" />
         </Field>
         <Field label="Nama Kasir">
@@ -174,6 +176,98 @@ export default function SettingsPage() {
           </p>
         </div>
       )}
+
+      {/* E29/E30: alamat nota + denda telat sewa per toko (DB, superadmin) */}
+      {role === "superadmin" && <StoreReceiptCard />}
+    </div>
+  );
+}
+
+function StoreReceiptCard() {
+  const stores = useData((st) => st.stores);
+  const activeStoreId = useData((st) => st.activeStoreId);
+  const fetchStores = useData((st) => st.fetchStores);
+  const [pick, setPick] = useState("");
+  const sid = pick || activeStoreId || stores[0]?.id || "";
+  const cur = stores.find((t) => t.id === sid);
+  const [address, setAddress] = useState("");
+  const [phone, setPhone] = useState("");
+  const [base, setBase] = useState("0");
+  const [step, setStep] = useState("0");
+  const [msgAddr, setMsgAddr] = useState<string | null>(null);
+  const [msgFee, setMsgFee] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  // muat nilai toko terpilih ke form tiap ganti toko / setelah data toko dimuat ulang
+  useEffect(() => {
+    setAddress(cur?.address ?? "");
+    setPhone(cur?.phone ?? "");
+    setBase(String(cur?.lateFeeBase ?? 0));
+    setStep(String(cur?.lateFeeStep ?? 0));
+  }, [sid, cur?.address, cur?.phone, cur?.lateFeeBase, cur?.lateFeeStep]);
+
+  async function saveAddress() {
+    if (!sid || busy) return;
+    setBusy(true);
+    setMsgAddr(null);
+    const { error } = await supabase.from("stores").update({ address: address.trim() || null, phone: phone.trim() || null }).eq("id", sid);
+    if (!error) await fetchStores();
+    setBusy(false);
+    setMsgAddr(error ? `Gagal: ${error.message}` : "Alamat nota tersimpan ✓ (tampil di semua perangkat toko ini)");
+  }
+  async function saveFee() {
+    if (!sid || busy) return;
+    const b = Math.max(0, Number(base) || 0);
+    const st = Math.max(0, Number(step) || 0);
+    setBusy(true);
+    setMsgFee(null);
+    const { error } = await supabase.from("stores").update({ late_fee_base: b, late_fee_step: st }).eq("id", sid);
+    if (!error) await fetchStores();
+    setBusy(false);
+    setMsgFee(error ? `Gagal: ${error.message}` : "Denda telat tersimpan ✓");
+  }
+
+  const cfg = { base: Number(base) || 0, step: Number(step) || 0 };
+  return (
+    <div className="card card-pad mt-4 space-y-3">
+      <h2 className="text-sm font-bold text-ink">Alamat Nota &amp; Denda Sewa (per toko)</h2>
+      <Field label="Toko">
+        <select value={sid} onChange={(e) => { setPick(e.target.value); setMsgAddr(null); setMsgFee(null); }} className="input">
+          {stores.map((t) => (
+            <option key={t.id} value={t.id}>{t.name}</option>
+          ))}
+        </select>
+      </Field>
+
+      <Field label="Alamat di nota">
+        <input value={address} onChange={(e) => setAddress(e.target.value)} className="input" placeholder="mis. Jl. Pahlawan No. 10, Majalengka" />
+      </Field>
+      <Field label="Telepon di nota">
+        <input value={phone} onChange={(e) => setPhone(e.target.value)} className="input" placeholder="mis. 0812-xxxx-xxxx" />
+      </Field>
+      <button onClick={saveAddress} disabled={busy || !sid} className="btn-primary w-full disabled:opacity-50">Simpan Alamat Nota</button>
+      {msgAddr && <p className="text-xs font-semibold text-ink">{msgAddr}</p>}
+
+      <div className="border-t border-black/5 pt-3" />
+      <h3 className="text-sm font-bold text-ink">Denda telat sewa</h3>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Denda hari ke-1 (Rp)">
+          <input inputMode="numeric" value={base} onChange={(e) => setBase(e.target.value.replace(/[^\d]/g, ""))} className="input tnum" />
+        </Field>
+        <Field label="Tambah per hari berikutnya (Rp)">
+          <input inputMode="numeric" value={step} onChange={(e) => setStep(e.target.value.replace(/[^\d]/g, ""))} className="input tnum" />
+        </Field>
+      </div>
+      <p className="text-xs text-gray-600">
+        Denda hari ke-n = hari ke-1 + (n−1) × tambahan, jadi makin lama telat makin besar. Berlaku per sewa (bukan per unit). Isi 0 untuk mematikan denda.
+      </p>
+      {cfg.base + cfg.step > 0 && (
+        <div className="rounded-2xl bg-beige/60 px-3 py-2 text-xs text-olive">
+          Contoh total: {[1, 2, 3, 5, 7].map((d) => `${d} hari ${formatRupiah(lateFee(d, cfg))}`).join(" · ")}
+        </div>
+      )}
+      <button onClick={saveFee} disabled={busy || !sid} className="btn-primary w-full disabled:opacity-50">Simpan Denda</button>
+      {msgFee && <p className="text-xs font-semibold text-ink">{msgFee}</p>}
     </div>
   );
 }

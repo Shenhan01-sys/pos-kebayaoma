@@ -57,6 +57,7 @@ export interface RentalItem {
   depositSettledAt?: string | null;
   startDate: string;
   dueDate: string;
+  returnedAt?: string | null; // waktu kembali penuh (rentals.returned_at) — membekukan hitungan denda telat
 }
 
 export type RentalTab = "aktif" | "terlambat" | "hari-ini" | "selesai";
@@ -361,19 +362,94 @@ export interface ReceiptRentalInfo {
   label: string;
   /** tanggal harus kembali, mis. "07 Okt 2026" (null bila nota tak membawa tanggal) */
   returnDate: string | null;
+  /** jam kembali = jam sewa (jam nota dibuat), mis. "14.30" WIB; null bila waktu nota tak diketahui */
+  returnTime: string | null;
+  /** tanggal + jam untuk dicetak, mis. "07 Okt 2026 14.30 WIB" (null bila tanpa tanggal) */
+  returnLabel: string | null;
+  /** telepon penyewa (null bila tidak diketahui) */
+  phone: string | null;
   /** pengganti kalimat "Barang tidak bisa dikembalikan" di kaki struk */
   footer: string;
 }
 
+/** jam "HH.mm" zona WIB dari timestamp ISO; null bila tidak valid */
+export function timeWib(iso?: string | null): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const parts = new Intl.DateTimeFormat("id-ID", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: "Asia/Jakarta" }).formatToParts(d);
+  const h = parts.find((p) => p.type === "hour")?.value;
+  const m = parts.find((p) => p.type === "minute")?.value;
+  return h && m ? `${h}.${m}` : null;
+}
+
 /** info tambahan struk untuk nota sewa; null untuk nota selain sewa (struk penjualan/PO tidak berubah) */
-export function receiptRentalInfo(tx: { kind?: string | null; dueDate?: string | null }): ReceiptRentalInfo | null {
+export function receiptRentalInfo(
+  tx: { kind?: string | null; dueDate?: string | null; createdAt?: string | null },
+  extra: { phone?: string | null } = {}
+): ReceiptRentalInfo | null {
   if (tx.kind !== "rental") return null;
   const returnDate = tx.dueDate ? formatDateId(tx.dueDate) : null;
+  const returnTime = timeWib(tx.createdAt); // jam kembali = jam sewa
+  const returnLabel = returnDate ? (returnTime ? `${returnDate} ${returnTime} WIB` : returnDate) : null;
   return {
     label: "*** SEWA ***",
     returnDate,
-    footer: returnDate
-      ? `Barang sewa wajib dikembalikan paling lambat ${returnDate}`
+    returnTime,
+    returnLabel,
+    phone: extra.phone?.trim() ? extra.phone.trim() : null,
+    footer: returnLabel
+      ? `Barang sewa wajib dikembalikan paling lambat ${returnLabel}`
       : "Barang sewa wajib dikembalikan sesuai tanggal jatuh tempo",
   };
+}
+
+// ===== E30: denda keterlambatan progresif (dapat diatur per toko di Pengaturan) =====
+
+export interface LateFeeConfig {
+  /** denda hari pertama telat (Rp) */
+  base: number;
+  /** tambahan denda tiap hari berikutnya (Rp) */
+  step: number;
+}
+
+/** jumlah hari telat (0 bila belum lewat jatuh tempo) */
+export function lateDays(dueDate: string, now: Date): number {
+  return Math.max(0, -daysLeft(dueDate, now));
+}
+
+/**
+ * Denda total telat `days` hari. Hari ke-n = base + (n-1)*step, sehingga makin lama makin besar:
+ * total = days*base + step*days*(days-1)/2. Per sewa (bukan per unit). 0 bila belum telat / konfigurasi 0.
+ */
+export function lateFee(days: number, cfg: LateFeeConfig): number {
+  const d = Math.max(0, Math.floor(Number.isFinite(days) ? days : 0));
+  const base = Math.max(0, Number(cfg.base) || 0);
+  const step = Math.max(0, Number(cfg.step) || 0);
+  if (d === 0) return 0;
+  return Math.round(base * d + (step * d * (d - 1)) / 2);
+}
+
+/** hari telat sewa ini: berhenti bertambah saat kembali penuh (returnedAt), selain itu dihitung sampai `now` */
+export function rentalLateDays(r: Pick<RentalItem, "dueDate" | "qty" | "returnedQty" | "returnedAt">, now: Date): number {
+  const end = !isOpenRental(r) && r.returnedAt ? new Date(r.returnedAt) : now;
+  return lateDays(r.dueDate, Number.isNaN(end.getTime()) ? now : end);
+}
+
+/** denda sewa ini saat ini (beku setelah kembali penuh) */
+export function rentalLateFee(r: Pick<RentalItem, "dueDate" | "qty" | "returnedQty" | "returnedAt">, now: Date, cfg: LateFeeConfig): number {
+  return lateFee(rentalLateDays(r, now), cfg);
+}
+
+/** telepon penyewa untuk struk: dari spesifikasi sewa saat checkout, selain itu dari tabel pelanggan (id lalu nama) */
+export function renterPhone(
+  tx: { customerId?: string | null; customerName?: string | null; rental?: { customerPhone?: string | null } | null },
+  customers: { id: string; name: string; phone?: string | null }[]
+): string | null {
+  const direct = tx.rental?.customerPhone?.trim();
+  if (direct) return direct;
+  const byId = tx.customerId ? customers.find((c) => c.id === tx.customerId) : undefined;
+  const name = (tx.customerName ?? "").trim().toLowerCase();
+  const found = byId ?? (name ? customers.find((c) => c.name.trim().toLowerCase() === name) : undefined);
+  return found?.phone?.trim() || null;
 }

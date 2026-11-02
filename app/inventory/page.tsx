@@ -8,13 +8,14 @@ import { formatRupiah, toLocalDayKey } from "@/lib/dummy";
 import { encodeVoBarcode } from "@/lib/barcode";
 import { canSendTransfer, canCancelTransfer, groupBySku } from "@/lib/transfer";
 import { maxTransferMsg } from "@/lib/errors";
+import { compressImageToDataUrl } from "@/lib/photo";
 import { Icon } from "@/components/icons";
 import PrintBarcodeModal from "@/components/PrintBarcodeModal";
 
 type Reason = "Rusak/Hilang" | "Penyesuaian" | "Stok Opname" | "Lainnya";
 
 export default function InventoryPage() {
-  const { products, movements, vendors, stores, transfers, adjustStock, addVendor, requestTransfer, sendTransfer, cancelTransfer } = useData();
+  const { products, movements, vendors, stores, transfers, adjustStock, addVendor, requestTransfer, sendTransfer, cancelTransfer, getTransferProof } = useData();
   const activeStoreId = useData((s) => s.activeStoreId);
   const auth = useAuth();
   const s = useSettings();
@@ -56,6 +57,11 @@ export default function InventoryPage() {
   const [trFormOpen, setTrFormOpen] = useState(false);
   const [trBusy, setTrBusy] = useState<string | null>(null);
   const [trError, setTrError] = useState<string | null>(null);
+  // Kirim transfer WAJIB foto bukti: modal ambil foto dulu, baru RPC send_transfer_with_proof
+  const [sendFor, setSendFor] = useState<{ id: string; label: string } | null>(null);
+  const [sendPhoto, setSendPhoto] = useState<string | null>(null);
+  const [sendErr, setSendErr] = useState<string | null>(null);
+  const [proofView, setProofView] = useState<{ label: string; src: string | null; loading: boolean } | null>(null);
   // E11: katalog toko asal via RPC masked (nama+sku saja — stok toko sebelah tak pernah dikirim ke FE)
   const [trProducts, setTrProducts] = useState<{ id: string; name: string; sku: string }[]>([]);
   const transferStoreId = auth.staff?.storeId ?? null; // toko staff (locked)
@@ -203,12 +209,43 @@ export default function InventoryPage() {
     if (ok) setTrFormOpen(false);
     else setTrError(useData.getState().error ?? "Gagal mengajukan transfer.");
   }
-  async function doSend(id: string) {
-    setTrBusy(id);
-    setTrError(null);
-    const ok = await sendTransfer(id);
+  function openSend(t: { id: string; productName?: string | null; qty: number }) {
+    setSendFor({ id: t.id, label: `${t.productName ?? "Transfer"} × ${t.qty}` });
+    setSendPhoto(null);
+    setSendErr(null);
+  }
+  async function pickSendPhoto(file: File | undefined) {
+    if (!file) return;
+    setSendErr(null);
+    try {
+      setSendPhoto(await compressImageToDataUrl(file));
+    } catch (e: any) {
+      setSendErr(e?.message ?? "Gagal membaca foto.");
+    }
+  }
+  async function doSend() {
+    if (!sendFor || trBusy !== null) return;
+    if (!sendPhoto) {
+      setSendErr("Foto bukti pengiriman wajib dilampirkan.");
+      return;
+    }
+    setTrBusy(sendFor.id);
+    setSendErr(null);
+    useData.setState({ error: null });
+    const ok = await sendTransfer(sendFor.id, sendPhoto);
     setTrBusy(null);
-    if (!ok) setTrError(useData.getState().error ?? "Gagal mengirim transfer.");
+    if (ok) {
+      setSendFor(null);
+      setSendPhoto(null);
+    } else {
+      setSendErr(useData.getState().error ?? "Gagal mengirim transfer.");
+    }
+  }
+  async function viewProof(t: { id: string; productName?: string | null; qty: number }) {
+    const label = `${t.productName ?? "Transfer"} × ${t.qty}`;
+    setProofView({ label, src: null, loading: true });
+    const src = await getTransferProof(t.id);
+    setProofView({ label, src, loading: false });
   }
   async function doCancel(id: string) {
     setTrBusy(id);
@@ -402,7 +439,7 @@ export default function InventoryPage() {
                 {t.note && <span className="text-xs text-gray-500">· {t.note}</span>}
                 <div className="ml-auto flex gap-2">
                   {canSendTransfer(t, activeStoreId, isManagerAll) && (
-                    <button onClick={() => doSend(t.id)} disabled={trBusy !== null} className="btn-primary px-3 py-1 text-xs disabled:opacity-40">
+                    <button onClick={() => openSend(t)} disabled={trBusy !== null} className="btn-primary px-3 py-1 text-xs disabled:opacity-40">
                       {trBusy === t.id ? "Mengirim…" : "Kirim"}
                     </button>
                   )}
@@ -424,11 +461,66 @@ export default function InventoryPage() {
                   <span className="text-gray-600">{t.productName} × {t.qty}</span>
                   <span className="text-xs text-gray-500">{new Date(t.sentAt ?? t.createdAt).toLocaleString("id-ID")}</span>
                   {t.sentBy && <span className="text-xs text-gray-500">dikirim {t.sentBy}</span>}
+                  {t.status === "sent" && (
+                    <button onClick={() => viewProof(t)} className="btn-ghost ml-auto px-3 py-1 text-xs">Lihat bukti</button>
+                  )}
                 </div>
               ))}
             </div>
           )}
         </>
+      )}
+
+      {sendFor && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4">
+          <div className="flex max-h-full w-full max-w-[380px] flex-col overflow-hidden rounded-t-4xl bg-white shadow-soft-xl sm:rounded-3xl">
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-5">
+              <h3 className="mb-1 text-lg font-bold text-ink">Kirim transfer</h3>
+              <p className="mb-3 text-sm text-gray-600">{sendFor.label}</p>
+              <p className="mb-3 rounded-2xl bg-warning/10 px-3 py-2 text-xs text-warning">
+                Foto bukti pengiriman wajib (barang yang dikirim). Transfer tidak bisa dikirim tanpa foto.
+              </p>
+              {sendPhoto ? (
+                <div className="mb-3">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={sendPhoto} alt="Bukti pengiriman" className="max-h-56 w-full rounded-2xl object-cover" />
+                  <button type="button" onClick={() => setSendPhoto(null)} disabled={trBusy !== null} className="btn-ghost mt-2 w-full py-2 text-xs">Ganti foto</button>
+                </div>
+              ) : (
+                <label className="mb-3 flex cursor-pointer flex-col items-center gap-2 rounded-2xl border-2 border-dashed border-black/15 p-6 text-center text-sm text-gray-500 transition hover:border-black/30">
+                  <Icon name="camera" size={22} />
+                  Ambil / pilih foto bukti
+                  <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => { void pickSendPhoto(e.target.files?.[0]); e.target.value = ""; }} />
+                </label>
+              )}
+              {sendErr && <p role="alert" className="rounded-xl bg-danger/10 px-3 py-2 text-sm font-medium text-danger">{sendErr}</p>}
+            </div>
+            <div className="flex shrink-0 gap-2 border-t border-black/5 p-5">
+              <button onClick={() => { setSendFor(null); setSendPhoto(null); }} disabled={trBusy !== null} className="btn-ghost flex-1 disabled:opacity-40">Batal</button>
+              <button onClick={doSend} disabled={!sendPhoto || trBusy !== null} className="btn-primary flex-1 disabled:opacity-40">
+                {trBusy === sendFor.id ? "Mengirim…" : "Kirim"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {proofView && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4" onClick={() => setProofView(null)}>
+          <div className="flex max-h-full w-full max-w-[420px] flex-col overflow-hidden rounded-t-4xl bg-white shadow-soft-xl sm:rounded-3xl" onClick={(e) => e.stopPropagation()}>
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-5">
+              <h3 className="mb-1 text-lg font-bold text-ink">Bukti pengiriman</h3>
+              <p className="mb-3 text-sm text-gray-600">{proofView.label}</p>
+              {proofView.loading && <p className="text-sm text-gray-500">Memuat foto…</p>}
+              {!proofView.loading && !proofView.src && <p className="text-sm text-gray-500">Tidak ada foto bukti (transfer lama dikirim sebelum fitur ini).</p>}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              {proofView.src && <img src={proofView.src} alt="Bukti pengiriman" className="w-full rounded-2xl" />}
+            </div>
+            <div className="shrink-0 border-t border-black/5 p-5">
+              <button onClick={() => setProofView(null)} className="btn-ghost w-full">Tutup</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {trFormOpen && (

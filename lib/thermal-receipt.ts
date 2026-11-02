@@ -25,9 +25,10 @@ const DASH = "-".repeat(42);
 export function buildThermalReceiptHtml(
   tx: Transaction,
   s: ReceiptStoreInfo,
-  qrPng?: string
+  qrPng?: string,
+  extra: { renterPhone?: string | null } = {}
 ): string {
-  const rental = receiptRentalInfo(tx); // E19: label SEWA + tanggal kembali (null untuk nota lain)
+  const rental = receiptRentalInfo(tx, { phone: extra.renterPhone }); // E19: label SEWA + tanggal/jam kembali + telp penyewa (null untuk nota lain)
   const items = tx.items
     .map(
       (it) => `
@@ -81,7 +82,8 @@ export function buildThermalReceiptHtml(
     <tr><td>${esc(tx.number)}</td><td class="r">${new Date(tx.createdAt).toLocaleString("id-ID")}</td></tr>
     ${rental ? `<tr><td colspan="2" class="c b">${esc(rental.label)}</td></tr>` : ""}
     <tr><td colspan="2">Kasir: ${esc(tx.cashier)}${tx.customerName ? ` / ${rental ? "Penyewa" : "Pelanggan"}: ` + esc(tx.customerName) : ""}</td></tr>
-    ${rental?.returnDate ? `<tr><td colspan="2" class="b">Kembali: ${esc(rental.returnDate)}</td></tr>` : ""}
+    ${rental?.phone ? `<tr><td colspan="2">Telp penyewa: ${esc(rental.phone)}</td></tr>` : ""}
+    ${rental?.returnLabel ? `<tr><td colspan="2" class="b">Kembali: ${esc(rental.returnLabel)}</td></tr>` : ""}
   </table>
   <div class="dash">${DASH}</div>
   <table>${items}</table>

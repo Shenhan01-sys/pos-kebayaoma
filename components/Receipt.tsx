@@ -1,11 +1,18 @@
 import { QRCodeSVG } from "qrcode.react";
 import { formatRupiah, type Transaction } from "@/lib/dummy";
 import { useSettings } from "@/store/settings";
-import { receiptRentalInfo } from "@/lib/rental";
+import { useData } from "@/store/data";
+import { receiptRentalInfo, renterPhone } from "@/lib/rental";
+import { resolveReceiptStore } from "@/lib/store-info";
 
 export default function Receipt({ tx }: { tx: Transaction }) {
-  const s = useSettings();
-  const rental = receiptRentalInfo(tx); // E19: label SEWA + tanggal kembali (null untuk nota lain)
+  const local = useSettings();
+  const stores = useData((d) => d.stores);
+  const customers = useData((d) => d.customers);
+  const activeStoreId = useData((d) => d.activeStoreId);
+  // alamat/telepon dari toko nota (DB, Pengaturan) — cadangan: isian lokal perangkat
+  const s = resolveReceiptStore(local, stores, tx.storeId ?? activeStoreId);
+  const rental = receiptRentalInfo(tx, { phone: renterPhone(tx, customers) }); // E19: label SEWA + tanggal/jam kembali + telp penyewa (null untuk nota lain)
   const verifyUrl =
     (typeof window !== "undefined" ? window.location.origin : "https://kebaya-oma.id") +
     "/verify/" +
@@ -41,8 +48,9 @@ export default function Receipt({ tx }: { tx: Transaction }) {
       <div>{new Date(tx.createdAt).toLocaleString("id-ID")}</div>
       <div>Kasir: {tx.cashier}</div>
       {tx.customerName && <div>{rental ? "Penyewa" : "Pelanggan"}: {tx.customerName}</div>}
-      {rental?.returnDate && (
-        <div className="font-bold">Kembali: {rental.returnDate}</div>
+      {rental?.phone && <div>Telp penyewa: {rental.phone}</div>}
+      {rental?.returnLabel && (
+        <div className="font-bold">Kembali: {rental.returnLabel}</div>
       )}
 
       <div className="my-2 border-t border-dashed border-black/30" />

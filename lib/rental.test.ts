@@ -391,3 +391,72 @@ describe("E20 deposit sewa", () => {
     expect(depositSummary([])).toEqual({ count: 0, received: 0, refunded: 0, deducted: 0, held: 0 });
   });
 });
+
+// ===== E29/E30: jam kembali = jam sewa, telp penyewa, denda telat progresif =====
+import { lateDays, lateFee, rentalLateDays, rentalLateFee, renterPhone, timeWib } from "./rental";
+
+describe("E29 nota sewa: telp + jam kembali = jam sewa", () => {
+  it("timeWib: UTC → WIB (HH.mm)", () => {
+    expect(timeWib("2026-10-02T07:30:00Z")).toBe("14.30");
+    expect(timeWib("2026-10-02T17:05:00Z")).toBe("00.05"); // lewat tengah malam WIB
+    expect(timeWib(undefined)).toBeNull();
+    expect(timeWib("bukan-tanggal")).toBeNull();
+  });
+  it("returnLabel memuat tanggal + jam nota; footer ikut", () => {
+    const r = receiptRentalInfo({ kind: "rental", dueDate: "2026-10-07", createdAt: "2026-10-02T07:30:00Z" }, { phone: " 0812-1111 " })!;
+    expect(r.returnTime).toBe("14.30");
+    expect(r.returnLabel).toBe("07 Okt 2026 14.30 WIB");
+    expect(r.phone).toBe("0812-1111");
+    expect(r.footer).toBe("Barang sewa wajib dikembalikan paling lambat 07 Okt 2026 14.30 WIB");
+  });
+  it("tanpa createdAt → hanya tanggal (perilaku lama)", () => {
+    const r = receiptRentalInfo({ kind: "rental", dueDate: "2026-10-07" })!;
+    expect(r.returnTime).toBeNull();
+    expect(r.returnLabel).toBe("07 Okt 2026");
+    expect(r.phone).toBeNull();
+  });
+  it("renterPhone: spesifikasi sewa > id pelanggan > nama pelanggan", () => {
+    const cs = [{ id: "c1", name: "Bu Ani", phone: "0811" }];
+    expect(renterPhone({ rental: { customerPhone: "0899" }, customerId: "c1" }, cs)).toBe("0899");
+    expect(renterPhone({ customerId: "c1" }, cs)).toBe("0811");
+    expect(renterPhone({ customerName: " bu ani " }, cs)).toBe("0811");
+    expect(renterPhone({ customerName: "Siapa" }, cs)).toBeNull();
+  });
+});
+
+describe("E30 denda telat progresif", () => {
+  const cfg = { base: 5000, step: 2000 };
+  it("lateFee: hari ke-n = base + (n-1)*step → total makin besar", () => {
+    expect(lateFee(0, cfg)).toBe(0);
+    expect(lateFee(1, cfg)).toBe(5000);
+    expect(lateFee(2, cfg)).toBe(5000 + 7000);
+    expect(lateFee(3, cfg)).toBe(5000 + 7000 + 9000);
+    expect(lateFee(5, cfg)).toBe(5000 + 7000 + 9000 + 11000 + 13000);
+  });
+  it("lateFee: tambahan per hari makin besar (konveks)", () => {
+    const inc = (d: number) => lateFee(d + 1, cfg) - lateFee(d, cfg);
+    expect(inc(3)).toBeGreaterThan(inc(2));
+    expect(inc(2)).toBeGreaterThan(inc(1));
+  });
+  it("konfigurasi 0 / negatif / bukan angka → denda mati", () => {
+    expect(lateFee(4, { base: 0, step: 0 })).toBe(0);
+    expect(lateFee(4, { base: -5, step: -1 })).toBe(0);
+    expect(lateFee(Number.NaN, cfg)).toBe(0);
+    expect(lateFee(2, { base: 0, step: 1000 })).toBe(1000); // hanya step: 0 + 1000
+  });
+  it("lateDays: belum lewat tempo = 0, lewat 3 hari = 3", () => {
+    const today = new Date("2026-10-10T12:00:00+07:00");
+    expect(lateDays("2026-10-10", today)).toBe(0);
+    expect(lateDays("2026-10-12", today)).toBe(0);
+    expect(lateDays("2026-10-07", today)).toBe(3);
+  });
+  it("rentalLateFee: terbuka dihitung sampai hari ini; kembali penuh dibekukan di returnedAt", () => {
+    const now = new Date("2026-10-20T12:00:00+07:00");
+    const open = { dueDate: "2026-10-07", qty: 1, returnedQty: 0, returnedAt: null };
+    expect(rentalLateDays(open, now)).toBe(13);
+    const done = { dueDate: "2026-10-07", qty: 1, returnedQty: 1, returnedAt: "2026-10-09T05:00:00Z" };
+    expect(rentalLateDays(done, now)).toBe(2);
+    expect(rentalLateFee(done, now, cfg)).toBe(12000);
+    expect(rentalLateFee({ ...open, dueDate: "2026-10-25" }, now, cfg)).toBe(0);
+  });
+});

@@ -85,6 +85,10 @@ export interface StoreInfo {
   prefix: string; // MJL / KTB / TRX-
   lat?: number | null; // E9: geofence login (null = belum dipasang)
   lng?: number | null;
+  address?: string | null; // alamat nota (stores.address, diubah superadmin di Pengaturan)
+  phone?: string | null; // telepon nota (stores.phone)
+  lateFeeBase?: number; // E30: denda hari pertama telat sewa (Rp)
+  lateFeeStep?: number; // E30: tambahan denda tiap hari berikutnya (Rp)
 }
 
 export type MovementType =
@@ -157,6 +161,7 @@ export interface RentalRow {
   depositSettledAt?: string | null;
   startDate: string;
   dueDate: string;
+  returnedAt?: string | null; // rentals.returned_at — denda telat beku saat kembali penuh
 }
 
 interface DataState {
@@ -242,7 +247,8 @@ interface DataState {
   fetchTransfers: () => Promise<void>;
   transferProducts: (storeId: string) => Promise<{ id: string; name: string; sku: string }[]>; // E11: katalog masked
   requestTransfer: (fromStoreId: string, toStoreId: string, productId: string, qty: number, requestedBy: string, note?: string) => Promise<boolean>;
-  sendTransfer: (id: string) => Promise<boolean>;
+  sendTransfer: (id: string, proof: string) => Promise<boolean>; // bukti foto (data URL) WAJIB — ditegakkan RPC send_transfer_with_proof
+  getTransferProof: (id: string) => Promise<string | null>;
   cancelTransfer: (id: string) => Promise<boolean>;
 
   // rentals (E7)
@@ -440,6 +446,26 @@ export const useData = create<DataState>()(
               lng: r.lng ?? null,
             })),
           });
+          // Alamat/telepon nota + denda sewa per toko (tabel stores, dibaca user login). Gagal/kolom belum ada
+          // (migrasi belum jalan) → diabaikan: nota memakai cadangan lokal, denda 0.
+          let extra: any[] | null = null;
+          const full = await supabase.from("stores").select("id, address, phone, late_fee_base, late_fee_step");
+          if (!full.error) extra = full.data;
+          else {
+            const basic = await supabase.from("stores").select("id, address, phone");
+            if (!basic.error) extra = basic.data;
+          }
+          if (extra) {
+            const byId = new Map(extra.map((x: any) => [x.id, x]));
+            set((st) => ({
+              stores: st.stores.map((x) => {
+                const e: any = byId.get(x.id);
+                return e
+                  ? { ...x, address: e.address ?? null, phone: e.phone ?? null, lateFeeBase: Number(e.late_fee_base ?? 0), lateFeeStep: Number(e.late_fee_step ?? 0) }
+                  : x;
+              }),
+            }));
+          }
         } catch (error: any) {
           set({ error: humanizeError(error) });
         }
@@ -1385,10 +1411,22 @@ export const useData = create<DataState>()(
         }
       },
 
-      sendTransfer: async (id) => {
+      getTransferProof: async (id) => {
+        if (!isSupabaseReady) return null;
+        try {
+          const { data, error } = await supabase.rpc("get_transfer_proof", { p_transfer: id });
+          if (error) throw error;
+          return (data as string | null) ?? null;
+        } catch (error: any) {
+          set({ error: humanizeError(error) });
+          return null;
+        }
+      },
+
+      sendTransfer: async (id, proof) => {
         if (!isSupabaseReady) return false;
         try {
-          const { error } = await supabase.rpc("send_transfer", { p_transfer: id });
+          const { error } = await supabase.rpc("send_transfer_with_proof", { p_transfer: id, p_proof: proof });
           if (error) throw error;
           await Promise.all([get().fetchTransfers(), get().fetchProducts(), get().fetchMovements()]);
           return true;
@@ -1447,6 +1485,7 @@ export const useData = create<DataState>()(
               depositSettledAt: r.deposit_settled_at ?? null,
               startDate: r.start_date,
               dueDate: r.due_date,
+              returnedAt: r.returned_at ?? null,
             })),
           });
         } catch (error: any) {

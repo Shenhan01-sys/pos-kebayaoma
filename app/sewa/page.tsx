@@ -23,6 +23,8 @@ import {
   matchesTab,
   outstandingQty,
   reminderText,
+  rentalLateDays,
+  rentalLateFee,
   rentalSummary,
   rentTotal,
   statusOf,
@@ -216,6 +218,16 @@ function Stat({ label, value, sub, tone, small }: { label: string; value: string
 
 const DEPOSIT_LABEL: Record<string, string> = { held: "ditahan", partial: "sebagian diselesaikan", settled: "selesai" };
 
+/** E30: konfigurasi denda telat toko pemilik sewa (Pengaturan); toko aktif bila baris tak membawa storeId; 0 = mati */
+function useLateFee(r: RentalRow, now: Date) {
+  const cfg = useData((st) => {
+    const t = st.stores.find((x) => x.id === (r.storeId ?? st.activeStoreId));
+    return { base: t?.lateFeeBase ?? 0, step: t?.lateFeeStep ?? 0 };
+  });
+  const days = rentalLateDays(r, now);
+  return { days, fee: rentalLateFee(r, now, cfg) };
+}
+
 function RentalCard({ r, now, onReturn, onDeposit }: { r: RentalRow; now: Date; onReturn: () => void; onDeposit: () => void }) {
   const rawStatus = statusOf(r, now);
   const dStatus = depositStatus(r);
@@ -225,6 +237,7 @@ function RentalCard({ r, now, onReturn, onDeposit }: { r: RentalRow; now: Date; 
   // "sebagian" tidak boleh menutupi keterlambatan: urgensi dari sisa hari + sisa unit
   const st = out > 0 ? (dl < 0 ? "lewat" : dl === 0 ? "jatuh-tempo" : rawStatus) : "selesai";
   const wa = waLink(r.customerPhone, reminderText(r, now));
+  const late = useLateFee(r, now);
   const countdown =
     st === "selesai" ? `Selesai · jatuh tempo ${formatDateId(r.dueDate)}`
     : dl < 0 ? `Terlambat ${-dl} hari (harus kembali ${formatDateId(r.dueDate)})`
@@ -245,6 +258,9 @@ function RentalCard({ r, now, onReturn, onDeposit }: { r: RentalRow; now: Date; 
             {r.customerPhone ? <span className="text-gray-500"> · {r.customerPhone}</span> : null}
           </div>
           <div className={`mt-0.5 text-sm font-medium ${st === "lewat" ? "text-danger" : st === "jatuh-tempo" ? "text-warning" : "text-gray-600"}`}>{countdown}</div>
+          {late.fee > 0 && (
+            <div className="mt-0.5 text-sm font-semibold text-danger">Denda telat {late.days} hari: {formatRupiah(late.fee)}{st === "selesai" ? " (beku saat kembali)" : " (terus bertambah)"}</div>
+          )}
           <div className="mt-0.5 text-xs text-gray-500">
             Nota {r.txNumber} · mulai {formatDateId(r.startDate)} · sewa {formatRupiah(rentTotal(r.rentPrice, r.qty))}
             {depositTotal(r) > 0 ? ` · deposit ${formatRupiah(depositTotal(r))}` : ""}
@@ -302,6 +318,7 @@ function ReturnDialog({
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const full = qty >= out;
+  const late = useLateFee(r, new Date());
 
   async function confirm() {
     if (busy) return; // cegah klik ganda → stok masuk dobel
@@ -316,7 +333,7 @@ function ReturnDialog({
     }
     onDone(
       full
-        ? `${r.productName} diterima kembali — sewa selesai.${heldNow > 0 ? ` Catat deposit ${formatRupiah(heldNow)} untuk ${r.customerName ?? "penyewa"} (dikembalikan / dipotong).` : ""}`
+        ? `${r.productName} diterima kembali — sewa selesai.${late.fee > 0 ? ` Denda telat ${late.days} hari ${formatRupiah(late.fee)}.` : ""}${heldNow > 0 ? ` Catat deposit ${formatRupiah(heldNow)} untuk ${r.customerName ?? "penyewa"} (dikembalikan / dipotong).` : ""}`
         : `${qty} unit ${r.productName} diterima — sisa ${out - qty} unit masih di penyewa.`,
       full && heldNow > 0
     );
@@ -346,6 +363,11 @@ function ReturnDialog({
         <p className="mb-3 text-xs text-gray-600">
           {full ? "Semua unit kembali — sewa ditandai selesai." : `Sisa ${out - qty} unit tetap tercatat disewa.`} Stok produk bertambah {qty}.
         </p>
+        {late.fee > 0 && (
+          <p className="mb-3 rounded-2xl bg-danger/10 px-3 py-2 text-xs font-semibold text-danger">
+            Terlambat {late.days} hari — denda {formatRupiah(late.fee)}. {heldNow > 0 ? "Bisa dipotong dari deposit di langkah berikutnya." : "Tagih tunai ke penyewa."}
+          </p>
+        )}
         {full && heldNow > 0 && (
           <p className="mb-3 rounded-2xl bg-warning/10 px-3 py-2 text-xs text-warning">
             Deposit sewa ini {formatRupiah(depositTotal(r))} ({formatRupiah(r.deposit ?? 0)} × {r.qty} unit), masih ditahan {formatRupiah(heldNow)}.
@@ -380,6 +402,7 @@ function DepositDialog({
   settleRentalDeposit: (id: string, refund: number, deduct: number, note: string, staff: string) => Promise<boolean>;
 }) {
   const held = depositHeld(r);
+  const late = useLateFee(r, new Date());
   const [refund, setRefund] = useState(String(held));
   const [deduct, setDeduct] = useState("0");
   const [note, setNote] = useState("");
@@ -426,6 +449,23 @@ function DepositDialog({
         <div className="mb-3 rounded-2xl bg-beige/60 px-3 py-2 text-sm text-olive">
           Masih ditahan <b className="tnum text-ink">{formatRupiah(held)}</b>
         </div>
+        {late.fee > 0 && (
+          <div className="mb-3 flex items-center justify-between gap-2 rounded-2xl bg-danger/10 px-3 py-2 text-sm text-danger">
+            <span>Denda telat {late.days} hari: <b className="tnum">{formatRupiah(late.fee)}</b></span>
+            <button
+              type="button"
+              onClick={() => {
+                const d = Math.min(late.fee, held);
+                setDeduct(String(d));
+                setRefund(String(held - d));
+                setNote((n) => n || `denda telat ${late.days} hari ${formatRupiah(late.fee)}`);
+              }}
+              className="btn-ghost shrink-0 px-3 text-xs"
+            >
+              Potong denda
+            </button>
+          </div>
+        )}
         <label className="mb-1 block text-xs font-medium text-gray-600" htmlFor="dep-refund">Dikembalikan ke penyewa (Rp)</label>
         <div className="mb-2 flex gap-2">
           <input id="dep-refund" inputMode="numeric" value={refund} onChange={(e) => setRefund(e.target.value.replace(/[^\d]/g, ""))} className="input flex-1 tnum" />
