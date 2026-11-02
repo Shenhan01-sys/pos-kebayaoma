@@ -482,7 +482,8 @@ export default function InventoryPage() {
 
       {stockOpen && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4">
-          <div className="w-full max-w-[380px] rounded-t-4xl bg-white p-5 shadow-soft-xl sm:rounded-3xl">
+          <div className="flex max-h-full w-full max-w-[380px] flex-col overflow-hidden rounded-t-4xl bg-white shadow-soft-xl sm:rounded-3xl">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-5">
             <h3 className="mb-1 text-lg font-bold text-ink">Stok: {stockOpen.productName}</h3>
             <p className="mb-4 text-xs text-gray-600">{stockOpen.sku} · stok saat ini: <span className="font-bold text-ink">{stockOpen.current}</span></p>
 
@@ -581,12 +582,13 @@ export default function InventoryPage() {
             <label className="mb-1 block text-sm text-olive">Catatan</label>
             <input value={note} onChange={(e) => setNote(e.target.value)} className="input mb-4" />
             {applyError && (
-              <p className="mb-3 rounded-xl bg-danger/10 px-3 py-2 text-sm font-medium text-danger">{applyError}</p>
+              <p className="rounded-xl bg-danger/10 px-3 py-2 text-sm font-medium text-danger">{applyError}</p>
             )}
-            <div className="flex gap-2">
-              <button onClick={() => setStockOpen(null)} disabled={busy} className="btn-ghost flex-1 disabled:opacity-40">Batal</button>
-              <button onClick={apply} disabled={qty <= 0 || busy} className="btn-violet flex-1 disabled:opacity-40">{busy ? "Menyimpan…" : "Simpan"}</button>
-            </div>
+          </div>
+          <div className="flex shrink-0 gap-2 border-t border-black/5 p-5">
+            <button onClick={() => setStockOpen(null)} disabled={busy} className="btn-ghost flex-1 disabled:opacity-40">Batal</button>
+            <button onClick={apply} disabled={qty <= 0 || busy} className="btn-violet flex-1 disabled:opacity-40">{busy ? "Menyimpan…" : "Simpan"}</button>
+          </div>
           </div>
         </div>
       )}
