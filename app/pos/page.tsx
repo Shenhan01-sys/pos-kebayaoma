@@ -14,6 +14,7 @@ import { parseVoBarcode, resolveVoScan } from "@/lib/barcode";
 import { filterProductsByQuery, findExactVariantMatch, findMatchingVariants } from "@/lib/pos-search";
 import { Icon } from "@/components/icons";
 import { formatDateId } from "@/lib/rental";
+import { joinInfo } from "@/lib/label-text";
 
 const thumbStyle: Record<string, { grad: string; emoji: string }> = {
   "cat-kebaya": { grad: "bg-apricot", emoji: "👗" },
@@ -331,7 +332,7 @@ export default function PosPage() {
                       {product.name} · {variant.name || variant.sku}
                     </div>
                     <div className="truncate text-xs text-gray-600">
-                      {[variant.size, variant.color].filter(Boolean).join(" / ") || "One Size"} ·{" "}
+                      {[variant.size, variant.color].filter(Boolean).join(" / ") || "—"} ·{" "}
                       <span className="tnum font-bold text-olive">{formatRupiah(variant.sellingPrice)}</span>
                       <span className={product.stock > 0 ? " text-gray-500" : " text-danger"}> · stok {product.stock}</span>
                     </div>
@@ -444,7 +445,7 @@ export default function PosPage() {
                 </button>
               </div>
               <div className="text-xs text-gray-600">
-                {l.seriesName} · {l.size} / {l.color}
+                {[l.seriesName, joinInfo([l.size, l.color])].filter(Boolean).join(" · ")}
               </div>
               <div className="mt-1.5 flex items-center justify-between">
                 {l.rental ? (
@@ -580,7 +581,7 @@ export default function PosPage() {
               <option value="">— Pilih series —</option>
               {allSeries.map((s) => (
                 <option key={s.variantId} value={s.variantId}>
-                  {s.productName} · {s.seriesName} ({s.size}/{s.color})
+                  {s.productName} · {s.seriesName}{joinInfo([s.size, s.color], "/") ? ` (${joinInfo([s.size, s.color], "/")})` : ""}
                 </option>
               ))}
             </select>

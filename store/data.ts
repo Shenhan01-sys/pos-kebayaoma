@@ -2682,7 +2682,7 @@ export const useData = create<DataState>()(
               id: "vc-" + Date.now().toString(36),
               sku: item.sku,
               name: "Series 1",
-              size: "One Size",
+              size: "",
               color: "Custom",
               colorCode: "#cccccc",
  sellingPrice: item.unitPrice,

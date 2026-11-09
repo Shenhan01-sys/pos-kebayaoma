@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { transactions as dummyTx, formatRupiah, type Transaction } from "@/lib/dummy";
 import { getAllTransactions, subscribeTransactions } from "@/store/cart";
 import { Icon } from "@/components/icons";
+import { joinInfo } from "@/lib/label-text";
 
 export default function VerifyPage({ params }: { params: { id: string } }) {
   const [tx, setTx] = useState<Transaction | null | undefined>(undefined);
@@ -50,7 +51,7 @@ export default function VerifyPage({ params }: { params: { id: string } }) {
           {tx.items.map((it, i) => (
             <div key={i} className="flex justify-between text-sm">
               <span className="text-ink">
-                {it.name} <span className="text-gray-500">({it.size}/{it.color}) x{it.quantity}</span>
+                {it.name} <span className="text-gray-500">{joinInfo([it.size, it.color], "/") ? `(${joinInfo([it.size, it.color], "/")}) ` : ""}x{it.quantity}</span>
               </span>
               <span className="font-medium tnum">{formatRupiah(it.total)}</span>
             </div>

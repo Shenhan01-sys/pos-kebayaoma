@@ -30,11 +30,8 @@ export default function ProductForm({
   );
   const [description, setDescription] = useState(product?.description ?? "");
   const [fabric, setFabric] = useState(product?.fabric ?? "");
-  const [care, setCare] = useState(product?.care ?? "");
-  const [tags, setTags] = useState((product?.tags ?? []).join(", "));
   const [season, setSeason] = useState(product?.season ?? "");
   const [brand, setBrand] = useState(product?.brand ?? "");
-  const [compareAt, setCompareAt] = useState(product?.compareAt ? String(product.compareAt) : "");
   const [active, setActive] = useState(product?.active ?? true);
   const [stock, setStock] = useState(product?.stock ?? 0);
   const [variants, setVariants] = useState<Variant[]>(
@@ -98,11 +95,10 @@ export default function ProductForm({
       categoryId,
       description,
       fabric,
-      care,
-      tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
+      care: product?.care ?? "", // field Perawatan/Tags/Harga coret dihapus dari form (tak dipakai toko); nilai lama dipertahankan
+      tags: product?.tags ?? [],
       season,
       brand,
-      compareAt: compareAt ? Number(compareAt) : undefined,
       active,
       stock,
       images: [`https://placehold.co/400x500/775533/ffffff?text=${encodeURIComponent(name)}`],
@@ -157,15 +153,6 @@ export default function ProductForm({
         </Labeled>
         <Labeled label="Bahan">
           <input value={fabric} onChange={(e) => setFabric(e.target.value)} className="input" />
-        </Labeled>
-        <Labeled label="Perawatan">
-          <input value={care} onChange={(e) => setCare(e.target.value)} className="input" />
-        </Labeled>
-        <Labeled label="Tags (pisah koma)">
-          <input value={tags} onChange={(e) => setTags(e.target.value)} className="input" />
-        </Labeled>
-        <Labeled label="Harga Coret (compare-at)">
-          <input value={compareAt} onChange={(e) => setCompareAt(e.target.value)} className="input" placeholder="opsional" type="number" />
         </Labeled>
         <Labeled label="Stok">
           <input value={stock} onChange={(e) => setStock(Number(e.target.value))} className="input" type="number" />
@@ -232,8 +219,11 @@ export default function ProductForm({
                   </label>
                 )}
                 <VarInput label="Barcode (opsional)" value={v.barcode ?? ""} onChange={(val) => setVar(i, { barcode: val })} />
-                <VarInput label="Modal (Rp)" type="number" value={String(v.costPrice)} onChange={(val) => setVar(i, { costPrice: Number(val) })} />
-                <VarInput label="Harga Jual (Rp)" type="number" value={String(v.sellingPrice)} onChange={(val) => setVar(i, { sellingPrice: Number(val) })} />
+                {/* Harga Jual langsung di samping Modal (satu baris, tak terpisah kolom lain) */}
+                <div className="col-span-2 grid grid-cols-2 gap-2">
+                  <VarInput label="Modal (Rp)" type="number" value={String(v.costPrice)} onChange={(val) => setVar(i, { costPrice: Number(val) })} />
+                  <VarInput label="Harga Jual (Rp)" type="number" value={String(v.sellingPrice)} onChange={(val) => setVar(i, { sellingPrice: Number(val) })} />
+                </div>
                 <VarInput label="Harga Sewa (Rp)" type="number" value={String(v.rentalPrice ?? "")} onChange={(val) => setVar(i, { rentalPrice: val ? Number(val) : null })} />
                 <VarInput label="Hari Sewa" type="number" value={String(v.rentalDays ?? 3)} onChange={(val) => setVar(i, { rentalDays: Number(val) || 3 })} />
                 <VarInput label="Deposit (Rp)" type="number" value={String(v.depositPrice ?? "")} onChange={(val) => setVar(i, { depositPrice: val ? Number(val) : null })} />

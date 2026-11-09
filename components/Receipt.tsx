@@ -4,6 +4,7 @@ import { useSettings } from "@/store/settings";
 import { useData } from "@/store/data";
 import { receiptRentalInfo, renterPhone } from "@/lib/rental";
 import { resolveReceiptStore } from "@/lib/store-info";
+import { joinInfo } from "@/lib/label-text";
 
 export default function Receipt({ tx }: { tx: Transaction }) {
   const local = useSettings();
@@ -62,7 +63,7 @@ export default function Receipt({ tx }: { tx: Transaction }) {
           </div>
           <div className="flex justify-between">
             <span>
-              {it.size} / {it.color} x{it.quantity}
+              {joinInfo([it.size, it.color])} x{it.quantity}
             </span>
             <span>{formatRupiah(it.total)}</span>
           </div>

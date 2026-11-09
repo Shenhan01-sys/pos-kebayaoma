@@ -28,3 +28,8 @@ export function labelColor(color: string | null | undefined, title: string): str
   const c = (color ?? "").trim();
   return c && !has(title, c) ? c : "";
 }
+
+/** gabung bagian info varian (size, warna, ...) yang terisi; bagian kosong/"One Size" dibuang → tak ada " / " yatim */
+export function joinInfo(parts: (string | null | undefined)[], sep = " / "): string {
+  return parts.map((p) => (p ?? "").trim()).filter((p) => p && !NO_SIZE.has(p.toLowerCase())).join(sep);
+}

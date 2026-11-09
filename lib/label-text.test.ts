@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { labelColor, labelSize, labelTitle } from "./label-text";
+import { joinInfo, labelColor, labelSize, labelTitle } from "./label-text";
 
 describe("labelTitle", () => {
   it("varian yang memuat nama produk dipakai apa adanya", () => {
@@ -54,5 +54,15 @@ describe("labelColor", () => {
   it("warna kosong → kosong", () => {
     expect(labelColor(undefined, "Kebaya")).toBe("");
     expect(labelColor("", "Kebaya")).toBe("");
+  });
+});
+
+describe("joinInfo", () => {
+  it("bagian kosong / One Size dibuang, tak ada pemisah yatim", () => {
+    expect(joinInfo(["M", "Merah"])).toBe("M / Merah");
+    expect(joinInfo(["", "Kebaya 150"])).toBe("Kebaya 150");
+    expect(joinInfo(["One Size ", "Kebaya 150"])).toBe("Kebaya 150");
+    expect(joinInfo([null, undefined, " "])).toBe("");
+    expect(joinInfo(["XL", "Putih"], "/")).toBe("XL/Putih");
   });
 });

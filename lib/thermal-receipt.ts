@@ -8,6 +8,7 @@
 
 import { formatRupiah, type Transaction } from "@/lib/dummy";
 import { receiptRentalInfo } from "@/lib/rental";
+import { joinInfo } from "@/lib/label-text";
 
 interface ReceiptStoreInfo {
   storeName: string;
@@ -36,7 +37,7 @@ export function buildThermalReceiptHtml(
         <td colspan="2" class="name">${esc(it.name)}${it.unitPrice === 0 ? " <b>GRATIS</b>" : ""}</td>
       </tr>
       <tr>
-        <td class="dim">${esc(it.size)} / ${esc(it.color)} x${it.quantity}</td>
+        <td class="dim">${esc(joinInfo([it.size, it.color]))} x${it.quantity}</td>
         <td class="r">${formatRupiah(it.total)}</td>
       </tr>`
     )
