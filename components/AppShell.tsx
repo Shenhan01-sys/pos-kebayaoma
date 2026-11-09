@@ -10,6 +10,7 @@ import { isSupabaseReady } from "@/lib/supabase";
 import { Icon, type IconName } from "@/components/icons";
 import LoadingScreen from "@/components/LoadingScreen";
 import LoginScreen from "@/components/LoginScreen";
+import DeviceLockControl from "@/components/DeviceLockControl";
 
 const links: { href: string; label: string; icon: IconName }[] = [
   { href: "/", label: "Dashboard", icon: "dashboard" },
@@ -196,6 +197,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           {nav}
 
           <StoreSwitcher />
+          <DeviceLockControl />
           <div className="relative z-10 m-2 flex items-center gap-3 rounded-2xl bg-beige p-2.5">
             <div className="avatar h-9 w-9 bg-violet">
               {initials(auth.staff?.name ?? s.cashierName)}

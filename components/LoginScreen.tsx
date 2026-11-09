@@ -7,6 +7,7 @@ import type { Role, Staff } from "@/store/data";
 import { useData } from "@/store/data";
 import { useAuth } from "@/store/auth";
 import { evaluateGeofence, getPosition } from "@/lib/geo";
+import { decideWithLock, readDeviceLock, shouldAutoLock, writeDeviceLock } from "@/lib/device-lock";
 import { Icon } from "@/components/icons";
 
 const roleLabel: Record<Role, string> = {
@@ -107,6 +108,21 @@ const [showGeoNotice, setShowGeoNotice] = useState(false);
       setPin("");
       return;
     }
+    // Kunci tablet: bila sudah dipasangkan ke satu toko, lewati GPS (kasir toko lain ditolak)
+    const decision = decideWithLock(readDeviceLock(), selected.role, selected.storeId ?? null, useData.getState().stores);
+    if (decision.kind === "blocked") {
+      await logout();
+      setBusy(false);
+      setError(decision.message);
+      setPin("");
+      return;
+    }
+    if (decision.kind === "use-lock") {
+      useData.getState().setActiveStore(decision.storeId);
+      setBusy(false);
+      router.replace("/");
+      return;
+    }
     // E9: geofence login — kasir/admin wajib dalam radius 25 m toko; superadmin/manager
     // di luar radius → global. Fail-open bila belum ada toko ber-koordinat.
     try {
@@ -137,6 +153,10 @@ const [showGeoNotice, setShowGeoNotice] = useState(false);
         }
         if (res.kind === "ok" && res.storeId) {
           useData.getState().setActiveStore(res.storeId);
+          // kasir yang lolos radius toko-nya → tablet otomatis terkunci ke toko itu
+          if (shouldAutoLock(selected.role) && selected.storeId === res.storeId) {
+            writeDeviceLock({ storeId: res.storeId, lockedAt: new Date().toISOString(), by: selected.name, method: "gps" });
+          }
         }
       }
     } catch (e: any) {
