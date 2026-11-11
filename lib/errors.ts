@@ -29,6 +29,8 @@ const DICT: { code: string; build: (ctx: HumanizeCtx) => string }[] = [
   { code: "amount_invalid", build: () => "Isi jumlah deposit yang dikembalikan atau dipotong (angka lebih dari 0)." },
   { code: "no_rental_price", build: () => "Varian ini belum punya harga sewa. Isi harga sewa di katalog produk dulu." },
   { code: "qty_invalid", build: () => "Jumlah harus lebih dari 0." },
+  { code: "foreign key", build: () => "Data ini sudah punya riwayat transaksi, jadi tidak bisa dihapus permanen." },
+  { code: "duplicate key", build: () => "Kode (SKU/barcode) sudah dipakai data lain — ubah lalu coba lagi." },
   { code: "invalid_movement_type", build: () => "Jenis operasi stok tidak dikenal — hubungi manager." },
 ];
 
@@ -47,7 +49,10 @@ export function humanizeError(err: unknown, ctx: HumanizeCtx = {}): string {
   // sudah berupa kalimat manusia (mengandung spasi cukup & huruf kecil campur) → pakai apa adanya
   if (/[a-z] [a-z]/.test(raw) && !lower.includes("_")) return raw;
   const act = ctx.action ? ` saat ${ctx.action}` : "";
-  return `Gagal${act} — coba lagi. Kalau terus gagal, hubungi manager.`;
+  // kode Postgres/PostgREST (mis. 23503) ikut ditampilkan agar keluhan user bisa dilacak
+  const pgCode = (err as { code?: unknown } | null)?.code;
+  const tag = typeof pgCode === "string" && pgCode ? ` (kode ${pgCode})` : "";
+  return `Gagal${act} — coba lagi. Kalau terus gagal, hubungi manager.${tag}`;
 }
 
 // Helper utk validasi FE pra-submit (pola pesan standar user E10)

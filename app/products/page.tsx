@@ -18,6 +18,7 @@ export default function ProductsPage() {
   const [catOpen, setCatOpen] = useState(false);
   const [toDelete, setToDelete] = useState<Product | null>(null);
   const [printBarcode, setPrintBarcode] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const filtered = cat === "all" ? products : products.filter((p) => p.categoryId === cat);
   const catName = (id: string) => categories.find((c) => c.id === id)?.name ?? "—";
@@ -38,6 +39,13 @@ export default function ProductsPage() {
           </button>
         </div>
       </div>
+
+      {notice && (
+        <div className="mb-4 flex items-start justify-between gap-3 rounded-2xl bg-beige p-3 text-sm text-ink">
+          <span>{notice}</span>
+          <button onClick={() => setNotice(null)} className="shrink-0 text-xs font-bold text-olive">Tutup</button>
+        </div>
+      )}
 
       <div className="seg mb-4 w-full overflow-x-auto no-scrollbar">
         <button onClick={() => setCat("all")} className={`seg-item whitespace-nowrap ${cat === "all" ? "seg-item-active" : ""}`}>Semua</button>
@@ -98,7 +106,16 @@ export default function ProductsPage() {
             <p className="mb-4 text-ink">Hapus produk <b>{toDelete.name}</b>?</p>
             <div className="flex gap-2">
               <button onClick={() => setToDelete(null)} className="btn-ghost flex-1">Batal</button>
-              <button onClick={() => { deleteProduct(toDelete.id); setToDelete(null); }} className="btn-danger flex-1">Hapus</button>
+              <button
+                onClick={async () => {
+                  const id = toDelete.id;
+                  setToDelete(null);
+                  setNotice(await deleteProduct(id));
+                }}
+                className="btn-danger flex-1"
+              >
+                Hapus
+              </button>
             </div>
           </div>
         </div>

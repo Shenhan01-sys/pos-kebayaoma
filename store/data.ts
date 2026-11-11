@@ -58,6 +58,11 @@ function debouncedTxRefetch() {
 const STORE_ID = process.env.NEXT_PUBLIC_STORE_ID ?? "demo-store";
 
 // Re-export safeJson for backward compat (used inline in some mappers)
+/** pelanggaran foreign key Postgres (23503) — baris masih dirujuk riwayat transaksi */
+function isFkViolation(err: { code?: string; message?: string } | null | undefined): boolean {
+  return err?.code === "23503" || /foreign key/i.test(err?.message ?? "");
+}
+
 export { safeJson } from "@/lib/safe-json";
 
 // Inisialisasi PowerSync saat module load (lazy, non-blocking)
@@ -220,7 +225,8 @@ interface DataState {
   /** true = tersimpan penuh; false = gagal (error di-set di store, produk di-rollback) */
   addProduct: (p: Omit<Product, "id" | "variants"> & { variants: Variant[] }) => Promise<boolean>;
   updateProduct: (id: string, patch: Partial<Product>) => Promise<void>;
-  deleteProduct: (id: string) => Promise<void>;
+  /** null = terhapus; string = pesan (dinonaktifkan karena punya riwayat, atau gagal) */
+  deleteProduct: (id: string) => Promise<string | null>;
   addVariant: (productId: string, v: Variant) => Promise<void>;
   updateVariant: (productId: string, variantId: string, patch: Partial<Variant>) => Promise<void>;
   removeVariant: (productId: string, variantId: string) => Promise<void>;
@@ -951,14 +957,27 @@ export const useData = create<DataState>()(
               }
             }
 
+            // seri yang sudah pernah terjual dikunci FK transaction_items (on delete restrict):
+            // jangan gagalkan seluruh simpan — perubahan lain tetap tersimpan, user diberi tahu.
+            const kept: string[] = [];
             for (const v of existing) {
               if (!incomingIds.has(v.id)) {
                 const { error: delErr } = await supabase
                   .from('variants')
                   .delete()
                   .eq('id', v.id);
-                if (delErr) throw delErr;
+                if (delErr) {
+                  if (isFkViolation(delErr)) kept.push(v.name || v.sku);
+                  else throw delErr;
+                }
               }
+            }
+            if (kept.length) {
+              await get().fetchProducts();
+              set({
+                error: `Perubahan tersimpan, tapi seri ${kept.join(", ")} tidak bisa dihapus karena sudah punya riwayat transaksi (dibiarkan tetap ada).`,
+              });
+              return;
             }
           }
 
@@ -985,7 +1004,7 @@ export const useData = create<DataState>()(
           set((s) => ({
             products: s.products.filter((p) => p.id !== id),
           }));
-          return;
+          return null;
         }
         try {
           const { error } = await supabase
@@ -993,13 +1012,24 @@ export const useData = create<DataState>()(
             .delete()
             .eq('id', id);
 
-          if (error) throw error;
+          if (error) {
+            // produk yang pernah terjual/disewa/ditransfer dikunci FK (on delete restrict) →
+            // nonaktifkan saja: hilang dari kasir, riwayat & laporan tetap utuh.
+            if (!isFkViolation(error)) throw error;
+            const { error: offErr } = await supabase.from('products').update({ active: false }).eq('id', id);
+            if (offErr) throw offErr;
+            set((s) => ({ products: s.products.map((p) => (p.id === id ? { ...p, active: false } : p)) }));
+            return "Produk ini sudah punya riwayat transaksi, jadi tidak bisa dihapus permanen. Produk dinonaktifkan (tidak tampil lagi di kasir).";
+          }
 
           set((s) => ({
             products: s.products.filter((p) => p.id !== id)
           }));
+          return null;
         } catch (error: any) {
-          set({ error: humanizeError(error) });
+          const msg = humanizeError(error, { action: "menghapus produk" });
+          set({ error: msg });
+          return msg;
         }
       },
 
