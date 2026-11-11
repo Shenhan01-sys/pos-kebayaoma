@@ -5,6 +5,7 @@
 
 import { GEOFENCE_RADIUS_M, haversineMeters, type GeoPoint } from "@/lib/geo";
 import { isAllStoreRole } from "@/lib/roles";
+import type { Role } from "@/store/data";
 
 export const DEVICE_LOCK_KEY = "kebaya-oma-device-lock";
 
@@ -89,7 +90,7 @@ export function decideWithLock(
     const s = stores.find((x) => x.id === id);
     return s ? s.prefix || s.name : "toko lain";
   };
-  if (!isAllStoreRole(role) && staffStoreId && staffStoreId !== lock.storeId) {
+  if (!isAllStoreRole(role as Role | null | undefined) && staffStoreId && staffStoreId !== lock.storeId) {
     return {
       kind: "blocked",
       message: `Tablet ini dikunci ke toko ${label(lock.storeId)}, sedangkan akunmu untuk toko ${label(staffStoreId)}. Minta superadmin/manager membuka kunci tablet bila tablet ini pindah toko.`,
