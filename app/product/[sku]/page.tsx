@@ -24,7 +24,7 @@ export default function ProductProfilePage({ params }: { params: { sku: string }
         .eq("sku", params.sku)
         .maybeSingle();
       if (cancelled) return;
-      if (error || !p) {
+      if (error || !p || p.deleted_at) {
         setLoading(false);
         return;
       }
@@ -40,7 +40,7 @@ export default function ProductProfilePage({ params }: { params: { sku: string }
         fabric: p.fabric,
         care: p.care,
         stock: p.stock,
-        variants: (p.variants ?? []).map((v: any) => ({
+        variants: (p.variants ?? []).filter((v: any) => !v.deleted_at).map((v: any) => ({
           id: v.id,
           sku: v.sku,
           name: v.name,

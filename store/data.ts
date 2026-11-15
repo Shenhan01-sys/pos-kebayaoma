@@ -58,6 +58,18 @@ function debouncedTxRefetch() {
 const STORE_ID = process.env.NEXT_PUBLIC_STORE_ID ?? "demo-store";
 
 // Re-export safeJson for backward compat (used inline in some mappers)
+/** akhiran SKU untuk baris yang di-soft-delete: kode lama bebas dipakai lagi & tak tercocokkan transfer */
+const deletedSku = (sku: string | null | undefined) => `${sku ?? ""}~hapus-${Date.now().toString(36)}`;
+
+/** soft delete seri (sudah punya riwayat → tak bisa hard delete): sembunyikan, lepas SKU & barcode */
+async function softDeleteVariant(id: string, sku: string | null | undefined) {
+  const { error } = await supabase
+    .from('variants')
+    .update({ deleted_at: new Date().toISOString(), sku: deletedSku(sku), barcode: null })
+    .eq('id', id);
+  if (error) throw error;
+}
+
 /** pelanggaran foreign key Postgres (23503) — baris masih dirujuk riwayat transaksi */
 function isFkViolation(err: { code?: string; message?: string } | null | undefined): boolean {
   return err?.code === "23503" || /foreign key/i.test(err?.message ?? "");
@@ -507,11 +519,12 @@ export const useData = create<DataState>()(
             ) as Record<string, any>[];
             const products: Product[] = [];
             for (const p of rows) {
+              if (p.deleted_at) continue;
               const vRows = await psDb.getAll(
                 `SELECT * FROM variants WHERE product_id = ?`,
                 [p.id]
               ) as Record<string, any>[];
-              products.push(mapProductRow(p, vRows.map(mapVariantRow)));
+              products.push(mapProductRow(p, vRows.filter((v) => !v.deleted_at).map(mapVariantRow)));
             }
             set({ products, loading: false });
             return;
@@ -539,9 +552,12 @@ export const useData = create<DataState>()(
 
           if (error) throw error;
 
-          const products = data.map((p: any) =>
-            mapProductRow(p, (p.variants ?? []).map(mapVariantRow))
-          );
+          // soft delete: produk/seri ber-deleted_at disembunyikan dari katalog & kasir (riwayat tetap utuh)
+          const products = data
+            .filter((p: any) => !p.deleted_at)
+            .map((p: any) =>
+              mapProductRow(p, (p.variants ?? []).filter((v: any) => !v.deleted_at).map(mapVariantRow))
+            );
 
           set({ products, loading: false });
         } catch (error: any) {
@@ -957,9 +973,8 @@ export const useData = create<DataState>()(
               }
             }
 
-            // seri yang sudah pernah terjual dikunci FK transaction_items (on delete restrict):
-            // jangan gagalkan seluruh simpan — perubahan lain tetap tersimpan, user diberi tahu.
-            const kept: string[] = [];
+            // seri yang sudah pernah terjual dikunci FK transaction_items (on delete restrict) →
+            // soft delete: hilang dari katalog & kasir, riwayat penjualan tetap utuh.
             for (const v of existing) {
               if (!incomingIds.has(v.id)) {
                 const { error: delErr } = await supabase
@@ -967,17 +982,10 @@ export const useData = create<DataState>()(
                   .delete()
                   .eq('id', v.id);
                 if (delErr) {
-                  if (isFkViolation(delErr)) kept.push(v.name || v.sku);
-                  else throw delErr;
+                  if (!isFkViolation(delErr)) throw delErr;
+                  await softDeleteVariant(v.id, v.sku);
                 }
               }
-            }
-            if (kept.length) {
-              await get().fetchProducts();
-              set({
-                error: `Perubahan tersimpan, tapi seri ${kept.join(", ")} tidak bisa dihapus karena sudah punya riwayat transaksi (dibiarkan tetap ada).`,
-              });
-              return;
             }
           }
 
@@ -1014,12 +1022,22 @@ export const useData = create<DataState>()(
 
           if (error) {
             // produk yang pernah terjual/disewa/ditransfer dikunci FK (on delete restrict) →
-            // nonaktifkan saja: hilang dari kasir, riwayat & laporan tetap utuh.
+            // soft delete: hilang dari katalog & kasir, riwayat & laporan tetap utuh.
             if (!isFkViolation(error)) throw error;
-            const { error: offErr } = await supabase.from('products').update({ active: false }).eq('id', id);
+            const cur = get().products.find((p) => p.id === id);
+            const { error: offErr } = await supabase
+              .from('products')
+              .update({ deleted_at: new Date().toISOString(), active: false, sku: deletedSku(cur?.sku) })
+              .eq('id', id);
             if (offErr) throw offErr;
-            set((s) => ({ products: s.products.map((p) => (p.id === id ? { ...p, active: false } : p)) }));
-            return "Produk ini sudah punya riwayat transaksi, jadi tidak bisa dihapus permanen. Produk dinonaktifkan (tidak tampil lagi di kasir).";
+            for (const v of cur?.variants ?? []) {
+              // seri tanpa riwayat boleh benar-benar dihapus; yang berriwayat di-soft-delete
+              const { error: vErr } = await supabase.from('variants').delete().eq('id', v.id);
+              if (vErr) {
+                if (!isFkViolation(vErr)) throw vErr;
+                await softDeleteVariant(v.id, v.sku);
+              }
+            }
           }
 
           set((s) => ({
@@ -1115,7 +1133,11 @@ export const useData = create<DataState>()(
             .delete()
             .eq('id', variantId);
 
-          if (error) throw error;
+          if (error) {
+            if (!isFkViolation(error)) throw error;
+            const sku = get().products.find((p) => p.id === productId)?.variants.find((v) => v.id === variantId)?.sku;
+            await softDeleteVariant(variantId, sku);
+          }
 
           set((s) => ({
             products: s.products.map((p) =>
