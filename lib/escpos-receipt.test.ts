@@ -41,16 +41,17 @@ describe("toAscii / wrap / leftRight", () => {
     expect(toAscii("Rp 150.000 — ok × 2…")).toBe("Rp 150.000 - ok x 2...");
     expect(toAscii("Café")).toBe("Cafe");
   });
-  it("baris tidak pernah melebihi 32 kolom", () => {
+  it("baris tidak pernah melebihi lebar kertas", () => {
     for (const l of wrap("Kebaya Brokat Panjang Sekali Namanya Lho dan masih panjang lagi ya")) expect(l.length).toBeLessThanOrEqual(ESCPOS_COLS);
-    expect(wrap("x".repeat(40))).toEqual(["x".repeat(32), "x".repeat(8)]);
+    expect(wrap("x".repeat(ESCPOS_COLS + 8))).toEqual(["x".repeat(ESCPOS_COLS), "x".repeat(8)]);
   });
   it("kiri-kanan rata kanan; tak muat → nilai di baris sendiri", () => {
-    expect(leftRight("Subtotal", "Rp 140.000")).toEqual(["Subtotal" + " ".repeat(32 - 8 - 10) + "Rp 140.000"]);
-    const r = leftRight("x".repeat(30), "Rp 140.000");
+    expect(ESCPOS_COLS).toBe(48);
+    expect(leftRight("Subtotal", "Rp 140.000")).toEqual(["Subtotal" + " ".repeat(ESCPOS_COLS - 8 - 10) + "Rp 140.000"]);
+    const r = leftRight("x".repeat(ESCPOS_COLS - 2), "Rp 140.000");
     expect(r).toHaveLength(2);
     expect(r[1].endsWith("Rp 140.000")).toBe(true);
-    expect(r[1]).toHaveLength(32);
+    expect(r[1]).toHaveLength(ESCPOS_COLS);
   });
 });
 

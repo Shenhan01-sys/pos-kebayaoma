@@ -1,4 +1,4 @@
-// lib/escpos-receipt.ts — nota ESC/POS teks untuk printer nota Rongta RPP02N (58mm, 384 dot, Font A = 32 kolom).
+// lib/escpos-receipt.ts — nota ESC/POS teks untuk printer nota Rongta RPP02N (kertas 80mm, 576 dot, Font A = 48 kolom).
 // Dikirim lewat RawBT (`rawbt:base64,…`) sehingga tercetak langsung tanpa dialog cetak Android
 // (revisi toko 16–18 Nov 2026: "printer direct, habis transaksi langsung print").
 // RawBT dari browser selalu mencetak ke printer DEFAULT-nya → di tablet kasir default = RPP02N;
@@ -8,7 +8,8 @@ import { formatRupiah, type Transaction } from "@/lib/dummy";
 import { receiptRentalInfo } from "@/lib/rental";
 import { joinInfo } from "@/lib/label-text";
 
-export const ESCPOS_COLS = 32;
+/** Font A 12 dot/karakter × 576 dot = 48 kolom; badan nota selebar header (uji fisik toko 2026-11-20) */
+export const ESCPOS_COLS = 48;
 
 export interface EscposReceiptStore {
   storeName: string;
