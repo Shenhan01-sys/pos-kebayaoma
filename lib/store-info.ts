@@ -22,7 +22,7 @@ const DUMMY_VALUES = new Set(["jl. sudirman no. 123, jakarta", "021-1234-5678"])
 /** alamat resmi outlet (dari toko, 17 Nov 2026) — dipakai bila kolom alamat DB kosong/dummy */
 const OUTLET_ADDRESS: [RegExp, string][] = [
   [/monjali/i, "Jalan Monjali 55, Yogyakarta"],
-  [/kota\s*baru|cokrodipuran/i, "Cokrodipuran 6, Yogyakarta"],
+  [/malioboro|kota\s*baru|cokrodipuran/i, "Cokrodipuran 6, Yogyakarta"],
 ];
 
 const real = (v?: string | null) => {

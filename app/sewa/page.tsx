@@ -118,7 +118,7 @@ export default function SewaPage() {
 
       {!activeStoreId && (
         <p className="mb-3 rounded-2xl bg-warning/10 px-3 py-2 text-sm text-warning">
-          Pilih toko operasional (MJL/KTB) di pojok kiri dulu untuk membuat sewa baru.
+          Pilih toko operasional (MJ/ML) di pojok kiri dulu untuk membuat sewa baru.
         </p>
       )}
       {flash && <p role="status" className="mb-3 rounded-2xl bg-success/10 px-3 py-2 text-sm font-medium text-success">{flash}</p>}

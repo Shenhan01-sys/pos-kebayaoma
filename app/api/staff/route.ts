@@ -67,7 +67,7 @@ function resolveTargetStore(
   if (!ALL_STORE_ROLES.includes(role) && !storeId) {
     // Kasir wajib terikat 1 toko; default ikut toko pembuat (bila ada).
     if (!caller.isAll && caller.store_id) return { ok: true, storeId: caller.store_id };
-    return { ok: false, res: NextResponse.json({ error: "Kasir wajib assigned ke toko (MJL/KTB)" }, { status: 400 }) };
+    return { ok: false, res: NextResponse.json({ error: "Kasir wajib assigned ke toko (MJ/ML)" }, { status: 400 }) };
   }
   if (!caller.isAll && storeId !== caller.store_id) {
     return { ok: false, res: NextResponse.json({ error: "Hanya bisa mengelola staff toko sendiri" }, { status: 403 }) };

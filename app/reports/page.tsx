@@ -179,7 +179,7 @@ export default function ReportsPage() {
 
   function meta(): ExportMeta {
     return {
-      storeLabel: storeSel === "semua" ? "SEMUA" : stores.find((t) => t.id === storeSel)?.prefix ?? "MJL",
+      storeLabel: storeSel === "semua" ? "SEMUA" : stores.find((t) => t.id === storeSel)?.prefix ?? "MJ",
       from, to, storeName: "Kebaya Oma",
       deposit: deposit.count > 0 ? deposit : null, // E20
     };

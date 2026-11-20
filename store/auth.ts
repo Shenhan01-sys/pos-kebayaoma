@@ -4,6 +4,8 @@ import { create } from "zustand";
 import type { Session } from "@supabase/supabase-js";
 import { supabase, isSupabaseReady } from "@/lib/supabase";
 import type { Staff } from "@/store/data";
+import { readDeviceLock } from "@/lib/device-lock";
+import { readLastStore, resolveBootStore } from "@/lib/store-scope";
 import { useData } from "@/store/data";
 
 const staffEmail = (staffId: string) => `staff-${staffId}@kebayaoma.local`;
@@ -44,8 +46,19 @@ async function loadStaffProfile(userId: string): Promise<Staff | null> {
 
 // Samakan scope toko data dengan user yang login, lalu refetch.
 // Staff terkunci -> tokonya; manager-all (storeId null) -> semua (null).
+// 2026-11-20: akun lintas-toko tidak lagi kembali ke "Semua toko" tiap reload — pakai kunci perangkat
+// atau pilihan toko terakhir di perangkat ini (lib/store-scope). Ditandai manual agar event SIGNED_IN
+// yang menyala ulang tidak menimpanya balik ke "Semua".
 async function applyLoginScope(profile: Staff | null) {
-  await useData.getState().syncStoreScope(profile?.storeId ?? null);
+  const own = profile?.storeId ?? null;
+  const d = useData.getState();
+  const boot = own
+    ? own
+    : d.storePickedManually && d.activeStoreId
+      ? null // pilihan manual sesi ini dipertahankan oleh guard syncStoreScope
+      : resolveBootStore(null, readDeviceLock()?.storeId, readLastStore());
+  if (!own && boot) useData.setState({ storePickedManually: true });
+  await d.syncStoreScope(boot);
 }
 
 export const useAuth = create<AuthState>()((set, get) => ({

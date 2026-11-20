@@ -96,7 +96,7 @@ export default function RentalNewModal({ onClose }: { onClose: () => void }) {
 
   function submit() {
     if (!pick) return;
-    if (!activeStoreId) { setErr("Pilih toko operasional (MJL/KTB) dulu."); return; }
+    if (!activeStoreId) { setErr("Pilih toko operasional (MJ/ML) dulu."); return; }
     const draft = buildRentalDraft({
       productId: pick.product.id,
       variantId: pick.variant.id,

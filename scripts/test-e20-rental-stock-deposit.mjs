@@ -44,7 +44,7 @@ if (!probe.ok) {
 }
 
 const stores = await j(await A.api("stores?select=id,name&order=name"));
-const ktb = stores.find((s) => /kota baru/i.test(s.name)) ?? stores[1];
+const ktb = stores.find((s) => /malioboro|kota baru/i.test(s.name)) ?? stores[1];
 const mjl = stores.find((s) => s.id !== ktb.id);
 console.log("toko uji:", ktb.name, "| toko lain:", mjl.name);
 

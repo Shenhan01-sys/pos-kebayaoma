@@ -59,7 +59,7 @@ const mapTx = (r) => ({
 });
 
 const stores = await j(await api("stores?select=id,name&order=name"));
-const ktb = stores.find((s) => /kota baru/i.test(s.name)) ?? stores[1];
+const ktb = stores.find((s) => /malioboro|kota baru/i.test(s.name)) ?? stores[1];
 console.log("toko uji:", ktb.name);
 
 let productId = null, variantId = null;
@@ -112,7 +112,7 @@ try {
   check("R2d baris laporan bertanda kind benar", r.lines.find((l) => l.number === `${TAG}-R1`)?.kind === "rental" && r.lines.find((l) => l.number === `${TAG}-S1`)?.kind === "sale");
 
   // R4: buildSheets
-  const sh = buildSheets(r, { storeLabel: "KTB", from: "", to: "" });
+  const sh = buildSheets(r, { storeLabel: "ML", from: "", to: "" });
   const f = (label) => (sh.summary.find((row) => row[0] === label) ?? [])[1];
   const detR1 = sh.detail.find((row) => row[0] === `${TAG}-R1`);
   check("R4 buildSheets: Omzet/Penjualan/Sewa identik dgn report; baris detail sewa bertanda 'Sewa'", f("Omzet") === 340000 && f("  Omzet Penjualan") === 200000 && f("  Omzet Sewa") === 140000 && detR1?.[detR1.length - 1] === "Sewa");

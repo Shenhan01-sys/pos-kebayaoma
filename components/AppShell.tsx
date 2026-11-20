@@ -5,6 +5,8 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useSettings } from "@/store/settings";
 import { useData } from "@/store/data";
+import { useCart } from "@/store/cart";
+import { flushProofQueue } from "@/lib/proof-queue";
 import { useAuth } from "@/store/auth";
 import { isSupabaseReady } from "@/lib/supabase";
 import { Icon, type IconName } from "@/components/icons";
@@ -98,7 +100,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   // Init auth (session + staff profile)
   useEffect(() => {
     useAuth.getState().init();
+    // 2026-11-20: keranjang tersimpan dipulihkan setelah mount (store/cart.ts skipHydration)
+    void useCart.persist.rehydrate();
   }, []);
+
+  // 2026-11-20: foto bukti yang tertahan (PWA dimatikan saat mengunggah) dikirim ulang begitu sesi siap
+  const hasSession = !!auth.session;
+  useEffect(() => {
+    if (hasSession) void flushProofQueue((id, photo) => useData.getState().attachPhotoProof(id, photo));
+  }, [hasSession]);
 
   // E14: JANGAN fetch data di sini — auth.init() -> syncStoreScope() sudah mem-fetch
   // semua koleksi SEKALI dengan scope toko yang benar. Fetch manual di mount duluan

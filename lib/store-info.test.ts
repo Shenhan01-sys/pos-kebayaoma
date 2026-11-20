@@ -32,6 +32,7 @@ describe("outletAddress", () => {
     expect(outletAddress("Kebaya Oma - Monjali")).toBe("Jalan Monjali 55, Yogyakarta");
     expect(outletAddress("Kebaya Oma - Kota Baru")).toBe("Cokrodipuran 6, Yogyakarta");
     expect(outletAddress("Kebaya Oma - Cokrodipuran")).toBe("Cokrodipuran 6, Yogyakarta");
+    expect(outletAddress("Kebaya Oma - Malioboro")).toBe("Cokrodipuran 6, Yogyakarta");
     expect(outletAddress(null)).toBe("");
   });
 });

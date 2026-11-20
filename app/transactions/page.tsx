@@ -554,7 +554,7 @@ export default function TransactionsPage() {
               <li><b>YT</b> = akumulasi total per nota</li>
               <li><b>Margin</b> = Total − Disc − Cost×Qty</li>
               <li><b>Ket</b> = "bonus" bila Price 0 (FE-only, tidak disimpan di DB)</li>
-              <li><b>Toko</b> = prefix toko nota (MJL/KTB); filter Toko untuk manager lintas-toko</li>
+              <li><b>Toko</b> = prefix toko nota (MJ/ML); filter Toko untuk manager lintas-toko</li>
             </ul>
           </div>
         </aside>

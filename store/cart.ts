@@ -1,4 +1,6 @@
 import { create } from "zustand";
+import { persist, createJSONStorage } from "zustand/middleware";
+import { CART_STORAGE_KEY, restoreCart, type PersistedCart } from "@/lib/cart-restore";
 import {
   products,
   type Product,
@@ -58,7 +60,11 @@ interface CartState {
   total: () => number;
 }
 
-export const useCart = create<CartState>((set, get) => ({
+// 2026-11-20: dipersist (lib/cart-restore) — reload/proses PWA dimatikan Android tidak lagi menghapus keranjang.
+// skipHydration: dipulihkan di AppShell setelah mount (hindari beda render server vs klien).
+export const useCart = create<CartState>()(
+  persist(
+  (set, get) => ({
   lines: [],
   customerName: null,
   discount: 0,
@@ -207,7 +213,26 @@ export const useCart = create<CartState>((set, get) => ({
   subtotal: () =>
     get().lines.reduce((s, l) => s + l.unitPrice * l.quantity - l.discount, 0),
   total: () => Math.max(0, get().subtotal() - get().discount),
-}));
+  }),
+  {
+    name: CART_STORAGE_KEY,
+    version: 1,
+    storage: createJSONStorage(() => localStorage),
+    skipHydration: true,
+    partialize: (s) => ({
+      lines: s.lines,
+      customerName: s.customerName,
+      discount: s.discount,
+      rental: s.rental,
+      savedAt: Date.now(),
+    }),
+    merge: (persisted, current) => {
+      const r = restoreCart(persisted as PersistedCart<CartLine, RentalDraft> | undefined, Date.now());
+      return r ? { ...current, ...r } : current;
+    },
+  }
+  )
+);
 
 // Transaction log — disimpan ke Supabase via useData; dummy sebagai fallback
 const overrides = new Map<string, Transaction["status"]>();

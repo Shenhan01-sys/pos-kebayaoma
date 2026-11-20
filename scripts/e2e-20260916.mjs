@@ -17,7 +17,7 @@ const SKU = "TESX";
 
 async function stores() {
   const { data } = await supabase.from("stores").select("id,receipt_prefix");
-  return { mjl: data.find((s) => s.receipt_prefix === "MJL").id, ktb: data.find((s) => s.receipt_prefix === "KTB").id };
+  return { mjl: data.find((s) => s.receipt_prefix === "MJ").id, ktb: data.find((s) => s.receipt_prefix === "ML").id };
 }
 
 async function fixlink() {

@@ -48,7 +48,7 @@ export default function StaffPage() {
     setModalError(null);
     const targetStore: string | null = form.storeId === "" ? null : form.storeId;
     if (form.role === "kasir" && !targetStore) {
-      setModalError("Kasir wajib assigned ke toko (MJL/KTB).");
+      setModalError("Kasir wajib assigned ke toko (MJ/ML).");
       return;
     }
     const payload = { ...form, storeId: targetStore };

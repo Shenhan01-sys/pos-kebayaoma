@@ -4,6 +4,7 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { supabase, isSupabaseReady } from "@/lib/supabase";
 import { humanizeError } from "@/lib/errors";
+import { writeLastStore } from "@/lib/store-scope";
 import { getPowerSyncDb, initPowerSync, isPowerSyncReady } from "@/lib/powersync/client";
 import {
   enqueueTransaction,
@@ -219,6 +220,8 @@ interface DataState {
   // transactions
   saveTransaction: (tx: Omit<Transaction, "id" | "items"> & { items: TransactionItem[] }, storeOverride?: string) => Promise<Transaction | null>;
   setTransactionStatus: (id: string, status: Transaction["status"]) => Promise<void>;
+  /** 2026-11-20: foto bukti diunggah sesudah transaksi tersimpan (lib/proof-queue); null = sukses, string = pesan galat */
+  attachPhotoProof: (txId: string, photo: string) => Promise<string | null>;
   settlePreorder: (id: string, method: PaymentMethod, remaining: number) => Promise<boolean>; // E6
   flushOfflineQueue: () => Promise<void>;
 
@@ -405,6 +408,7 @@ export const useData = create<DataState>()(
         // E24: pilihan manual (switcher/banner) dicatat — syncStoreScope tidak boleh
         // menimpanya balik ke "Semua" saat event auth menyala ulang.
         set({ activeStoreId: id, storePickedManually: id !== null });
+        writeLastStore(id); // 2026-11-20: dipulihkan saat reload (lib/store-scope)
         // E14: fetchTransactions tidak di sini — halaman pemakai (/transactions,
         // dashboard) fetch sendiri saat activeStoreId berubah.
         await Promise.all([
@@ -418,6 +422,18 @@ export const useData = create<DataState>()(
           get().fetchTransfers(),
           get().fetchRentals(),
         ]);
+      },
+
+      attachPhotoProof: async (txId, photo) => {
+        if (!isSupabaseReady) return null;
+        // Hanya kolom photo_proof; trigger transactions cuma `UPDATE OF status` → tanpa efek samping stok/kalender.
+        // Tanpa .select(): foto tidak dikirim balik.
+        const { error } = await supabase.from("transactions").update({ photo_proof: photo }).eq("id", txId);
+        if (error) return humanizeError(error);
+        set((s) => ({
+          transactions: s.transactions.map((t) => (t.id === txId ? { ...t, hasProof: true } : t)),
+        }));
+        return null;
       },
 
       syncStoreScope: async (storeId, opts) => {
@@ -651,7 +667,7 @@ export const useData = create<DataState>()(
       addCategory: async (c) => {
         const sid = get().activeStoreId;
         if (!sid) {
-          set({ error: "Pilih toko operasional (MJL/KTB) dulu." });
+          set({ error: "Pilih toko operasional (MJ/ML) dulu." });
           return;
         }
         const psDb = getPowerSyncDb();
@@ -759,7 +775,7 @@ export const useData = create<DataState>()(
       addProduct: async (p) => {
         const sid = get().activeStoreId;
         if (!sid) {
-          set({ error: "Pilih toko operasional (MJL/KTB) dulu." });
+          set({ error: "Pilih toko operasional (MJ/ML) dulu." });
           return false;
         }
         const psDb = getPowerSyncDb();
@@ -1226,7 +1242,7 @@ export const useData = create<DataState>()(
         // scope "Semua" (null) â†’ fallback ke toko milik produk (view Gabungan bisa adjust per toko)
         const sid = get().activeStoreId ?? product.storeId;
         if (!sid) {
-          set({ error: "Pilih toko operasional (MJL/KTB) dulu." });
+          set({ error: "Pilih toko operasional (MJ/ML) dulu." });
           return false;
         }
 
@@ -1325,7 +1341,7 @@ export const useData = create<DataState>()(
       addVendor: async (name, phone) => {
         const sid = get().activeStoreId;
         if (!sid) {
-          set({ error: "Pilih toko operasional (MJL/KTB) dulu." });
+          set({ error: "Pilih toko operasional (MJ/ML) dulu." });
           return null;
         }
         const trimmed = name.trim();
@@ -1687,7 +1703,7 @@ export const useData = create<DataState>()(
       addCustomer: async (c) => {
         const sid = get().activeStoreId;
         if (!sid) {
-          const msg = "Pilih toko operasional (MJL/KTB) dulu — pelanggan tercatat ke toko aktif.";
+          const msg = "Pilih toko operasional (MJ/ML) dulu — pelanggan tercatat ke toko aktif.";
           set({ error: msg });
           throw new Error(msg);
         }
@@ -2013,7 +2029,7 @@ export const useData = create<DataState>()(
       openShift: async (startingCash, staffName) => {
         const sid = get().activeStoreId;
         if (!sid) {
-          set({ error: "Pilih toko operasional (MJL/KTB) dulu." });
+          set({ error: "Pilih toko operasional (MJ/ML) dulu." });
           return;
         }
         const psDb = getPowerSyncDb();
@@ -2193,7 +2209,7 @@ export const useData = create<DataState>()(
           // storeOverride dipakai flush offline-queue agar ikut toko asal antrean.
           const sid = storeOverride ?? get().activeStoreId;
           if (!sid) {
-            set({ error: "Pilih toko operasional (MJL/KTB) dulu." });
+            set({ error: "Pilih toko operasional (MJ/ML) dulu." });
             return null;
           }
           const customer = tx.customerName

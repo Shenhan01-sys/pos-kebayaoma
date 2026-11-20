@@ -22,6 +22,10 @@ import Receipt from "@/components/Receipt";
 import { inclusiveTax } from "@/lib/tax";
 import { formatDateId, rentalDraftDeposit, renterPhone, toRentalSpec } from "@/lib/rental";
 import { Icon } from "@/components/icons";
+import PhotoCapture from "@/components/PhotoCapture";
+import { enqueueProof, sendProof } from "@/lib/proof-queue";
+import { getPowerSyncDb } from "@/lib/powersync/client";
+import { isSupabaseReady } from "@/lib/supabase";
 
 const methodMeta: Record<PaymentMethod, { label: string; icon: "qris" | "cash" | "transfer" | "shopee" }> = {
   qris: { label: "QRIS (EDC)", icon: "qris" }, // 2026-11-20: bayar di mesin EDC, tanpa QR Midtrans
@@ -87,6 +91,11 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
 
   const [error, setError] = useState<string | null>(null);
   const [photo, setPhoto] = useState<string | null>(null);
+  const [camOpen, setCamOpen] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  // 2026-11-20: foto diunggah sesudah transaksi tersimpan (lib/proof-queue) — diputuskan sekali per simpan
+  const photoLaterRef = useRef(false);
+  const [proofState, setProofState] = useState<"idle" | "uploading" | "done" | "failed">("idle");
   const [negoOpen, setNegoOpen] = useState(false);
 
   function handlePhoto(e: React.ChangeEvent<HTMLInputElement>) {
@@ -146,7 +155,7 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
       amountPaid,
       change: Math.max(0, amountPaid - grand),
       createdAt: now,
-      photoProof: photo ?? undefined,
+      photoProof: photoLaterRef.current ? undefined : photo ?? undefined,
       ...(rental ? { kind: "rental" as const, dueDate: rental.dueDate, rental: toRentalSpec(rental) } : {}),
       items: lines.map((l) => ({
         productId: l.productId,
@@ -165,8 +174,23 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
     };
   }
 
+  async function uploadProof(txId: string, data: string) {
+    setProofState("uploading");
+    const ok = await sendProof({ txId, photo: data }, (id, ph) => useData.getState().attachPhotoProof(id, ph));
+    setProofState(ok ? "done" : "failed");
+  }
+
   async function saveTx(tx: Transaction): Promise<Transaction | null> {
     const saved = await addTransaction(tx);
+    if (saved) {
+      // 2026-11-20: keranjang dikosongkan SAAT tersimpan (bukan saat "Selesai") — keranjang kini tersimpan
+      // di perangkat; bila PWA termuat ulang (mis. saat RawBT mencetak) item yang sudah dibayar tidak boleh muncul lagi.
+      clear();
+      if (photoLaterRef.current && photo) {
+        enqueueProof(saved.id, photo); // tetap terkirim walau PWA dimatikan sebelum unggahan selesai
+        void uploadProof(saved.id, photo);
+      }
+    }
     if (!saved) {
       // saveTransaction gagal (misal toko operasional belum dipilih) — tampilkan,
       // jangan stuck diam. Transaksi offline tetap antre via saveTransaction.
@@ -189,6 +213,9 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
 
   async function finishInner() {
     setError(null);
+    // online & tanpa PowerSync → simpan transaksi tanpa foto, foto menyusul; offline → foto ikut antrean transaksi
+    photoLaterRef.current =
+      !!photo && isSupabaseReady && typeof navigator !== "undefined" && navigator.onLine && !getPowerSyncDb();
 
     // E18: sewa wajib online (baris rentals disisipkan di tengah penyimpanan; tidak ada antrean offline)
     if (isRental && typeof navigator !== "undefined" && !navigator.onLine) {
@@ -341,7 +368,19 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
               </span>
               <div className="mt-2 text-lg font-extrabold text-ink">Transaksi Berhasil</div>
               <div className="text-xs font-semibold text-success">Tersimpan ✓ · nota dikirim ke printer</div>
-              <div className="text-sm text-gray-600 tnum">{formatRupiah(grand)}</div>
+              <div className="text-sm text-gray-600 tnum">{formatRupiah(paid.total)}</div>
+              {proofState === "uploading" && <div className="mt-1 text-xs text-gray-500">Foto bukti sedang dikirim…</div>}
+              {proofState === "done" && <div className="mt-1 text-xs text-success">Foto bukti terkirim ✓</div>}
+              {proofState === "failed" && (
+                <div className="mt-1 text-xs text-red-600">
+                  Foto bukti belum terkirim — dikirim ulang otomatis saat app dibuka lagi.
+                  {photo && (
+                    <button onClick={() => void uploadProof(paid.id, photo)} className="ml-1 font-semibold underline">
+                      Coba lagi
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
             <Receipt tx={paid} />
 
@@ -393,7 +432,7 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
                 onClick={() => {
                   clear();
                   onClose();
-                  if (isRental) router.push("/sewa");
+                  if (paid.kind === "rental") router.push("/sewa");
                 }}
                 className="btn-ghost flex-1"
               >
@@ -668,11 +707,29 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
                 </button>
               </div>
             ) : (
-              <label className="flex cursor-pointer flex-col items-center gap-2 rounded-2xl border-2 border-dashed border-black/15 p-5 text-center text-sm text-gray-500 transition hover:border-apricot hover:text-apricot">
+              <button
+                type="button"
+                onClick={() => setCamOpen(true)}
+                className="flex w-full cursor-pointer flex-col items-center gap-2 rounded-2xl border-2 border-dashed border-black/15 p-5 text-center text-sm text-gray-500 transition hover:border-apricot hover:text-apricot"
+              >
                 <Icon name="camera" size={28} className="text-olive" />
-                <span>Ketuk untuk ambil / upload foto</span>
-                <input type="file" accept="image/*" capture="environment" onChange={handlePhoto} className="hidden" />
-              </label>
+                <span>Ketuk untuk ambil foto</span>
+              </button>
+            )}
+            {/* cadangan: app kamera / galeri HP (dipakai bila kamera di halaman gagal atau dipilih) */}
+            <input ref={fileRef} type="file" accept="image/*" onChange={handlePhoto} className="hidden" />
+            {camOpen && (
+              <PhotoCapture
+                onCapture={(d) => {
+                  setPhoto(d);
+                  setCamOpen(false);
+                }}
+                onClose={() => setCamOpen(false)}
+                onFallback={() => {
+                  setCamOpen(false);
+                  fileRef.current?.click();
+                }}
+              />
             )}
           </div>
         </div>
