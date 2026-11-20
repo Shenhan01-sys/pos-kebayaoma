@@ -74,7 +74,8 @@ export default function PosPage() {
 
   function focusScan() {
     // Jangan rebut fokus dari input/select yang sedang dipakai kasir
-    if (document.activeElement === document.body) {
+    const el = document.activeElement as HTMLElement | null;
+    if (!el || el === document.body || el.tagName === "BUTTON" || el.tagName === "A") {
       scanInputRef.current?.focus();
     }
   }
@@ -104,10 +105,55 @@ export default function PosPage() {
       if (code) {
         handleScan(code);
         setScanBuffer("");
+        lastScanAtRef.current = Date.now();
       }
       e.preventDefault();
     }
   }
+
+  // 2026-11-20 (bug toko: scan ke-3 menghapus produk ke-2): scanner HID mengetik + Enter ke elemen
+  // yang sedang FOKUS. Setelah kasir mengetuk tombol (−/×/+ di keranjang, kartu produk), fokus
+  // tinggal di tombol itu → Enter dari scanner "mengklik" tombol tsb. Di halaman POS, ketikan saat
+  // fokus BUKAN di kolom isian ditangkap sebagai kode scan dan Enter/Tab tak pernah mengklik tombol.
+  const lastScanAtRef = useRef(0);
+  const handleScanRef = useRef<(code: string) => void>(() => {});
+  const modalOpenRef = useRef(false);
+  modalOpenRef.current = !!(picker || checkout || scannerOpen || customOpen || rentalConfirmOpen);
+  useEffect(() => {
+    let buf = "";
+    let last = 0;
+    const onKey = (e: KeyboardEvent) => {
+      if (modalOpenRef.current) return;
+      const now = Date.now();
+      // sufiks Tab dari scanner sesudah scan → jangan pindahkan fokus ke tombol berikutnya
+      if (e.key === "Tab" && now - lastScanAtRef.current < 500) {
+        e.preventDefault();
+        return;
+      }
+      const el = document.activeElement as HTMLElement | null;
+      const typing = !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable);
+      if (typing) return; // input scan tersembunyi & kolom cari punya handler sendiri
+      if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        e.stopPropagation();
+        if (buf && now - last < 400) {
+          handleScanRef.current(buf);
+          lastScanAtRef.current = now;
+        }
+        buf = "";
+        el?.blur();
+        scanInputRef.current?.focus();
+        return;
+      }
+      if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        buf = now - last > 400 ? e.key : buf + e.key;
+        last = now;
+        e.preventDefault();
+      }
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, []);
 
   const allSeries = products.flatMap((p) =>
     p.variants.map((v) => ({
@@ -162,6 +208,7 @@ export default function PosPage() {
     }
     flashScanMsg(`Barcode tidak dikenal: ${code}`);
   };
+  handleScanRef.current = handleScan;
 
   // E22: filter multi-token sampai level varian — nama varian, size/warna, harga
   // (token numerik), selain nama/SKU/tags produk & SKU/barcode varian (jalur lama).
@@ -189,6 +236,7 @@ export default function PosPage() {
         if (v.barcode === code || v.sku === code) {
           addVariant(p, v);
           setQuery("");
+          lastScanAtRef.current = Date.now();
           flashScanMsg(`${p.name} · ${v.name || v.sku} masuk keranjang`, "info");
           return;
         }
