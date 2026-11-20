@@ -5,11 +5,12 @@ import jsPDF from "jspdf";
 import JsBarcode from "jsbarcode";
 import { Dialog, DialogPanel, DialogTitle } from "@headlessui/react";
 import BarcodeLabel from "./BarcodeLabel";
-import RawbtSetupPanel from "./RawbtSetupPanel";
 import { useData } from "@/store/data";
-import { buildCalibrationJob, buildTsplJob } from "@/lib/tspl";
+import { buildTsplJob } from "@/lib/tspl";
 import { bytesToBase64, canvasTextRenderer } from "@/lib/tspl-text";
-import { RAWBT_MAX_ROWS, rawbtIntentUrl, shouldUseRawbt } from "@/lib/rawbt";
+import { shouldUseRawbt } from "@/lib/rawbt";
+import { buildXpLabelSheetHtml } from "@/lib/xp-label-html";
+import { printHtmlViaIframe } from "@/lib/print";
 import { isCode128Printable } from "@/lib/barcode";
 import { labelColor, labelSize as labelSizeText, labelTitle } from "@/lib/label-text";
 
@@ -47,7 +48,6 @@ export default function PrintBarcodeModal({
   // 40x20/50x25/60x30 = jalur RPP02N (single label per halaman).
   const [labelSize, setLabelSize] = useState<"60x30" | "50x25" | "40x20" | "xp420b">("xp420b");
   // E29: panel siapkan printer (tablet/RawBT) — muncul saat Direct Print diklik
-  const [showRawbtSetup, setShowRawbtSetup] = useState(false);
   const LABEL_DIMS: Record<string, { w: number; h: number }> = {
     "60x30": { w: 60, h: 30 },
     "50x25": { w: 50, h: 25 },
@@ -72,7 +72,6 @@ export default function PrintBarcodeModal({
   // Auto-check all variants on open (preset → varian & copies dari restock)
   useEffect(() => {
     if (isOpen) {
-      setShowRawbtSetup(false);
       if (preset) {
         setSelectedVariants({ [preset.variantId]: preset.copies });
         return;
@@ -284,29 +283,27 @@ ${labelHTML}
     }
   };
 
-  // E27: tablet Android → job TSPL yang sama dikirim ke app RawBT (Bluetooth), tanpa print-bridge.
-  // Tanpa fetch ke 127.0.0.1 (tidak ada bridge di tablet; menghindari popup izin jaringan lokal).
-  const xp420bRawbtPrint = (labels: ReturnType<typeof collectLabels>) => {
-    const rows = Math.ceil(labels.length / XP_COLS);
-    if (rows > RAWBT_MAX_ROWS) {
-      alert(
-        `Dari tablet maksimal ${RAWBT_MAX_ROWS * XP_COLS} label (${RAWBT_MAX_ROWS} baris) per cetak.\n` +
-          `Terpilih ${labels.length} label — kurangi jumlahnya lalu cetak bertahap.`
-      );
-      return;
-    }
-    // Tanpa confirm(): Chrome Android hanya membuka intent app lain bila masih dalam gesture klik,
-    // dan dialog confirm() menghabiskan gesture itu (terbukti: RawBT tidak terbuka, uji 2026-10-15).
-    window.location.href = rawbtIntentUrl(bytesToBase64(buildTsplJob(labels, canvasTextRenderer())));
-    onClose();
+  // 2026-11-20: tablet Android → DIALOG CETAK (layanan cetak RawBT, printer "XP-D4601B_5419").
+  // Intent `rawbt:` tidak dipakai lagi untuk label: RawBT di tablet kasir mencetak otomatis ke printer
+  // default = RPP02N (nota 0 ketukan), jadi job label lewat intent akan keluar di printer nota.
+  const xp420bDialogPrint = (labels: ReturnType<typeof collectLabels>) => {
+    const imgCache = new Map<string, string>();
+    const barcodeImg = (code: string) => {
+      if (!imgCache.has(code)) {
+        const canvas = document.createElement("canvas");
+        JsBarcode(canvas, code, { format: "CODE128", width: 2, height: 40, displayValue: false, margin: 0 });
+        imgCache.set(code, canvas.toDataURL("image/png"));
+      }
+      return imgCache.get(code)!;
+    };
+    printHtmlViaIframe(buildXpLabelSheetHtml(labels, barcodeImg));
   };
 
   const handleDirectPrint = () => {
     const labels = collectLabels();
     if (labels.length === 0) return;
     if (labelSize === "xp420b" && shouldUseRawbt(navigator.userAgent, navigator.maxTouchPoints ?? 0)) {
-      // E29: cetak hanya lewat panel, setelah RawBT terbuka & printer terbukti tersambung
-      return setShowRawbtSetup(true);
+      return xp420bDialogPrint(labels);
     }
     if (labelSize === "xp420b") return void xp420bBridgePrint(labels);
     return legacyDirectPrint(labels, LABEL_DIMS[labelSize]);
@@ -614,22 +611,6 @@ ${labelHTML}
                   )}
                 </div>
               </div>
-            )}
-
-            {/* E29: siapkan printer label di tablet (RawBT) */}
-            {showRawbtSetup && labelSize === "xp420b" && (
-              <RawbtSetupPanel
-                labelCount={totalLabels}
-                rows={Math.ceil(totalLabels / XP_COLS)}
-                onPrint={() => {
-                  const labels = collectLabels();
-                  if (labels.length > 0) xp420bRawbtPrint(labels);
-                }}
-                onPrintCalibration={() => {
-                  window.location.href = rawbtIntentUrl(bytesToBase64(buildCalibrationJob()));
-                }}
-                onClose={() => setShowRawbtSetup(false)}
-              />
             )}
 
             {/* Total */}
