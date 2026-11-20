@@ -42,6 +42,9 @@ import {
   mapShiftRow,
 } from "@/lib/store-mappers";
 
+/** kunci flush antrean offline (lihat flushOfflineQueue) */
+let flushInFlight: Promise<void> | null = null;
+
 const generateLocalId = () => "local-" + Math.random().toString(36).slice(2, 10);
 
 // Perf (audit 2026-09-19): refetch transaksi realtime di-debounce 4 dtk —
@@ -2614,6 +2617,12 @@ export const useData = create<DataState>()(
       },
 
       flushOfflineQueue: async () => {
+        // satu flush pada satu waktu: event "online" + load awal bisa jalan bersamaan dan
+        // menyimpan antrean yang sama dua kali (transaksi dobel)
+        if (flushInFlight) return flushInFlight;
+        let release!: () => void;
+        flushInFlight = new Promise<void>((r) => (release = r));
+        try {
         if (typeof navigator !== "undefined" && !navigator.onLine) return;
         const pending = await getPendingTransactions();
         if (pending.length === 0) return;
@@ -2636,6 +2645,10 @@ export const useData = create<DataState>()(
         if (flushed > 0) {
           console.info(`[offline-queue] Flushed ${flushed}/${pending.length}. Refreshing stateâ€¦`);
           await get().fetchTransactions();
+        }
+        } finally {
+          flushInFlight = null;
+          release();
         }
       },
 

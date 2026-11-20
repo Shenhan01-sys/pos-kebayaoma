@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { QRCodeSVG } from "qrcode.react";
 import {
   formatRupiah,
   type PaymentMethod,
@@ -20,11 +19,10 @@ import { resolveReceiptStore } from "@/lib/store-info";
 import Receipt from "@/components/Receipt";
 import { inclusiveTax } from "@/lib/tax";
 import { formatDateId, rentalDraftDeposit, renterPhone, toRentalSpec } from "@/lib/rental";
-import { humanizeError } from "@/lib/errors";
 import { Icon } from "@/components/icons";
 
 const methodMeta: Record<PaymentMethod, { label: string; icon: "qris" | "cash" | "transfer" | "shopee" }> = {
-  qris: { label: "QRIS", icon: "qris" },
+  qris: { label: "QRIS (EDC)", icon: "qris" }, // 2026-11-20: bayar di mesin EDC, tanpa QR Midtrans
   cash: { label: "Tunai", icon: "cash" },
   transfer: { label: "Transfer", icon: "transfer" },
   shopee: { label: "Shopee", icon: "transfer" },
@@ -38,15 +36,18 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
   const s = useSettings();
   const auth = useAuth();
   const cashierName = auth.staff?.name ?? s.cashierName;
-  const { products, setTransactionStatus, recordCustomItem } = useData();
+  const { products, recordCustomItem } = useData();
   const activeStoreId = useData((s) => s.activeStoreId);
   const stores = useData((s) => s.stores);
   const storePrefix =
     stores.find((t) => t.id === activeStoreId)?.prefix ?? "TRX-";
 
-  const [method, setMethod] = useState<PaymentMethod>("qris");
+  const [method, setMethod] = useState<PaymentMethod>("cash");
   const [paid, setPaid] = useState<Transaction | null>(null);
-  const [pendingId, setPendingId] = useState<string | null>(null);
+  // cegah transaksi dobel: tombol Konfirmasi terkunci selama penyimpanan berjalan
+  const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
+  const autoPrinted = useRef(false);
   const [txNumber] = useState(() => nextTxNumber(storePrefix));
   const [customPrompt, setCustomPrompt] = useState<TransactionItem[]>([]);
   // E6: Pre-order DP
@@ -82,8 +83,6 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
   const [cashPaid, setCashPaid] = useState(String(grand));
   useEffect(() => setCashPaid(String(grand)), [grand]);
 
-  const [qr, setQr] = useState<{ qrString: string; qrisRef: string; mock: boolean; expiry?: string } | null>(null);
-  const [qrLoading, setQrLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [photo, setPhoto] = useState<string | null>(null);
   const [negoOpen, setNegoOpen] = useState(false);
@@ -124,85 +123,6 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
     img.src = url;
   }
 
-  // Request dynamic QRIS whenever amount/method changes
-  useEffect(() => {
-    if (method !== "qris") return;
-    let cancelled = false;
-    setQrLoading(true);
-    setError(null);
-    fetch("/api/qris/charge", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ order_id: txNumber, gross_amount: grand }),
-    })
-      .then((r) => r.json())
-      .then((d) => {
-        if (cancelled) return;
-        if (d.error) {
-          setError(d.error);
-          setQr(null);
-        } else {
-          setQr({
-            qrString: d.qrString,
-            qrisRef: d.qrisRef,
-            mock: !!d.mock,
-            expiry: d.expiry,
-          });
-        }
-      })
-      .catch((e) => {
-        if (!cancelled) setError(humanizeError(e));
-      })
-      .finally(() => !cancelled && setQrLoading(false));
-    return () => {
-      cancelled = true;
-    };
-  }, [method, grand, txNumber]);
-
-  // Listen for pending QRIS transaction → paid (via realtime)
-  useEffect(() => {
-    if (!pendingId) return;
-    const unsub = useData.subscribe((state) => {
-      const tx = state.transactions.find((t) => t.id === pendingId);
-      if (tx?.status === "paid") {
-        setCustomPrompt(tx.items.filter((i) => i.productId === "custom"));
-        setPaid(tx);
-        setPendingId(null);
-      }
-    });
-    return unsub;
-  }, [pendingId]);
-
-  // Polling fallback: cek status QRIS tiap 3 detik kalau realtime belum sampai
-  useEffect(() => {
-    if (!pendingId || !qr || qr.mock) return;
-    let cancelled = false;
-    const poll = async () => {
-      try {
-        const res = await fetch(`/api/qris/status?ref=${encodeURIComponent(qr.qrisRef)}`);
-        if (cancelled) return;
-        const data = await res.json();
-        if (data.status === "paid") {
-          await useData.getState().fetchTransactions();
-          const tx = useData.getState().transactions.find((t) => t.id === pendingId);
-          if (tx?.status === "paid") {
-            setCustomPrompt(tx.items.filter((i) => i.productId === "custom"));
-            setPaid(tx);
-            setPendingId(null);
-          }
-        }
-      } catch {
-        // Poll gagal, coba lagi nanti
-      }
-    };
-    const interval = setInterval(poll, 3000);
-    poll(); // Cek langsung
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, [pendingId, qr]);
-
   function buildTx(
     status: Transaction["status"],
     paymentStatus: Transaction["paymentStatus"],
@@ -224,7 +144,6 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
       amountPaid,
       change: Math.max(0, amountPaid - grand),
       createdAt: now,
-      qrisRef: method === "qris" ? qr?.qrisRef : undefined,
       photoProof: photo ?? undefined,
       ...(rental ? { kind: "rental" as const, dueDate: rental.dueDate, rental: toRentalSpec(rental) } : {}),
       items: lines.map((l) => ({
@@ -255,6 +174,18 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
   }
 
   async function finish() {
+    if (busyRef.current) return; // ketukan kedua saat menyimpan diabaikan (penyebab transaksi dobel)
+    busyRef.current = true;
+    setBusy(true);
+    try {
+      await finishInner();
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
+  }
+
+  async function finishInner() {
     setError(null);
 
     // E18: sewa wajib online (baris rentals disisipkan di tengah penyimpanan; tidak ada antrean offline)
@@ -279,10 +210,7 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
       return;
     }
 
-    if (!photo) {
-      setError("Foto bukti pembayaran wajib diunggah.");
-      return;
-    }
+    // 2026-11-20: foto bukti opsional untuk semua metode (permintaan toko)
 
     // ===== E6 PRE-ORDER (DP) : status partial → trigger pending->partial reserve stok =====
     if (po) {
@@ -293,10 +221,6 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
       }
       if (!dueDate) {
         setError("Isi tanggal jatuh tempo pelunasan.");
-        return;
-      }
-      if (method === "qris") {
-        setError("Pre-order: pilih metode Tunai/Transfer untuk pembayaran DP.");
         return;
       }
       const tx: Transaction = {
@@ -330,38 +254,13 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
       return;
     }
 
-    if (method === "transfer") {
-      const tx = buildTx("paid", "paid", grand);
-      const saved = await saveTx(tx);
-      if (saved) {
-        setCustomPrompt(saved.items.filter((i) => i.productId === "custom"));
-        setPaid(saved);
-      }
-      return;
-    }
-
-    // QRIS
-    if (qr?.mock) {
-      const tx = buildTx("paid", "paid", grand);
-      const saved = await saveTx(tx);
-      if (saved) {
-        setCustomPrompt(saved.items.filter((i) => i.productId === "custom"));
-        setPaid(saved);
-      }
-      return;
-    }
-
-    // Real QRIS: buat transaksi pending, tunggu webhook/realtime
-    const tx = buildTx("pending", "pending", 0);
+    // Transfer & QRIS (EDC): kasir mengonfirmasi setelah pembayaran masuk → langsung lunas
+    const tx = buildTx("paid", "paid", grand);
     const saved = await saveTx(tx);
-    if (saved) setPendingId(saved.id);
-  }
-
-  async function cancelPending() {
-    if (pendingId) {
-      await setTransactionStatus(pendingId, "cancelled");
+    if (saved) {
+      setCustomPrompt(saved.items.filter((i) => i.productId === "custom"));
+      setPaid(saved);
     }
-    setPendingId(null);
   }
 
   // E-print (2026-09-18, revisi 2): struk thermal via hidden iframe — bukan window.print()
@@ -407,6 +306,15 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
     printHtmlViaIframe(html);
   }
 
+  // 2026-11-20: nota langsung dicetak sekali setelah transaksi tersimpan (tombol Print Nota tetap ada untuk cetak ulang)
+  useEffect(() => {
+    if (!paid || autoPrinted.current) return;
+    autoPrinted.current = true;
+    const t = setTimeout(() => void printThermal(), 300); // tunggu struk (QR verifikasi) ter-render
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paid]);
+
   if (paid) {
     return (
       <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4">
@@ -417,7 +325,8 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
               <span className="flex h-14 w-14 items-center justify-center rounded-full bg-success text-white shadow-glow">
                 <Icon name="check" size={30} />
               </span>
-              <div className="mt-2 text-lg font-extrabold text-ink">Pembayaran Berhasil</div>
+              <div className="mt-2 text-lg font-extrabold text-ink">Transaksi Berhasil</div>
+              <div className="text-xs font-semibold text-success">Tersimpan ✓ · nota sedang dicetak</div>
               <div className="text-sm text-gray-600 tnum">{formatRupiah(grand)}</div>
             </div>
             <Receipt tx={paid} />
@@ -475,52 +384,6 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
                 className="btn-ghost flex-1"
               >
                 Selesai
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (pendingId) {
-    return (
-      <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4">
-        {/* E23a: panel muat viewport, tombol pinned */}
-        <div className="flex max-h-full w-full max-w-[380px] flex-col overflow-hidden rounded-t-4xl bg-white p-0 text-center shadow-soft-xl sm:rounded-3xl">
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-5">
-            <div className="mb-3 flex flex-col items-center">
-              <span className="flex h-12 w-12 animate-pulse items-center justify-center rounded-full bg-apricot/20 text-apricot">
-                <Icon name="qris" size={28} />
-              </span>
-              <h2 className="mt-3 text-lg font-extrabold text-ink">Menunggu Pembayaran QRIS</h2>
-              <p className="text-sm text-gray-600">{txNumber}</p>
-            </div>
-
-            {qr && (
-              <div className="mx-auto mb-3 w-fit rounded-2xl bg-white p-3 shadow-soft">
-                <QRCodeSVG value={qr.qrString} size={176} level="M" />
-              </div>
-            )}
-
-            <p className="text-sm text-gray-600">
-              Minta pelanggan scan QR di atas. Transaksi akan otomatis terkonfirmasi setelah pembayaran diterima.
-            </p>
-            {qr?.expiry && (
-              <p className="mt-1 text-xs text-olive">
-                Berlaku s.d. {new Date(qr.expiry).toLocaleTimeString("id-ID")}
-              </p>
-            )}
-            <p className="mt-2 flex items-center justify-center gap-1.5 text-[11px] text-gray-400">
-              <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-success" />
-              Memeriksa status pembayaran…
-            </p>
-          </div>
-
-          <div className="shrink-0 border-t border-black/5 p-5">
-            <div className="flex gap-2">
-              <button onClick={cancelPending} className="btn-ghost flex-1">
-                Batalkan
               </button>
             </div>
           </div>
@@ -704,27 +567,9 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
           </div>
 
           {method === "qris" && (
-            <div className="flex flex-col items-center rounded-2xl bg-beige/60 p-4">
-              {qrLoading || !qr ? (
-                <div className="flex h-[176px] w-[176px] items-center justify-center rounded-2xl bg-white text-sm text-gray-500 shadow-soft">
-                  Membuat QR…
-                </div>
-              ) : (
-                <div className="rounded-2xl bg-white p-3 shadow-soft">
-                  <QRCodeSVG value={qr.qrString} size={176} level="M" />
-                </div>
-              )}
-              <p className="mt-2 text-center text-xs text-gray-600">
-                {qr?.mock
-                  ? "Mode simulasi (tanpa key Midtrans). Klik tombol untuk menyelesaikan."
-                  : "Scan dengan GoPay / ShopeePay / OVO / e-wallet QRIS."}
-              </p>
-              {qr?.expiry && (
-                <p className="mt-1 text-[11px] text-olive">
-                  Berlaku s.d. {new Date(qr.expiry).toLocaleTimeString("id-ID")}
-                </p>
-              )}
-            </div>
+            <p className="rounded-2xl bg-beige/60 p-4 text-sm text-gray-600">
+              Pelanggan bayar QRIS di <b>mesin EDC</b>. Konfirmasi setelah pembayaran berhasil di EDC — foto struk EDC boleh dilampirkan di bawah (opsional).
+            </p>
           )}
 
           {method === "cash" && (
@@ -795,7 +640,7 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
           <div className="mt-3 rounded-2xl bg-beige/60 p-3">
             <label className="mb-2 flex items-center gap-1.5 text-sm font-medium text-olive">
               <Icon name="camera" size={16} /> Foto Bukti Pembayaran
-              <span className="text-danger">*</span>
+              <span className="text-xs font-normal text-gray-500">(opsional)</span>
             </label>
             {photo ? (
               <div className="relative">
@@ -819,12 +664,8 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
         </div>
 
         <div className="shrink-0 border-t border-black/5 bg-white px-5 pb-5 pt-3">
-          <button onClick={finish} className="btn-primary w-full py-3 text-base">
-            {method === "qris"
-              ? qr?.mock
-                ? "Simulasikan Pembayaran"
-                : "Bayar via QRIS"
-              : "Konfirmasi"}
+          <button onClick={finish} disabled={busy} className="btn-primary w-full py-3 text-base disabled:opacity-60">
+            {busy ? "Menyimpan…" : "Konfirmasi"}
           </button>
         </div>
       </div>

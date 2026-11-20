@@ -38,7 +38,7 @@ export default function Receipt({ tx }: { tx: Transaction }) {
         {s.storeName.toUpperCase()}
       </div>
       <div className="text-center text-[11px]">{s.address}</div>
-      <div className="text-center text-[11px]">Telp: {s.phone}</div>
+      {s.phone && <div className="text-center text-[11px]">Telp: {s.phone}</div>}
 
       <div className="my-2 border-t border-dashed border-black/30" />
 

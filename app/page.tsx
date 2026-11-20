@@ -7,6 +7,7 @@ import { transactions as dummyTx, formatRupiah, todayLocalKey, type Transaction 
 import { getAllTransactions, subscribeTransactions } from "@/store/cart";
 import { useSettings } from "@/store/settings";
 import { useData } from "@/store/data";
+import { resolveReceiptStore } from "@/lib/store-info";
 import { useAuth } from "@/store/auth";
 import { Icon, type IconName } from "@/components/icons";
 import { computeDashboard } from "@/lib/dashboard-data";
@@ -43,6 +44,9 @@ export default function DashboardPage() {
   const auth = useAuth();
   const { products } = useData();
   const activeStoreId = useData((st) => st.activeStoreId);
+  const storeRows = useData((st) => st.stores);
+  // alamat outlet aktif: DB → alamat resmi outlet (bukan dummy lokal)
+  const storeAddress = resolveReceiptStore(s, storeRows, activeStoreId).address;
   useEffect(() => {
     const sync = () => setLive(getAllTransactions(dummyTx));
     sync();
@@ -148,7 +152,7 @@ export default function DashboardPage() {
               <h1 className="text-2xl font-extrabold tracking-tight text-ink">
                 Halo, {auth.staff?.name ?? s.cashierName} 👋
               </h1>
-              <p className="text-sm text-olive/80">{s.storeName} · {s.address}</p>
+              <p className="text-sm text-olive/80">{s.storeName}{storeAddress ? ` · ${storeAddress}` : ""}</p>
             </div>
           </div>
           <Link href="/pos" className="btn-primary">

@@ -77,7 +77,7 @@ export function buildThermalReceiptHtml(
 <body>
   <div class="c b store">${esc(s.storeName.toUpperCase())}</div>
   <div class="c small">${esc(s.address)}</div>
-  <div class="c small">Telp: ${esc(s.phone)}</div>
+  ${s.phone ? `<div class="c small">Telp: ${esc(s.phone)}</div>` : ""}
   <div class="dash">${DASH}</div>
   <table class="meta">
     <tr><td>${esc(tx.number)}</td><td class="r">${new Date(tx.createdAt).toLocaleString("id-ID")}</td></tr>
