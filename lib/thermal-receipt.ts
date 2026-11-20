@@ -78,6 +78,7 @@ export function buildThermalReceiptHtml(
   <div class="c b store">${esc(s.storeName.toUpperCase())}</div>
   <div class="c small">${esc(s.address)}</div>
   ${s.phone ? `<div class="c small">Telp: ${esc(s.phone)}</div>` : ""}
+  ${tx.training ? `<div class="c b">*** LATIHAN ***</div><div class="c b">BUKAN NOTA SAH</div>` : ""}
   <div class="dash">${DASH}</div>
   <table class="meta">
     <tr><td>${esc(tx.number)}</td><td class="r">${new Date(tx.createdAt).toLocaleString("id-ID")}</td></tr>
@@ -97,7 +98,7 @@ export function buildThermalReceiptHtml(
     ${payRows.map(([k, v]) => `<tr><td>${k}</td><td class="r">${v}</td></tr>`).join("")}
   </table>
   <div class="dash">${DASH}</div>
-  ${qrPng ? `<div class="c"><img class="qr" src="${qrPng}" alt="QR"></div><div class="c small">Scan untuk verifikasi resmi</div>` : ""}
+  ${qrPng && !tx.training ? `<div class="c"><img class="qr" src="${qrPng}" alt="QR"></div><div class="c small">Scan untuk verifikasi resmi</div>` : ""}
   <div class="c b" style="margin-top:4px">Terima kasih</div>
   <div class="c small">${rental ? esc(rental.footer) : "Barang tidak bisa dikembalikan"}</div>
 </body>

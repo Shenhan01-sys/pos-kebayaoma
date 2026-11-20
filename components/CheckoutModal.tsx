@@ -181,6 +181,23 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
   }
 
   async function saveTx(tx: Transaction): Promise<Transaction | null> {
+    // 2026-11-20 Mode Latihan: simulasi di perangkat — TIDAK ada tulisan ke DB (transaksi, stok, nomor nota,
+    // pelanggan, foto). Nota tetap bisa dicetak, bertanda LATIHAN tanpa QR verifikasi.
+    if (useSettings.getState().trainingMode) {
+      const d = new Date();
+      const hh = (n: number) => String(n).padStart(2, "0");
+      const sim: Transaction = {
+        ...tx,
+        id: `latihan-${d.getTime()}`,
+        number: `LATIHAN-${hh(d.getHours())}${hh(d.getMinutes())}${hh(d.getSeconds())}`,
+        storeId: useData.getState().activeStoreId ?? undefined,
+        createdAt: d.toISOString(),
+        photoProof: undefined,
+        training: true,
+      };
+      clear();
+      return sim;
+    }
     const saved = await addTransaction(tx);
     if (saved) {
       // 2026-11-20: keranjang dikosongkan SAAT tersimpan (bukan saat "Selesai") — keranjang kini tersimpan
@@ -379,7 +396,11 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
                 <Icon name="check" size={30} />
               </span>
               <div className="mt-2 text-lg font-extrabold text-ink">Transaksi Berhasil</div>
-              <div className="text-xs font-semibold text-success">Tersimpan ✓ · nota dikirim ke printer</div>
+              {paid.training ? (
+                <div className="text-xs font-bold text-orange-600">MODE LATIHAN · tidak disimpan · nota bertanda LATIHAN</div>
+              ) : (
+                <div className="text-xs font-semibold text-success">Tersimpan ✓ · nota dikirim ke printer</div>
+              )}
               <div className="text-sm text-gray-600 tnum">{formatRupiah(paid.total)}</div>
               {proofState === "uploading" && <div className="mt-1 text-xs text-gray-500">Foto bukti sedang dikirim…</div>}
               {proofState === "done" && <div className="mt-1 text-xs text-success">Foto bukti terkirim ✓</div>}

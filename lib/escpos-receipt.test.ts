@@ -85,6 +85,16 @@ describe("buildEscposReceipt", () => {
     expect(printed(Uint8Array.from(b))).toContain("Scan untuk verifikasi resmi");
     expect(printed(buildEscposReceipt(base, store))).not.toContain("Scan untuk verifikasi");
   });
+  it("Mode Latihan: tanda LATIHAN & BUKAN NOTA SAH, tanpa QR verifikasi", () => {
+    const b = buildEscposReceipt({ ...base, training: true, number: "LATIHAN-231500" }, store, { verifyUrl: "https://x.id/verify/t1" });
+    const t = printed(b);
+    expect(t).toContain("*** LATIHAN ***");
+    expect(t).toContain("BUKAN NOTA SAH");
+    expect(t).not.toContain("Scan untuk verifikasi");
+    const arr = Array.from(b);
+    expect(arr.some((v, i) => v === 0x1d && arr[i + 1] === 0x28 && arr[i + 2] === 0x6b)).toBe(false);
+    expect(printed(buildEscposReceipt(base, store))).not.toContain("LATIHAN");
+  });
   it("base64 bolak-balik", () => {
     const b = buildEscposReceipt(base, store);
     expect(Buffer.from(bytesToBase64(b), "base64").equals(Buffer.from(b))).toBe(true);

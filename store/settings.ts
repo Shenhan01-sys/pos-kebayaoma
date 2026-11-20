@@ -10,6 +10,8 @@ export interface Settings {
   taxRate: number; // percent
   printerType: "escpos-bluetooth" | "browser" | "cloud";
   cashierName: string;
+  /** 2026-11-20: Mode Latihan — checkout disimulasikan, tidak ditulis ke DB (components/TrainingModeControl) */
+  trainingMode: boolean;
 }
 
 interface SettingsState extends Settings {
@@ -25,6 +27,7 @@ export const useSettings = create<SettingsState>()(
       taxRate: 0, // E4: default OFF; model inclusive, manager mengisi % bila perlu
       printerType: "escpos-bluetooth",
       cashierName: "Ani",
+      trainingMode: false,
       update: (patch) => set(patch),
     }),
     {

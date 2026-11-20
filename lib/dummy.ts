@@ -108,6 +108,8 @@ export interface Transaction {
   change: number;
   items: TransactionItem[];
   createdAt: string;
+  /** 2026-11-20: hasil Mode Latihan — hanya di memori perangkat, tidak pernah ke DB */
+  training?: boolean;
   qrisRef?: string;
   photoProof?: string;
   hasProof?: boolean;    // E21: nota punya foto bukti (isi diambil saat dilihat — fetchPhotoProof)

@@ -105,6 +105,7 @@ export function buildEscposReceipt(tx: Transaction, s: EscposReceiptStore, opt: 
   p.size(0x00).bold(false);
   if (s.address) p.lines(wrap(s.address));
   if (s.phone) p.lines(wrap(`Telp: ${s.phone}`));
+  if (tx.training) p.bold(true).line("*** LATIHAN ***").line("BUKAN NOTA SAH").bold(false);
   p.align("left").dash();
   p.line(toAscii(tx.number));
   p.line(toAscii(new Date(tx.createdAt).toLocaleString("id-ID", { timeZone: "Asia/Jakarta" })));
@@ -127,7 +128,7 @@ export function buildEscposReceipt(tx: Transaction, s: EscposReceiptStore, opt: 
   p.lines(leftRight(`Bayar (${tx.paymentMethod.toUpperCase()})`, formatRupiah(tx.amountPaid)));
   if (tx.change > 0) p.lines(leftRight("Kembali", formatRupiah(tx.change)));
   p.dash().align("center");
-  if (opt.verifyUrl) p.qr(opt.verifyUrl).raw(LF).line("Scan untuk verifikasi resmi");
+  if (opt.verifyUrl && !tx.training) p.qr(opt.verifyUrl).raw(LF).line("Scan untuk verifikasi resmi");
   p.bold(true).line("Terima kasih").bold(false);
   p.lines(wrap(rental ? rental.footer : "Barang tidak bisa dikembalikan"));
   p.align("left").raw(LF, LF, LF);
