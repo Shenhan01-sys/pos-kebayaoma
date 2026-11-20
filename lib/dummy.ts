@@ -74,14 +74,20 @@ export interface TransactionItem {
 }
 
 /** E18: data sewa yang menempel pada transaksi kind='rental' (disisipkan ke tabel rentals oleh saveTransaction) */
-export interface RentalSpec {
+/** satu baris tabel rentals (per barang) */
+export interface RentalSpecLine {
   productId: string;
   qty: number;
   rentPrice: number; // per unit
   deposit: number | null; // per unit
+}
+
+/** satu nota sewa = satu penyewa + satu periode, N barang (satu baris rentals per barang) */
+export interface RentalSpec {
   startDate: string; // 'YYYY-MM-DD'
   dueDate: string; // 'YYYY-MM-DD'
   customerPhone?: string | null;
+  lines: RentalSpecLine[];
 }
 
 export interface Transaction {

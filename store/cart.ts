@@ -8,7 +8,7 @@ import {
   type Transaction,
 } from "@/lib/dummy";
 import { useData } from "@/store/data";
-import type { RentalDraft } from "@/lib/rental";
+import { mergeRentalLines, type RentalDraft } from "@/lib/rental";
 
 export interface CartLine {
   key: string; // variantId
@@ -32,9 +32,11 @@ interface CartState {
   lines: CartLine[];
   customerName: string | null;
   discount: number;
-  /** E18: draft sewa aktif (dibawa dari /sewa). Ada ⇒ keranjang hanya berisi satu baris sewa & checkout memakai mode sewa */
+  /** E18: draft sewa aktif (dibawa dari /sewa). Ada ⇒ keranjang hanya berisi baris sewa (satu per baris draft, key = variantId)
+   *  & checkout memakai mode sewa */
   rental: RentalDraft | null;
-  startRental: (product: Product, variant: Variant, draft: RentalDraft) => void;
+  /** mulai/ganti sewa: keranjang DIGANTI baris sewa. items = produk+varian tiap baris draft. false = ada varian tak dikenal (tak berubah) */
+  startRental: (draft: RentalDraft, items: { product: Product; variant: Variant }[]) => boolean;
   addVariant: (
     product: Product,
     variant: Variant,
@@ -69,30 +71,34 @@ export const useCart = create<CartState>()(
   customerName: null,
   discount: 0,
   rental: null,
-  // E18: mulai sewa — keranjang DIGANTI satu baris sewa (tarif per unit, tanpa modal), penyewa jadi pelanggan nota
-  startRental: (product, variant, draft) =>
-    set({
-      lines: [
-        {
-          key: variant.id,
-          productId: product.id,
-          variantId: variant.id,
-          name: product.name,
-          sku: variant.sku,
-          seriesName: variant.name,
-          size: variant.size,
-          color: variant.color,
-          unitPrice: draft.rentPrice,
-          costPrice: 0, // sewa: tak ada HPP per unit (disimpan null; trigger DB set_item_cost_price mengisinya dari modal varian — laporan mengabaikan HPP baris sewa, lib/report-data.ts)
-          quantity: draft.qty,
-          discount: 0,
-          rental: true,
-        },
-      ],
-      customerName: draft.customerName,
-      discount: 0,
-      rental: draft,
-    }),
+  // E18: mulai sewa — keranjang DIGANTI baris sewa (tarif per unit, tanpa modal), penyewa jadi pelanggan nota.
+  // Multi-barang: satu baris keranjang per baris draft; varian kembar digabung (qty dijumlah) agar key tetap unik.
+  startRental: (draft, items) => {
+    const merged = mergeRentalLines(draft.lines);
+    if (merged.length === 0) return false;
+    const lines: CartLine[] = [];
+    for (const d of merged) {
+      const it = items.find((x) => x.variant.id === d.variantId && x.product.id === d.productId);
+      if (!it) return false;
+      lines.push({
+        key: it.variant.id,
+        productId: it.product.id,
+        variantId: it.variant.id,
+        name: it.product.name,
+        sku: it.variant.sku,
+        seriesName: it.variant.name,
+        size: it.variant.size,
+        color: it.variant.color,
+        unitPrice: d.rentPrice,
+        costPrice: 0, // sewa: tak ada HPP per unit (disimpan null; trigger DB set_item_cost_price mengisinya dari modal varian — laporan mengabaikan HPP baris sewa, lib/report-data.ts)
+        quantity: d.qty,
+        discount: 0,
+        rental: true,
+      });
+    }
+    set({ lines, customerName: draft.customerName, discount: 0, rental: { ...draft, lines: merged } });
+    return true;
+  },
   addVariant: (product, variant, qty = 1, opts) =>
     set((state) => {
       if (state.rental) return state; // E18: keranjang sewa terkunci
@@ -193,11 +199,16 @@ export const useCart = create<CartState>()(
         .filter((l) => l.quantity > 0),
     })),
   remove: (key) =>
-    set((s) =>
-      s.rental
-        ? { lines: [], customerName: null, discount: 0, rental: null } // E18: menghapus baris sewa = batalkan sewa
-        : { lines: s.lines.filter((l) => l.key !== key) }
-    ),
+    set((s) => {
+      if (!s.rental) return { lines: s.lines.filter((l) => l.key !== key) };
+      // E18: hapus satu barang sewa (baris draft ikut dihapus); barang terakhir dihapus = batalkan sewa
+      const line = s.lines.find((l) => l.key === key);
+      if (!line) return s;
+      const lines = s.lines.filter((l) => l.key !== key);
+      const draftLines = s.rental.lines.filter((d) => d.variantId !== line.variantId);
+      if (lines.length === 0 || draftLines.length === 0) return { lines: [], customerName: null, discount: 0, rental: null };
+      return { lines, rental: { ...s.rental, lines: draftLines } };
+    }),
   setCustomer: (name) => set((s) => (s.rental ? s : { customerName: name })),
   setDiscount: (amount) =>
  set((s) => {
@@ -227,7 +238,7 @@ export const useCart = create<CartState>()(
       savedAt: Date.now(),
     }),
     merge: (persisted, current) => {
-      const r = restoreCart(persisted as PersistedCart<CartLine, RentalDraft> | undefined, Date.now());
+      const r = restoreCart(persisted as PersistedCart<CartLine> | undefined, Date.now());
       return r ? { ...current, ...r } : current;
     },
   }

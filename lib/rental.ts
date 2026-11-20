@@ -282,8 +282,8 @@ export function resolveRentalPrice(
 
 // ===== E18: sewa dibayar lewat checkout POS (draft dari /sewa → keranjang /pos → CheckoutModal) =====
 
-/** draft sewa yang dibawa dari halaman /sewa ke keranjang POS */
-export interface RentalDraft {
+/** satu baris barang dalam draft sewa (satu varian; tarif & deposit per unit) */
+export interface RentalDraftLine {
   productId: string;
   variantId: string;
   qty: number;
@@ -291,67 +291,167 @@ export interface RentalDraft {
   rentPrice: number;
   /** deposit per unit (info, tidak masuk total bayar) */
   deposit: number | null;
+}
+
+/** draft sewa yang dibawa dari halaman /sewa ke keranjang POS.
+ *  Satu nota sewa = SATU penyewa + SATU tanggal mulai/lama/jatuh tempo, berisi N baris barang (keluhan staf:
+ *  "belum bisa add item yang berbeda dalam 1 nota"). Tiap baris → satu baris tabel rentals saat disimpan. */
+export interface RentalDraft {
   days: number;
   startDate: string; // YYYY-MM-DD
   dueDate: string; // YYYY-MM-DD
   customerName: string;
   customerPhone: string | null;
+  lines: RentalDraftLine[];
 }
 
-/** buat draft dari isian form (jatuh tempo = mulai + hari); harga dibulatkan ke rupiah utuh */
-export function buildRentalDraft(input: {
+export interface RentalDraftLineInput {
   productId: string;
   variantId: string;
   qty: number;
   rentPrice: number;
   deposit?: number | null;
-  days: number;
-  startDate: string;
-  customerName: string;
-  customerPhone?: string | null;
-}): RentalDraft {
-  const days = Math.max(1, Math.round(input.days));
+}
+
+/** rapikan satu baris: qty minimal 1 (bulat), harga ke rupiah utuh, deposit 0/null → null */
+export function buildRentalDraftLine(input: RentalDraftLineInput): RentalDraftLine {
   return {
     productId: input.productId,
     variantId: input.variantId,
     qty: Math.max(1, Math.round(input.qty)),
     rentPrice: Math.round(input.rentPrice),
     deposit: input.deposit && input.deposit > 0 ? Math.round(input.deposit) : null,
+  };
+}
+
+/** gabungkan baris dengan varian sama (qty dijumlah; tarif & deposit memakai baris TERAKHIR); urutan pertama dipertahankan */
+export function mergeRentalLines<T extends RentalDraftLine>(lines: T[]): T[] {
+  const out: T[] = [];
+  for (const l of lines) {
+    const i = out.findIndex((x) => x.variantId === l.variantId);
+    if (i < 0) out.push({ ...l });
+    else out[i] = { ...l, qty: out[i].qty + l.qty };
+  }
+  return out;
+}
+
+/** buat draft dari isian form (jatuh tempo = mulai + hari); harga dibulatkan ke rupiah utuh; varian kembar digabung */
+export function buildRentalDraft(input: {
+  days: number;
+  startDate: string;
+  customerName: string;
+  customerPhone?: string | null;
+  lines: RentalDraftLineInput[];
+}): RentalDraft {
+  const days = Math.max(1, Math.round(input.days));
+  return {
     days,
     startDate: input.startDate,
     dueDate: addDays(input.startDate, days),
     customerName: input.customerName.trim(),
     customerPhone: input.customerPhone?.trim() ? input.customerPhone.trim() : null,
+    lines: mergeRentalLines(input.lines.map(buildRentalDraftLine)),
   };
 }
 
-/** pesan kesalahan bila draft belum layak dibayar; null = layak */
-export function validateRentalDraft(d: RentalDraft, stock: number): string | null {
+/** total qty yang diminta per produk (stok disimpan per PRODUK, bukan per varian) */
+export function rentalQtyByProduct(lines: Pick<RentalDraftLine, "productId" | "qty">[]): Map<string, number> {
+  const m = new Map<string, number>();
+  for (const l of lines) m.set(l.productId, (m.get(l.productId) ?? 0) + l.qty);
+  return m;
+}
+
+/** pesan kesalahan bila draft belum layak dibayar; null = layak.
+ *  stockOf(productId) → stok produk (undefined = produk tidak dikenal). Qty dijumlah per produk lintas baris. */
+export function validateRentalDraft(
+  d: RentalDraft,
+  stockOf: (productId: string) => number | undefined,
+  nameOf?: (productId: string) => string | undefined
+): string | null {
   if (!d.customerName.trim()) return "Nama penyewa wajib diisi.";
-  if (!(d.rentPrice > 0)) return "Harga sewa harus lebih dari 0.";
-  if (!(d.qty >= 1)) return "Jumlah minimal 1.";
+  if (!Array.isArray(d.lines) || d.lines.length === 0) return "Tambahkan minimal satu barang sewa.";
+  for (const l of d.lines) {
+    if (!l.productId || !l.variantId) return "Ada baris barang sewa yang tidak valid.";
+    if (!(l.rentPrice > 0)) return "Harga sewa harus lebih dari 0.";
+    if (!(Number.isInteger(l.qty) && l.qty >= 1)) return "Jumlah minimal 1.";
+    if (l.deposit != null && !(l.deposit >= 0)) return "Deposit tidak boleh negatif.";
+  }
   if (!(d.days >= 1)) return "Lama sewa minimal 1 hari.";
   if (!/^\d{4}-\d{2}-\d{2}$/.test(d.startDate)) return "Tanggal mulai tidak valid.";
-  if (d.qty > stock) return `Stok hanya ${stock}.`;
+  const multi = d.lines.length > 1;
+  for (const [productId, qty] of rentalQtyByProduct(d.lines)) {
+    const stock = stockOf(productId);
+    const name = nameOf?.(productId);
+    if (stock === undefined) return `Barang sewa${name ? ` ${name}` : ""} tidak ditemukan — muat ulang data produk.`;
+    if (qty > stock) {
+      if (!multi) return name ? `Stok ${name} hanya ${stock}.` : `Stok hanya ${stock}.`;
+      return `Stok ${name ?? "barang"} hanya ${stock} (diminta ${qty} di nota ini).`;
+    }
+  }
   return null;
 }
 
-/** total tagihan sewa (tarif × qty) — deposit TIDAK termasuk */
-export const rentalDraftTotal = (d: Pick<RentalDraft, "rentPrice" | "qty">) => rentTotal(d.rentPrice, d.qty);
+/** total tagihan sewa (Σ tarif × qty) — deposit TIDAK termasuk */
+export const rentalDraftTotal = (d: { lines: Pick<RentalDraftLine, "rentPrice" | "qty">[] }) =>
+  d.lines.reduce((s, l) => s + rentTotal(l.rentPrice, l.qty), 0);
 
-/** deposit total yang harus diterima kasir terpisah (per unit × qty) */
-export const rentalDraftDeposit = (d: Pick<RentalDraft, "deposit" | "qty">) => (d.deposit ?? 0) * d.qty;
+/** deposit total yang harus diterima kasir terpisah (Σ per unit × qty) */
+export const rentalDraftDeposit = (d: { lines: Pick<RentalDraftLine, "deposit" | "qty">[] }) =>
+  d.lines.reduce((s, l) => s + (l.deposit ?? 0) * l.qty, 0);
 
-/** data yang disisipkan ke tabel rentals saat transaksi sewa disimpan */
+/** total unit dalam draft */
+export const rentalDraftUnits = (d: { lines: Pick<RentalDraftLine, "qty">[] }) => d.lines.reduce((s, l) => s + l.qty, 0);
+
+/** data yang disisipkan ke tabel rentals saat transaksi sewa disimpan (satu baris rentals per baris draft) */
 export function toRentalSpec(d: RentalDraft) {
   return {
-    productId: d.productId,
-    qty: d.qty,
-    rentPrice: d.rentPrice,
-    deposit: d.deposit,
     startDate: d.startDate,
     dueDate: d.dueDate,
     customerPhone: d.customerPhone,
+    lines: d.lines.map((l) => ({ productId: l.productId, qty: l.qty, rentPrice: l.rentPrice, deposit: l.deposit })),
+  };
+}
+
+const isStr = (v: unknown): v is string => typeof v === "string" && v.length > 0;
+const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
+
+function normalizeLine(raw: unknown): RentalDraftLine | null {
+  if (!raw || typeof raw !== "object") return null;
+  const l = raw as Record<string, unknown>;
+  if (!isStr(l.productId) || !isStr(l.variantId)) return null;
+  if (!isNum(l.qty) || l.qty < 1 || !Number.isInteger(l.qty)) return null;
+  if (!isNum(l.rentPrice) || l.rentPrice < 0) return null;
+  if (l.deposit != null && (!isNum(l.deposit) || l.deposit < 0)) return null;
+  return { productId: l.productId, variantId: l.variantId, qty: l.qty, rentPrice: l.rentPrice, deposit: l.deposit && (l.deposit as number) > 0 ? (l.deposit as number) : null };
+}
+
+/** pulihkan draft dari localStorage (keranjang dipersist). Bentuk lama (satu barang: productId/variantId/qty/… di
+ *  tingkat atas, tanpa `lines`) dikonversi ke `lines: [satu baris]`. Rusak/tidak lengkap → null (draft dibuang). */
+export function normalizeRentalDraft(raw: unknown): RentalDraft | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  if (!isNum(r.days) || r.days < 1) return null;
+  if (!isStr(r.startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(r.startDate)) return null;
+  if (!isStr(r.dueDate) || !/^\d{4}-\d{2}-\d{2}$/.test(r.dueDate)) return null;
+  if (typeof r.customerName !== "string") return null;
+  if (r.customerPhone != null && typeof r.customerPhone !== "string") return null;
+  let lines: RentalDraftLine[];
+  if (Array.isArray(r.lines)) {
+    const parsed = r.lines.map(normalizeLine);
+    if (parsed.length === 0 || parsed.some((l) => l === null)) return null;
+    lines = mergeRentalLines(parsed as RentalDraftLine[]);
+  } else if ("productId" in r) {
+    const one = normalizeLine(r); // bentuk lama (sebelum multi-barang)
+    if (!one) return null;
+    lines = [one];
+  } else return null;
+  return {
+    days: r.days,
+    startDate: r.startDate,
+    dueDate: r.dueDate,
+    customerName: r.customerName,
+    customerPhone: typeof r.customerPhone === "string" && r.customerPhone.trim() ? r.customerPhone : null,
+    lines,
   };
 }
 

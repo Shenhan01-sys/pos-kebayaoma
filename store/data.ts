@@ -2292,16 +2292,24 @@ export const useData = create<DataState>()(
           const isPo = (tx as Transaction).kind === "preorder";
           const isRental = !!tx.rental && (tx as Transaction).kind === "rental";
 
-          // E18: sewa — guard stok server + pelanggan (auto-create) SEBELUM nomor nota/header dibuat
+          // E18: sewa — guard stok server + pelanggan (auto-create) SEBELUM nomor nota/header dibuat.
+          // Multi-barang: stok disimpan per PRODUK → qty semua baris produk yang sama dijumlah dulu.
           let rentalCustomerId: string | null = customer?.id ?? null;
           if (isRental && tx.rental) {
-            const { data: prod, error: prodErr } = await supabase
+            const rentalLines = tx.rental.lines ?? [];
+            if (rentalLines.length === 0) throw new Error("Nota sewa tanpa barang.");
+            const needByProduct = new Map<string, number>();
+            for (const l of rentalLines) needByProduct.set(l.productId, (needByProduct.get(l.productId) ?? 0) + l.qty);
+            const { data: prods, error: prodErr } = await supabase
               .from('products')
-              .select('stock')
-              .eq('id', tx.rental.productId)
-              .single();
+              .select('id, stock')
+              .in('id', [...needByProduct.keys()]);
             if (prodErr) throw prodErr;
-            if (Number(prod?.stock ?? 0) < tx.rental.qty) throw new Error("insufficient_stock");
+            for (const [productId, need] of needByProduct) {
+              const prod = (prods ?? []).find((p: any) => p.id === productId);
+              if (!prod) throw new Error("product_not_found");
+              if (Number(prod.stock ?? 0) < need) throw new Error("insufficient_stock");
+            }
             if (!rentalCustomerId && tx.customerName) {
               const nm = tx.customerName.trim();
               const { data: found } = await supabase
@@ -2387,16 +2395,18 @@ export const useData = create<DataState>()(
           // E18: baris sewa disisipkan SEBELUM status final (paid → trigger stok). Gagal ⇒ hapus nota (items ikut cascade):
           // tidak ada nota terbayar tanpa catatan sewa, dan stok belum tersentuh.
           if (isRental && tx.rental) {
-            const { error: rentalErr } = await supabase.from('rentals').insert([{
+            // satu baris rentals per barang, disisipkan sekaligus (satu request → gagal semua / berhasil semua)
+            const spec = tx.rental;
+            const { error: rentalErr } = await supabase.from('rentals').insert(spec.lines.map((l) => ({
               transaction_id: header.id,
               customer_id: rentalCustomerId,
-              product_id: tx.rental.productId,
-              qty: tx.rental.qty,
-              rent_price: tx.rental.rentPrice,
-              deposit: tx.rental.deposit ?? null,
-              start_date: tx.rental.startDate,
-              due_date: tx.rental.dueDate,
-            }]);
+              product_id: l.productId,
+              qty: l.qty,
+              rent_price: l.rentPrice,
+              deposit: l.deposit ?? null,
+              start_date: spec.startDate,
+              due_date: spec.dueDate,
+            })));
             if (rentalErr) {
               await supabase.from('transactions').delete().eq('id', header.id);
               throw rentalErr;

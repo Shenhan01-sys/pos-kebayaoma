@@ -32,6 +32,8 @@ import {
   type RentalTab,
 } from "@/lib/rental";
 import RentalNewModal from "@/components/RentalNewModal";
+import { useCart } from "@/store/cart";
+import type { RentalDraft } from "@/lib/rental";
 import { Icon } from "@/components/icons";
 
 const TABS: { id: RentalTab; label: string }[] = [
@@ -68,6 +70,25 @@ export default function SewaPage() {
   const [tab, setTab] = useState<RentalTab>("aktif");
   const [query, setQuery] = useState("");
   const [newOpen, setNewOpen] = useState(false);
+  // E18 multi-barang: /sewa?tambah=1 (tombol "Tambah item sewa" di POS) → modal terbuka berisi draft sewa di keranjang
+  const [editDraft, setEditDraft] = useState<RentalDraft | null>(null);
+  const [wantAdd] = useState(() => typeof window !== "undefined" && new URLSearchParams(window.location.search).get("tambah") === "1");
+  useEffect(() => {
+    if (!wantAdd) return;
+    window.history.replaceState(null, "", "/sewa"); // buang flag: muat ulang halaman tidak membuka modal lagi
+    // tunggu keranjang terpulihkan (persist) DAN data produk termuat — prefill modal mencocokkan barang ke produk
+    let done = false;
+    const tryOpen = () => {
+      if (done || !useCart.persist.hasHydrated() || useData.getState().products.length === 0) return;
+      done = true;
+      const d = useCart.getState().rental;
+      if (d) { setEditDraft(d); setNewOpen(true); }
+    };
+    const unsubCart = useCart.persist.onFinishHydration(tryOpen);
+    const unsubData = useData.subscribe(tryOpen);
+    tryOpen();
+    return () => { unsubCart(); unsubData(); };
+  }, [wantAdd]);
   const [returning, setReturning] = useState<RentalRow | null>(null);
   const [depositId, setDepositId] = useState<string | null>(null); // E20: dialog deposit (id sewa; data segar dibaca dari store)
   const [loading, setLoading] = useState(true);
@@ -110,7 +131,7 @@ export default function SewaPage() {
         </div>
         <div className="flex items-center gap-2">
           <button onClick={() => refresh()} className="btn-ghost px-3 py-2 text-sm" aria-label="Muat ulang">Muat ulang</button>
-          <button onClick={() => setNewOpen(true)} className="btn-primary px-4 py-2.5 text-sm">
+          <button onClick={() => { setEditDraft(null); setNewOpen(true); }} className="btn-primary px-4 py-2.5 text-sm">
             <Icon name="plus" size={16} /> Sewa baru
           </button>
         </div>
@@ -158,7 +179,7 @@ export default function SewaPage() {
             {rentals.length === 0 ? "Belum ada sewa." : query ? "Tidak ada sewa yang cocok." : "Tidak ada data di tab ini."}
           </p>
           {rentals.length === 0 && (
-            <button onClick={() => setNewOpen(true)} className="btn-primary mt-2 px-4 py-2 text-sm">Buat sewa pertama</button>
+            <button onClick={() => { setEditDraft(null); setNewOpen(true); }} className="btn-primary mt-2 px-4 py-2 text-sm">Buat sewa pertama</button>
           )}
         </div>
       ) : (
@@ -174,7 +195,7 @@ export default function SewaPage() {
         (tunai, bukan bagian omzet) dan ditahan sampai dicatat dikembalikan / dipotong lewat tombol &quot;Deposit&quot;.
       </p>
 
-      {newOpen && <RentalNewModal onClose={() => setNewOpen(false)} />}
+      {newOpen && <RentalNewModal initial={editDraft} onClose={() => { setNewOpen(false); setEditDraft(null); }} />}
       {returning && (
         <ReturnDialog
           r={returning}

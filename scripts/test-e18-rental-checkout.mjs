@@ -7,6 +7,9 @@
 //  K3 QRIS pending: header+items+rentals pending → stok TIDAK berubah; paid → stok keluar; batal → stok kembali
 //  K4 daftar sewa: join transactions.status memisahkan paid / pending / cancelled (dasar filter fetchRentals)
 //  K5 RLS lintas toko: kasir KTB tidak bisa menyisipkan rentals ke nota toko MJL
+//  K6 multi-barang (1 nota, 2 produk): items 2 baris + rentals 2 baris dalam SATU insert (array, seperti saveTransaction);
+//     stok kedua produk keluar saat paid; kedua baris sewa terbaca dengan nomor nota yang sama;
+//     insert array dengan satu baris rusak → GAGAL semua (0 baris) → header dihapus (rollback)
 // Jalankan: node --experimental-strip-types --no-warnings scripts/test-e18-rental-checkout.mjs
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -41,8 +44,8 @@ const ktb = stores.find((s) => /malioboro|kota baru/i.test(s.name)) ?? stores[1]
 const mjl = stores.find((s) => s.id !== ktb.id);
 console.log("toko uji:", ktb.name, "| toko lain:", mjl.name);
 
-let staffId = null, authId = null, productId = null, variantId = null;
-const stockOf = async () => Number((await j(await A.api(`products?select=stock&id=eq.${productId}`)))[0].stock);
+let staffId = null, authId = null, productId = null, variantId = null, product2Id = null, variant2Id = null;
+const stockOf = async (id = productId) => Number((await j(await A.api(`products?select=stock&id=eq.${id}`)))[0].stock);
 
 try {
   // --- pra-kondisi (service role): produk + varian stok 5, kasir uji dengan sesi nyata ---
@@ -50,6 +53,11 @@ try {
   productId = p.id;
   const v = (await j(await A.api("variants", { method: "POST", body: JSON.stringify([{ sku: `${TAG}-V`, name: "Seri A", size: "M", color: "TES", color_code: "#000000", selling_price: 100000, cost_price: 0, rental_price: null, rental_days: 3, deposit_price: null, product_id: productId }]) })))[0];
   variantId = v.id;
+  // produk kedua (K6 multi-barang), stok 4
+  const p2 = (await j(await A.api("products", { method: "POST", body: JSON.stringify([{ sku: `${TAG}-P2`, name: `${TAG} Selendang`, store_id: ktb.id, active: true, stock: 4, images: [], tags: [] }]) })))[0];
+  product2Id = p2.id;
+  const v2 = (await j(await A.api("variants", { method: "POST", body: JSON.stringify([{ sku: `${TAG}-V2`, name: "Seri B", size: "All", color: "TES", color_code: "#000000", selling_price: 60000, cost_price: 0, rental_price: 30000, rental_days: 3, deposit_price: 10000, product_id: product2Id }]) })))[0];
+  variant2Id = v2.id;
   const st = (await j(await A.api("staff", { method: "POST", body: JSON.stringify([{ name: `${TAG} kasir`, role: "kasir", store_id: ktb.id, active: true }]) })))[0];
   staffId = st.id;
   const email = `staff-${staffId}@kebayaoma.local`;
@@ -128,6 +136,52 @@ try {
   const x = await K.api("rentals", { method: "POST", body: JSON.stringify([{ transaction_id: foreign.id, product_id: productId, qty: 1, rent_price: 1000, start_date: startDate, due_date: dueDate }]) });
   const leaked = await j(await A.api(`rentals?select=id&transaction_id=eq.${foreign.id}`));
   check("K5 kasir KTB TIDAK bisa menyisipkan rentals ke nota toko MJL (RLS)", !x.ok && leaked.length === 0, `status ${x.status}`);
+
+  // K6 multi-barang: 1 nota sewa, 2 produk (p1 ×1 @75.000, p2 ×2 @30.000 deposit 10.000/unit)
+  {
+    const s1 = await stockOf(productId), s2 = await stockOf(product2Id);
+    const makeMulti = async (suffix, { badSecond = false } = {}) => {
+      const name = `${TAG} ${suffix}`;
+      const c = await K.api("customers", { method: "POST", body: JSON.stringify([{ store_id: ktb.id, name, phone: "0857-3333-4444" }]) });
+      const cust = (await j(c))?.[0];
+      const num = await j(await K.rpc("next_tx_number", { p_store_id: ktb.id }));
+      const total = 75000 * 1 + 30000 * 2;
+      const hr = await K.api("transactions", { method: "POST", body: JSON.stringify([{
+        store_id: ktb.id, number: num, cashier: `${TAG} kasir`, customer_id: cust?.id ?? null, customer_name: name,
+        status: "pending", payment_method: "cash", payment_status: "pending", subtotal: total, tax: 0, discount: 0, total, amount_paid: total, change: 0,
+        kind: "rental", due_date: dueDate,
+      }]) });
+      const header = (await j(hr))?.[0];
+      const ir = header ? await K.api("transaction_items", { method: "POST", body: JSON.stringify([
+        { transaction_id: header.id, product_id: productId, variant_id: variantId, name: `${TAG} Kebaya`, sku: `${TAG}-V`, size: "M", color: "TES", quantity: 1, unit_price: 75000, cost_price: null, discount: 0, total: 75000 },
+        { transaction_id: header.id, product_id: product2Id, variant_id: variant2Id, name: `${TAG} Selendang`, sku: `${TAG}-V2`, size: "All", color: "TES", quantity: 2, unit_price: 30000, cost_price: null, discount: 0, total: 60000 },
+      ]) }) : null;
+      // SATU insert array — sama dengan store/data.ts saveTransaction (spec.lines.map(...))
+      const rr = header ? await K.api("rentals", { method: "POST", body: JSON.stringify([
+        { transaction_id: header.id, customer_id: cust?.id ?? null, product_id: productId, qty: 1, rent_price: 75000, deposit: null, start_date: startDate, due_date: dueDate },
+        { transaction_id: header.id, customer_id: cust?.id ?? null, product_id: badSecond ? randomUUID() : product2Id, qty: 2, rent_price: 30000, deposit: 10000, start_date: startDate, due_date: dueDate },
+      ]) }) : null;
+      return { header, hr, ir, rr };
+    };
+    const k6 = await makeMulti("multi");
+    check("K6a 1 header + 2 item + 2 rentals (satu insert array) di bawah RLS", k6.hr.ok && k6.ir?.ok && k6.rr?.ok, `hdr ${k6.hr.status} item ${k6.ir?.status} rentals ${k6.rr?.status}`);
+    const rows = await j(await K.api(`rentals?select=product_id,qty,rent_price,deposit,due_date,transactions(number,status)&transaction_id=eq.${k6.header.id}&order=qty`));
+    check("K6b dua baris rentals berbagi satu nota (nomor sama, jatuh tempo sama)",
+      rows?.length === 2 && rows[0].transactions?.number === k6.header.number && rows[1].transactions?.number === k6.header.number
+        && rows.every((r) => r.due_date === dueDate) && Number(rows[1].deposit) === 10000, JSON.stringify(rows));
+    check("K6c sebelum paid: stok kedua produk BELUM berubah", (await stockOf(productId)) === s1 && (await stockOf(product2Id)) === s2);
+    await setStatus(k6.header.id, "paid");
+    const a1 = await stockOf(productId), a2 = await stockOf(product2Id);
+    check("K6d setelah paid: stok p1 −1 dan p2 −2 (trigger per item)", a1 === s1 - 1 && a2 === s2 - 2, `p1 ${s1}→${a1} p2 ${s2}→${a2}`);
+
+    const k6r = await makeMulti("multi-rollback", { badSecond: true });
+    const partial = k6r.header ? await j(await A.api(`rentals?select=id&transaction_id=eq.${k6r.header.id}`)) : null;
+    check("K6e insert array dengan 1 baris rusak GAGAL seluruhnya (0 baris tersisip)", k6r.rr && !k6r.rr.ok && partial?.length === 0, `rentals status ${k6r.rr?.status} sisa ${partial?.length}`);
+    const del6 = await K.api(`transactions?id=eq.${k6r.header.id}`, { method: "DELETE" });
+    const still6 = await j(await A.api(`transactions?select=id&id=eq.${k6r.header.id}`));
+    check("K6f rollback: header dihapus → nota & item hilang; stok tak berubah",
+      del6.ok && still6.length === 0 && (await stockOf(productId)) === a1 && (await stockOf(product2Id)) === a2);
+  }
 } finally {
   // cleanup (service role): movement → nota (items/rentals cascade) → penyewa → produk (varian cascade) → staff → auth user
   try {
@@ -135,6 +189,7 @@ try {
     await A.api(`transactions?customer_name=like.${TAG}*`, { method: "DELETE" });
     await A.api(`customers?name=like.${TAG}*`, { method: "DELETE" });
     if (productId) await A.api(`products?id=eq.${productId}`, { method: "DELETE" });
+    if (product2Id) await A.api(`products?id=eq.${product2Id}`, { method: "DELETE" });
     if (staffId) await A.api(`staff?id=eq.${staffId}`, { method: "DELETE" });
     if (authId) await fetch(`${url}/auth/v1/admin/users/${authId}`, { method: "DELETE", headers: admin });
   } catch (e) { console.log("cleanup error:", e.message); }

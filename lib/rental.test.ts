@@ -243,20 +243,29 @@ describe("E17 default harga sewa", () => {
   });
 });
 
-// ===== E18: draft sewa → keranjang POS → checkout =====
-import { buildRentalDraft, rentalDraftDeposit, rentalDraftTotal, toRentalSpec, validateRentalDraft } from "./rental";
+// ===== E18: draft sewa → keranjang POS → checkout (multi-barang: 1 penyewa + 1 periode, N baris) =====
+import {
+  buildRentalDraft,
+  mergeRentalLines,
+  normalizeRentalDraft,
+  rentalDraftDeposit,
+  rentalDraftTotal,
+  rentalDraftUnits,
+  rentalQtyByProduct,
+  toRentalSpec,
+  validateRentalDraft,
+} from "./rental";
 
+const line1 = { productId: "p1", variantId: "v1", qty: 2, rentPrice: 75000, deposit: 20000 };
+const line2 = { productId: "p2", variantId: "v2", qty: 1, rentPrice: 50000, deposit: null };
 const base = {
-  productId: "p1",
-  variantId: "v1",
-  qty: 2,
-  rentPrice: 75000,
-  deposit: 20000,
   days: 5,
   startDate: "2026-10-02",
   customerName: "  Sari  ",
   customerPhone: " 0857-1111-2222 ",
+  lines: [line1],
 };
+const stockMap = (m: Record<string, number>) => (id: string) => m[id];
 
 describe("E18 draft sewa", () => {
   it("jatuh tempo = mulai + hari; nama & HP dirapikan; deposit per unit dipertahankan", () => {
@@ -264,36 +273,46 @@ describe("E18 draft sewa", () => {
     expect(d.dueDate).toBe("2026-10-07");
     expect(d.customerName).toBe("Sari");
     expect(d.customerPhone).toBe("0857-1111-2222");
-    expect(d.deposit).toBe(20000);
+    expect(d.lines[0].deposit).toBe(20000);
     expect(d.days).toBe(5);
   });
   it("HP kosong/spasi → null; deposit 0/null → null", () => {
     expect(buildRentalDraft({ ...base, customerPhone: "   " }).customerPhone).toBeNull();
-    expect(buildRentalDraft({ ...base, deposit: 0 }).deposit).toBeNull();
-    expect(buildRentalDraft({ ...base, deposit: null }).deposit).toBeNull();
+    expect(buildRentalDraft({ ...base, lines: [{ ...line1, deposit: 0 }] }).lines[0].deposit).toBeNull();
+    expect(buildRentalDraft({ ...base, lines: [{ ...line1, deposit: null }] }).lines[0].deposit).toBeNull();
   });
   it("qty/hari minimal 1, desimal dibulatkan, harga ke rupiah utuh", () => {
-    const d = buildRentalDraft({ ...base, qty: 0, days: 0.2, rentPrice: 75000.6 });
-    expect(d.qty).toBe(1);
+    const d = buildRentalDraft({ ...base, days: 0.2, lines: [{ ...line1, qty: 0, rentPrice: 75000.6 }] });
+    expect(d.lines[0].qty).toBe(1);
     expect(d.days).toBe(1);
-    expect(d.rentPrice).toBe(75001);
+    expect(d.lines[0].rentPrice).toBe(75001);
     expect(d.dueDate).toBe("2026-10-03");
   });
-  it("tagihan = tarif × qty; deposit total = deposit/unit × qty (terpisah dari tagihan)", () => {
-    const d = buildRentalDraft(base);
-    expect(rentalDraftTotal(d)).toBe(150000);
-    expect(rentalDraftDeposit(d)).toBe(40000);
-    expect(rentalDraftDeposit(buildRentalDraft({ ...base, deposit: null }))).toBe(0);
+  it("tagihan = Σ tarif × qty; deposit total = Σ deposit/unit × qty (terpisah dari tagihan)", () => {
+    const one = buildRentalDraft(base);
+    expect(rentalDraftTotal(one)).toBe(150000);
+    expect(rentalDraftDeposit(one)).toBe(40000);
+    expect(rentalDraftDeposit(buildRentalDraft({ ...base, lines: [{ ...line1, deposit: null }] }))).toBe(0);
+    const two = buildRentalDraft({ ...base, lines: [line1, line2] });
+    expect(rentalDraftTotal(two)).toBe(200000);
+    expect(rentalDraftDeposit(two)).toBe(40000);
+    expect(rentalDraftUnits(two)).toBe(3);
   });
-  it("toRentalSpec: hanya kolom yang disisipkan ke rentals", () => {
-    expect(toRentalSpec(buildRentalDraft(base))).toEqual({
-      productId: "p1",
-      qty: 2,
-      rentPrice: 75000,
-      deposit: 20000,
+  it("varian sama ditambah dua kali → digabung (qty dijumlah, tarif baris terakhir)", () => {
+    const d = buildRentalDraft({ ...base, lines: [line1, line2, { ...line1, qty: 1, rentPrice: 70000 }] });
+    expect(d.lines).toHaveLength(2);
+    expect(d.lines[0]).toEqual({ ...line1, qty: 3, rentPrice: 70000 });
+    expect(mergeRentalLines([line1, line1]).map((l) => l.qty)).toEqual([4]);
+  });
+  it("toRentalSpec: satu baris rentals per barang, hanya kolom yang disisipkan", () => {
+    expect(toRentalSpec(buildRentalDraft({ ...base, lines: [line1, line2] }))).toEqual({
       startDate: "2026-10-02",
       dueDate: "2026-10-07",
       customerPhone: "0857-1111-2222",
+      lines: [
+        { productId: "p1", qty: 2, rentPrice: 75000, deposit: 20000 },
+        { productId: "p2", qty: 1, rentPrice: 50000, deposit: null },
+      ],
     });
   });
 });
@@ -301,23 +320,67 @@ describe("E18 draft sewa", () => {
 describe("E18 validateRentalDraft", () => {
   const ok = buildRentalDraft(base);
   it("draft layak → null", () => {
-    expect(validateRentalDraft(ok, 10)).toBeNull();
-    expect(validateRentalDraft(ok, 2)).toBeNull(); // stok pas
+    expect(validateRentalDraft(ok, () => 10)).toBeNull();
+    expect(validateRentalDraft(ok, () => 2)).toBeNull(); // stok pas
   });
   it("nama kosong", () => {
-    expect(validateRentalDraft({ ...ok, customerName: "  " }, 10)).toMatch(/penyewa/i);
+    expect(validateRentalDraft({ ...ok, customerName: "  " }, () => 10)).toMatch(/penyewa/i);
   });
-  it("harga 0 / negatif", () => {
-    expect(validateRentalDraft({ ...ok, rentPrice: 0 }, 10)).toMatch(/harga sewa/i);
-    expect(validateRentalDraft({ ...ok, rentPrice: -5 }, 10)).toMatch(/harga sewa/i);
+  it("tanpa barang", () => {
+    expect(validateRentalDraft({ ...ok, lines: [] }, () => 10)).toMatch(/minimal satu barang/i);
   });
-  it("stok kurang → menyebut stok", () => {
-    expect(validateRentalDraft({ ...ok, qty: 3 }, 2)).toBe("Stok hanya 2.");
+  it("harga 0 / negatif di baris mana pun", () => {
+    expect(validateRentalDraft({ ...ok, lines: [{ ...ok.lines[0], rentPrice: 0 }] }, () => 10)).toMatch(/harga sewa/i);
+    expect(validateRentalDraft({ ...ok, lines: [ok.lines[0], { ...line2, rentPrice: -5 }] }, () => 10)).toMatch(/harga sewa/i);
   });
-  it("hari < 1, qty < 1, tanggal mulai rusak", () => {
-    expect(validateRentalDraft({ ...ok, days: 0 }, 10)).toMatch(/lama sewa/i);
-    expect(validateRentalDraft({ ...ok, qty: 0 }, 10)).toMatch(/jumlah/i);
-    expect(validateRentalDraft({ ...ok, startDate: "02-10-2026" }, 10)).toMatch(/tanggal/i);
+  it("stok kurang (satu barang) → menyebut stok", () => {
+    expect(validateRentalDraft({ ...ok, lines: [{ ...ok.lines[0], qty: 3 }] }, () => 2)).toBe("Stok hanya 2.");
+    expect(validateRentalDraft({ ...ok, lines: [{ ...ok.lines[0], qty: 3 }] }, () => 2, () => "Kebaya A")).toBe("Stok Kebaya A hanya 2.");
+  });
+  it("hari < 1, qty < 1, deposit negatif, tanggal mulai rusak", () => {
+    expect(validateRentalDraft({ ...ok, days: 0 }, () => 10)).toMatch(/lama sewa/i);
+    expect(validateRentalDraft({ ...ok, lines: [{ ...ok.lines[0], qty: 0 }] }, () => 10)).toMatch(/jumlah/i);
+    expect(validateRentalDraft({ ...ok, lines: [{ ...ok.lines[0], deposit: -1 }] }, () => 10)).toMatch(/deposit/i);
+    expect(validateRentalDraft({ ...ok, startDate: "02-10-2026" }, () => 10)).toMatch(/tanggal/i);
+  });
+  it("stok dicek PER PRODUK: qty dua varian produk yang sama dijumlah", () => {
+    const sameProduct = buildRentalDraft({
+      ...base,
+      lines: [
+        { productId: "p1", variantId: "v1a", qty: 2, rentPrice: 75000 },
+        { productId: "p1", variantId: "v1b", qty: 2, rentPrice: 75000 },
+        line2,
+      ],
+    });
+    expect(rentalQtyByProduct(sameProduct.lines)).toEqual(new Map([["p1", 4], ["p2", 1]]));
+    // tiap baris (2) ≤ stok 3, tapi total produk p1 = 4 > 3 → ditolak
+    expect(validateRentalDraft(sameProduct, stockMap({ p1: 3, p2: 5 }), (id) => (id === "p1" ? "Kebaya A" : "Selendang")))
+      .toBe("Stok Kebaya A hanya 3 (diminta 4 di nota ini).");
+    expect(validateRentalDraft(sameProduct, stockMap({ p1: 4, p2: 1 }))).toBeNull();
+    // produk kedua yang kurang juga tertangkap
+    expect(validateRentalDraft(sameProduct, stockMap({ p1: 4, p2: 0 }))).toMatch(/hanya 0/);
+  });
+  it("produk tidak dikenal (stok undefined) → ditolak", () => {
+    expect(validateRentalDraft(buildRentalDraft({ ...base, lines: [line1, line2] }), stockMap({ p1: 5 }))).toMatch(/tidak ditemukan/);
+  });
+});
+
+describe("E18 normalizeRentalDraft (draft tersimpan di localStorage)", () => {
+  const header = { days: 3, startDate: "2026-11-20", dueDate: "2026-11-23", customerName: "Sari", customerPhone: null };
+  it("bentuk baru dipertahankan", () => {
+    const d = { ...header, lines: [line1, line2] };
+    expect(normalizeRentalDraft(d)).toEqual(d);
+  });
+  it("bentuk lama (satu barang di tingkat atas) → lines: [satu baris]", () => {
+    expect(normalizeRentalDraft({ ...header, ...line1 })).toEqual({ ...header, lines: [line1] });
+  });
+  it("rusak → null", () => {
+    expect(normalizeRentalDraft(null)).toBeNull();
+    expect(normalizeRentalDraft("x")).toBeNull();
+    expect(normalizeRentalDraft({ ...header })).toBeNull(); // tanpa barang
+    expect(normalizeRentalDraft({ ...header, startDate: "kemarin", lines: [line1] })).toBeNull();
+    expect(normalizeRentalDraft({ ...header, ...line1, qty: "2" })).toBeNull();
+    expect(normalizeRentalDraft({ ...header, lines: [line1, { productId: "p2" }] })).toBeNull();
   });
 });
 

@@ -13,7 +13,7 @@ import { useSettings } from "@/store/settings";
 import { parseVoBarcode, resolveVoScan } from "@/lib/barcode";
 import { filterProductsByQuery, findExactVariantMatch, findMatchingVariants } from "@/lib/pos-search";
 import { Icon } from "@/components/icons";
-import { formatDateId } from "@/lib/rental";
+import { formatDateId, rentalDraftDeposit, rentalDraftTotal, rentalDraftUnits } from "@/lib/rental";
 import { joinInfo } from "@/lib/label-text";
 
 const thumbStyle: Record<string, { grad: string; emoji: string }> = {
@@ -33,9 +33,11 @@ export default function PosPage() {
   // E18: sewa datang dari /sewa (draft di keranjang) → popup konfirmasi sewa → modal pembayaran yang sama
   const router = useRouter();
   const [rentalConfirmOpen, setRentalConfirmOpen] = useState(false);
+  // muncul saat sewa mulai/datang dari /sewa — BUKAN tiap kali satu barang sewa dihapus dari keranjang
+  const hasRental = !!rental;
   useEffect(() => {
-    if (rental) setRentalConfirmOpen(true);
-  }, [rental]);
+    if (hasRental) setRentalConfirmOpen(true);
+  }, [hasRental]);
   const { products, categories, customers, addProduct, movements, vendors } = useData();
   const stores = useData((s) => s.stores);
   const activeStoreId = useData((s) => s.activeStoreId);
@@ -274,14 +276,25 @@ export default function PosPage() {
           <div className="mb-3 flex flex-wrap items-center gap-2 rounded-2xl bg-violet/10 px-3 py-2.5 text-sm font-medium text-violet" role="status">
             <Icon name="rental" size={16} />
             <span>
-              Mode sewa: {rental.customerName} · kembali {formatDateId(rental.dueDate)}. Selesaikan pembayaran atau batalkan sewa dulu untuk menjual item lain.
+              Mode sewa: {rental.customerName} · kembali {formatDateId(rental.dueDate)} · {rental.lines.length} barang ({rentalDraftUnits(rental)} unit) ·{" "}
+              {formatRupiah(rentalDraftTotal(rental))}
+              {rentalDraftDeposit(rental) > 0 ? ` + deposit ${formatRupiah(rentalDraftDeposit(rental))}` : ""}. Selesaikan pembayaran atau batalkan
+              sewa dulu untuk menjual item lain.
             </span>
-            <button
-              onClick={() => { clear(); router.push("/sewa"); }}
-              className="btn-ghost ml-auto px-3 py-1.5 text-xs"
-            >
-              Batalkan sewa
-            </button>
+            <div className="ml-auto flex gap-2">
+              <button
+                onClick={() => router.push("/sewa?tambah=1")}
+                className="btn-ghost px-3 py-1.5 text-xs"
+              >
+                <Icon name="plus" size={14} /> Tambah item sewa
+              </button>
+              <button
+                onClick={() => { clear(); router.push("/sewa"); }}
+                className="btn-ghost px-3 py-1.5 text-xs"
+              >
+                Batalkan sewa
+              </button>
+            </div>
           </div>
         )}
         {scanMsg && (
@@ -485,9 +498,14 @@ export default function PosPage() {
                   )}
                 </div>
                 <button
-                  onClick={() => (l.rental ? (clear(), router.push("/sewa")) : remove(l.key))}
+                  onClick={() => {
+                    // E18: hapus satu barang sewa; barang sewa terakhir dihapus = sewa batal → kembali ke /sewa
+                    const lastRental = !!l.rental && lines.length <= 1;
+                    remove(l.key);
+                    if (lastRental) router.push("/sewa");
+                  }}
                   className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-black/5 text-gray-600 transition hover:bg-danger/15 hover:text-danger"
-                  aria-label={l.rental ? "Batalkan sewa" : "Hapus"}
+                  aria-label={l.rental ? (lines.length <= 1 ? "Batalkan sewa" : "Hapus barang sewa") : "Hapus"}
                 >
                   <Icon name="close" size={14} />
                 </button>
@@ -600,8 +618,11 @@ export default function PosPage() {
       {rental && rentalConfirmOpen && !checkout && (
         <RentalConfirmModal
           draft={rental}
-          itemName={lines[0]?.name ?? "Barang sewa"}
-          variantLabel={lines[0] ? [lines[0].seriesName, lines[0].size, lines[0].color].filter(Boolean).join(" · ") : ""}
+          items={lines.map((l) => ({
+            variantId: l.variantId,
+            name: l.name,
+            variantLabel: [l.seriesName, l.size, l.color].filter(Boolean).join(" · "),
+          }))}
           onContinue={() => { setRentalConfirmOpen(false); setCheckout(true); }}
           onCancel={() => { setRentalConfirmOpen(false); clear(); router.push("/sewa"); }}
         />

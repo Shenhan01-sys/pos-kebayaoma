@@ -4,24 +4,30 @@
 // Menampilkan ringkasan sewa lalu lanjut ke modal pembayaran POS yang SAMA (QRIS / tunai / transfer + foto bukti).
 
 import { formatRupiah } from "@/lib/dummy";
-import { formatDateId, rentalDraftDeposit, rentalDraftTotal, type RentalDraft } from "@/lib/rental";
+import { formatDateId, rentalDraftDeposit, rentalDraftTotal, rentalDraftUnits, type RentalDraft } from "@/lib/rental";
 import { Icon } from "@/components/icons";
+
+/** baris keranjang yang ditampilkan (nama/varian dari keranjang; qty, tarif & deposit dari draft) */
+export interface RentalConfirmItem {
+  variantId: string;
+  name: string;
+  variantLabel: string;
+}
 
 export default function RentalConfirmModal({
   draft,
-  itemName,
-  variantLabel,
+  items,
   onContinue,
   onCancel,
 }: {
   draft: RentalDraft;
-  itemName: string;
-  variantLabel: string;
+  items: RentalConfirmItem[];
   onContinue: () => void;
   onCancel: () => void;
 }) {
   const total = rentalDraftTotal(draft);
   const deposit = rentalDraftDeposit(draft);
+  const units = rentalDraftUnits(draft);
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4" role="dialog" aria-label="Konfirmasi sewa">
       <div className="w-full max-w-[420px] rounded-t-4xl bg-white p-5 shadow-soft-xl sm:rounded-3xl">
@@ -36,13 +42,29 @@ export default function RentalConfirmModal({
         </div>
 
         <div className="mb-3 rounded-2xl bg-beige/60 p-3 text-sm">
-          <div className="font-semibold text-ink">{itemName}</div>
-          <div className="text-xs text-gray-600">{variantLabel}</div>
-          <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+          <ul className="max-h-[36vh] space-y-1.5 overflow-auto pretty-scroll" aria-label="Barang sewa">
+            {draft.lines.map((l) => {
+              const it = items.find((x) => x.variantId === l.variantId);
+              return (
+                <li key={l.variantId} className="flex items-start justify-between gap-2 border-b border-black/5 pb-1.5 last:border-0 last:pb-0">
+                  <div className="min-w-0">
+                    <div className="truncate font-semibold text-ink">{it?.name ?? "Barang sewa"}</div>
+                    {it?.variantLabel && <div className="truncate text-xs text-gray-600">{it.variantLabel}</div>}
+                    <div className="text-xs text-gray-600">
+                      {l.qty} unit × {formatRupiah(l.rentPrice)}
+                      {l.deposit ? ` · deposit ${formatRupiah(l.deposit)}/unit` : ""}
+                    </div>
+                  </div>
+                  <b className="tnum shrink-0 text-sm text-ink">{formatRupiah(l.rentPrice * l.qty)}</b>
+                </li>
+              );
+            })}
+          </ul>
+          <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 border-t border-black/10 pt-2 text-xs">
             <dt className="text-olive">Penyewa</dt>
             <dd className="text-right font-medium text-ink">{draft.customerName}{draft.customerPhone ? ` · ${draft.customerPhone}` : ""}</dd>
             <dt className="text-olive">Jumlah</dt>
-            <dd className="text-right font-medium text-ink">{draft.qty} unit × {formatRupiah(draft.rentPrice)}</dd>
+            <dd className="text-right font-medium text-ink">{draft.lines.length} barang · {units} unit</dd>
             <dt className="text-olive">Lama sewa</dt>
             <dd className="text-right font-medium text-ink">{draft.days} hari</dd>
             <dt className="text-olive">Mulai</dt>

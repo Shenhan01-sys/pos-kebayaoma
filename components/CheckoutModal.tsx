@@ -20,7 +20,7 @@ import { rawbtIntentUrl, shouldUseRawbt } from "@/lib/rawbt";
 import { resolveReceiptStore } from "@/lib/store-info";
 import Receipt from "@/components/Receipt";
 import { inclusiveTax } from "@/lib/tax";
-import { formatDateId, rentalDraftDeposit, renterPhone, toRentalSpec } from "@/lib/rental";
+import { formatDateId, rentalDraftDeposit, renterPhone, toRentalSpec, validateRentalDraft } from "@/lib/rental";
 import { Icon } from "@/components/icons";
 import PhotoCapture from "@/components/PhotoCapture";
 import { enqueueProof, sendProof } from "@/lib/proof-queue";
@@ -36,7 +36,7 @@ const methodMeta: Record<PaymentMethod, { label: string; icon: "qris" | "cash" |
 
 export default function CheckoutModal({ onClose }: { onClose: () => void }) {
   const { lines, discount, setDiscount, setUnitPrice, customerName, clear, rental } = useCart();
-  // E18: mode sewa — keranjang berisi satu baris sewa dari /sewa; bayar lewat modal yang sama (tanpa diskon/nego/PO)
+  // E18: mode sewa — keranjang berisi baris-baris sewa dari /sewa (satu nota, N barang); bayar lewat modal yang sama (tanpa diskon/nego/PO)
   const router = useRouter();
   const isRental = !!rental;
   const s = useSettings();
@@ -237,6 +237,18 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
           .join("; ")}. Kurangi qty di keranjang dulu.`
       );
       return;
+    }
+    // E18 multi-barang: stok per PRODUK — qty beberapa varian produk yang sama dijumlah (cek per baris di atas tak cukup)
+    if (rental) {
+      const problem = validateRentalDraft(
+        rental,
+        (id) => products.find((p) => p.id === id)?.stock,
+        (id) => products.find((p) => p.id === id)?.name
+      );
+      if (problem) {
+        setError(problem);
+        return;
+      }
     }
 
     // 2026-11-20: foto bukti opsional untuk semua metode (permintaan toko)
