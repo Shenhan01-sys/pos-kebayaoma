@@ -39,6 +39,9 @@ export default function Receipt({ tx }: { tx: Transaction }) {
       </div>
       <div className="text-center text-[11px]">{s.address}</div>
       {s.phone && <div className="text-center text-[11px]">Telp: {s.phone}</div>}
+      {tx.training && (
+        <div className="mt-1 text-center text-[12px] font-bold">*** LATIHAN ***<br />BUKAN NOTA SAH</div>
+      )}
 
       <div className="my-2 border-t border-dashed border-black/30" />
 
@@ -89,12 +92,14 @@ export default function Receipt({ tx }: { tx: Transaction }) {
 
       <div className="my-2 border-t border-dashed border-black/30" />
 
-      <div className="flex flex-col items-center py-1">
-        <div className="rounded-lg bg-white p-1.5 shadow-soft">
-          <QRCodeSVG value={verifyUrl} size={84} level="M" />
+      {!tx.training && (
+        <div className="flex flex-col items-center py-1">
+          <div className="rounded-lg bg-white p-1.5 shadow-soft">
+            <QRCodeSVG value={verifyUrl} size={84} level="M" />
+          </div>
+          <div className="mt-1 text-center text-[10px]">Scan untuk verifikasi resmi</div>
         </div>
-        <div className="mt-1 text-center text-[10px]">Scan untuk verifikasi resmi</div>
-      </div>
+      )}
       <div className="text-center text-[11px] font-semibold">Terima kasih</div>
       <div className="text-center text-[10px] text-gray-600">
         {rental ? rental.footer : "Barang tidak bisa dikembalikan"}
