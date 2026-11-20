@@ -15,6 +15,8 @@ import { useAuth } from "@/store/auth";
 import { canSeeProfit } from "@/lib/roles";
 import { printHtmlViaIframe } from "@/lib/print";
 import { buildThermalReceiptHtml } from "@/lib/thermal-receipt";
+import { buildEscposReceipt, bytesToBase64 } from "@/lib/escpos-receipt";
+import { rawbtIntentUrl, shouldUseRawbt } from "@/lib/rawbt";
 import { resolveReceiptStore } from "@/lib/store-info";
 import Receipt from "@/components/Receipt";
 import { inclusiveTax } from "@/lib/tax";
@@ -269,6 +271,18 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
   // karakter acak (temuan uji fisik user) — bitmap aman di semua driver.
   async function printThermal() {
     if (!paid) return;
+    // 2026-11-20: tablet Android → nota ESC/POS langsung ke RawBT (printer default RawBT = RPP02N),
+    // tanpa dialog cetak Android. PC/desktop tetap lewat dialog cetak (HTML) di bawah.
+    if (typeof navigator !== "undefined" && shouldUseRawbt(navigator.userAgent, navigator.maxTouchPoints ?? 0)) {
+      const st = useData.getState();
+      const bytes = buildEscposReceipt(
+        paid,
+        resolveReceiptStore(s, st.stores, paid.storeId ?? st.activeStoreId),
+        { renterPhone: renterPhone(paid, st.customers), verifyUrl: `${window.location.origin}/verify/${paid.id}` }
+      );
+      window.location.href = rawbtIntentUrl(bytesToBase64(bytes));
+      return;
+    }
     let qrPng = "";
     const svgEl = document.querySelector("#print-area svg") as SVGSVGElement | null;
     if (svgEl) {
@@ -326,7 +340,7 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
                 <Icon name="check" size={30} />
               </span>
               <div className="mt-2 text-lg font-extrabold text-ink">Transaksi Berhasil</div>
-              <div className="text-xs font-semibold text-success">Tersimpan ✓ · nota sedang dicetak</div>
+              <div className="text-xs font-semibold text-success">Tersimpan ✓ · nota dikirim ke printer</div>
               <div className="text-sm text-gray-600 tnum">{formatRupiah(grand)}</div>
             </div>
             <Receipt tx={paid} />
