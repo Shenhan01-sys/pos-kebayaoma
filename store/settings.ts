@@ -12,6 +12,8 @@ export interface Settings {
   cashierName: string;
   /** 2026-11-20: Mode Latihan — checkout disimulasikan, tidak ditulis ke DB (components/TrainingModeControl) */
   trainingMode: boolean;
+  /** 2026-11-21: cetak nota & label lewat app pembantu Android "Kebaya Oma Print" (lib/print-helper) */
+  printHelper: boolean;
 }
 
 interface SettingsState extends Settings {
@@ -28,6 +30,7 @@ export const useSettings = create<SettingsState>()(
       printerType: "escpos-bluetooth",
       cashierName: "Ani",
       trainingMode: false,
+      printHelper: false,
       update: (patch) => set(patch),
     }),
     {

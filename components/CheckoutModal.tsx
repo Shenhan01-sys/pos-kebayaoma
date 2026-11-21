@@ -17,6 +17,7 @@ import { printHtmlViaIframe } from "@/lib/print";
 import { buildThermalReceiptHtml } from "@/lib/thermal-receipt";
 import { buildEscposReceipt, bytesToBase64 } from "@/lib/escpos-receipt";
 import { rawbtIntentUrl, shouldUseRawbt } from "@/lib/rawbt";
+import { helperIntentUrl } from "@/lib/print-helper";
 import { resolveReceiptStore } from "@/lib/store-info";
 import Receipt from "@/components/Receipt";
 import { inclusiveTax } from "@/lib/tax";
@@ -336,7 +337,8 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
         resolveReceiptStore(s, st.stores, paid.storeId ?? st.activeStoreId),
         { renterPhone: renterPhone(paid, st.customers), verifyUrl: `${window.location.origin}/verify/${paid.id}` }
       );
-      window.location.href = rawbtIntentUrl(bytesToBase64(bytes));
+      // 2026-11-21: app pembantu → langsung ke printer NOTA yang dipilih di app (tanpa RawBT)
+      window.location.href = s.printHelper ? helperIntentUrl("nota", bytesToBase64(bytes)) : rawbtIntentUrl(bytesToBase64(bytes));
       return;
     }
     let qrPng = "";

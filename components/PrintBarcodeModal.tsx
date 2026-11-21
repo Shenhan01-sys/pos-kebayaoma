@@ -8,7 +8,9 @@ import BarcodeLabel from "./BarcodeLabel";
 import { useData } from "@/store/data";
 import { buildTsplJob } from "@/lib/tspl";
 import { bytesToBase64, canvasTextRenderer } from "@/lib/tspl-text";
-import { shouldUseRawbt } from "@/lib/rawbt";
+import { RAWBT_MAX_ROWS, shouldUseRawbt } from "@/lib/rawbt";
+import { helperIntentUrl } from "@/lib/print-helper";
+import { useSettings } from "@/store/settings";
 import { buildXpLabelSheetHtml } from "@/lib/xp-label-html";
 import { printHtmlViaIframe } from "@/lib/print";
 import { isCode128Printable } from "@/lib/barcode";
@@ -311,6 +313,20 @@ ${labelHTML}
     const labels = collectLabels();
     if (labels.length === 0) return;
     if (labelSize === "xp420b" && shouldUseRawbt(navigator.userAgent, navigator.maxTouchPoints ?? 0)) {
+      // 2026-11-21: app pembantu "Kebaya Oma Print" → job TSPL (geometri E15, sama dengan print-bridge PC)
+      // langsung ke printer LABEL yang dipilih di app. Tanpa dialog/confirm sebelum navigasi (gesture klik).
+      if (useSettings.getState().printHelper) {
+        const rows = Math.ceil(labels.length / XP_COLS);
+        if (rows > RAWBT_MAX_ROWS) {
+          alert(
+            `Dari tablet maksimal ${RAWBT_MAX_ROWS * XP_COLS} label (${RAWBT_MAX_ROWS} baris) per cetak.\n` +
+              `Terpilih ${labels.length} label — kurangi jumlahnya lalu cetak bertahap.`
+          );
+          return;
+        }
+        window.location.href = helperIntentUrl("label", bytesToBase64(buildTsplJob(labels, canvasTextRenderer())));
+        return;
+      }
       let hintOff = false;
       try {
         hintOff = localStorage.getItem(XP_HINT_KEY) === "1";

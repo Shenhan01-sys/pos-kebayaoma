@@ -14,6 +14,7 @@ import LoadingScreen from "@/components/LoadingScreen";
 import LoginScreen from "@/components/LoginScreen";
 import DeviceLockControl from "@/components/DeviceLockControl";
 import TrainingModeControl, { TrainingModeBanner } from "@/components/TrainingModeControl";
+import PrintHelperControl from "@/components/PrintHelperControl";
 
 const links: { href: string; label: string; icon: IconName }[] = [
   { href: "/", label: "Dashboard", icon: "dashboard" },
@@ -210,6 +211,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <StoreSwitcher />
           <DeviceLockControl />
           <TrainingModeControl />
+          <PrintHelperControl />
           <div className="relative z-10 m-2 flex items-center gap-3 rounded-2xl bg-beige p-2.5">
             <div className="avatar h-9 w-9 bg-violet">
               {initials(auth.staff?.name ?? s.cashierName)}
