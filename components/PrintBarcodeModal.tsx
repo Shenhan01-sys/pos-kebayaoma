@@ -563,10 +563,9 @@ ${labelHTML}
               </div>
               {labelSize === "xp420b" && (
                 <p className="mt-2 text-xs text-gray-600">
-                  Roll die-cut siap pakai: 3 label per baris, liner 10,8 cm. <b>Direct Print</b> = langsung ke printer
-                  via <code>npm run print-bridge</code> di PC, atau lewat app <b>RawBT</b> di tablet (profil
-                  XP-D4601B_RAW, driver raw transfer, jadi default — Direct Print membuka panel siapkan printer dulu).
-                  Jumlah baris tepat, tanpa dialog. Tombol PDF = pratinjau.
+                  Roll die-cut siap pakai: 3 label per baris, liner 10,8 cm. <b>Direct Print</b> = di PC langsung ke printer
+                  via <code>npm run print-bridge</code>; di tablet membuka dialog cetak → pilih printer
+                  <b>XP-D4601B_5419</b>, kertas <b>110mm Roll</b>, <b>Hitam &amp; Putih</b>. Tombol PDF = pratinjau.
                 </p>
               )}
             </div>
@@ -647,7 +646,7 @@ ${labelHTML}
               <button
                 onClick={handleDirectPrint}
                 disabled={totalLabels === 0}
-                title={labelSize === "xp420b" ? "Cetak langsung ke printer label XP-D4601B: PC lewat print-bridge (npm run print-bridge), tablet lewat app RawBT" : "Print langsung ke printer thermal (Bluetooth/USB/WiFi) via browser print dialog"}
+                title={labelSize === "xp420b" ? "Cetak ke printer label XP-D4601B: PC lewat print-bridge (npm run print-bridge), tablet lewat dialog cetak (printer XP-D4601B_5419, kertas 110mm Roll)" : "Print langsung ke printer thermal (Bluetooth/USB/WiFi) via browser print dialog"}
                 className="px-6 py-3 bg-white border-2 border-[#775533] text-[#775533] rounded-xl hover:bg-[#775533]/5 font-bold transition flex items-center gap-2 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
