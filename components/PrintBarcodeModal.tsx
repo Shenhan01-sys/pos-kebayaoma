@@ -47,7 +47,14 @@ export default function PrintBarcodeModal({
   // Satuan baris = 1,5 label + 0,3 gap = 1,8 cm → page break wajib kelipatan 1,8.
   // 40x20/50x25/60x30 = jalur RPP02N (single label per halaman).
   const [labelSize, setLabelSize] = useState<"60x30" | "50x25" | "40x20" | "xp420b">("xp420b");
-  // E29: panel siapkan printer (tablet/RawBT) — muncul saat Direct Print diklik
+  // 2026-11-21: pengingat printer label di tablet — dialog cetak Android memilih printer TERAKHIR dipakai app
+  // (dulu RPP02N_3BFC / 80mm Roll → label tampil & tercetak seperti nota). Web tidak bisa memilih printer.
+  const XP_HINT_KEY = "kebaya-oma-xp-print-hint-off";
+  const [showXpHint, setShowXpHint] = useState(false);
+  const [xpHintOff, setXpHintOff] = useState(false);
+  useEffect(() => {
+    if (showXpHint) document.getElementById("xp-print-hint")?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [showXpHint]);
   const LABEL_DIMS: Record<string, { w: number; h: number }> = {
     "60x30": { w: 60, h: 30 },
     "50x25": { w: 50, h: 25 },
@@ -72,6 +79,7 @@ export default function PrintBarcodeModal({
   // Auto-check all variants on open (preset → varian & copies dari restock)
   useEffect(() => {
     if (isOpen) {
+      setShowXpHint(false);
       if (preset) {
         setSelectedVariants({ [preset.variantId]: preset.copies });
         return;
@@ -303,7 +311,14 @@ ${labelHTML}
     const labels = collectLabels();
     if (labels.length === 0) return;
     if (labelSize === "xp420b" && shouldUseRawbt(navigator.userAgent, navigator.maxTouchPoints ?? 0)) {
-      return xp420bDialogPrint(labels);
+      let hintOff = false;
+      try {
+        hintOff = localStorage.getItem(XP_HINT_KEY) === "1";
+      } catch {
+        /* storage diblokir: pengingat tetap tampil */
+      }
+      if (hintOff) return xp420bDialogPrint(labels);
+      return setShowXpHint(true); // tombol di panel = gesture baru untuk membuka dialog cetak
     }
     if (labelSize === "xp420b") return void xp420bBridgePrint(labels);
     return legacyDirectPrint(labels, LABEL_DIMS[labelSize]);
@@ -608,6 +623,52 @@ ${labelHTML}
                       +{Object.keys(selectedVariants).length - 3} more labels...
                     </p>
                   )}
+                </div>
+              </div>
+            )}
+
+            {showXpHint && labelSize === "xp420b" && (
+              <div id="xp-print-hint" className="mb-4 rounded-xl border-2 border-[#775533] bg-[#fff8ef] p-4 text-sm text-[#3a1430]">
+                <div className="mb-2 font-bold">Sebelum mencetak label, di dialog cetak pilih:</div>
+                <ol className="mb-3 list-decimal space-y-1 pl-5">
+                  <li>
+                    Printer: <b>XP-D4601B_5419</b> (bukan RPP02N — itu printer nota)
+                  </li>
+                  <li>
+                    Kertas: <b>110mm Roll</b>
+                  </li>
+                  <li>
+                    Warna: <b>Hitam &amp; Putih</b>
+                  </li>
+                </ol>
+                <p className="mb-3 text-xs text-gray-600">
+                  Android mengingat pilihan terakhir. Kalau pratinjau terlihat seperti nota panjang, printernya masih RPP02N.
+                </p>
+                <label className="mb-3 flex items-center gap-2 text-xs">
+                  <input type="checkbox" checked={xpHintOff} onChange={(e) => setXpHintOff(e.target.checked)} />
+                  Jangan tampilkan lagi di perangkat ini
+                </label>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      if (xpHintOff) {
+                        try {
+                          localStorage.setItem(XP_HINT_KEY, "1");
+                        } catch {
+                          /* abaikan */
+                        }
+                      }
+                      setShowXpHint(false);
+                      const labels = collectLabels();
+                      if (labels.length > 0) xp420bDialogPrint(labels);
+                    }}
+                    className="flex-1 rounded-xl bg-[#775533] px-4 py-2 font-bold text-white"
+                  >
+                    Buka dialog cetak
+                  </button>
+                  <button onClick={() => setShowXpHint(false)} className="rounded-xl border border-[#775533] px-4 py-2 text-[#775533]">
+                    Batal
+                  </button>
                 </div>
               </div>
             )}
