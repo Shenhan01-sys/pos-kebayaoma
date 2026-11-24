@@ -21,6 +21,7 @@ import { useData } from "@/store/data";
 import { canManageTransactions } from "@/lib/roles";
 import { Icon } from "@/components/icons";
 import TransferPanel from "@/components/TransferPanel";
+import Receipt from "@/components/Receipt";
 
 const METHOD_LABELS: Record<PaymentMethod, string> = {
   qris: "QRIS",
@@ -65,6 +66,8 @@ export default function TransactionsPage() {
     stores.find((t) => t.id === id)?.prefix ?? "—";
   const [showVoided, setShowVoided] = useState(false);
   const [photoView, setPhotoView] = useState<string | null>(null);
+  // 2026-11-24: klik baris → nota digital utuh (tabel lebar terpotong; mudah dilihat & di-screenshot)
+  const [receiptTx, setReceiptTx] = useState<Transaction | null>(null);
   // E21: foto bukti tak ikut daftar — diambil saat tombol diklik
   const [proofLoadingId, setProofLoadingId] = useState<string | null>(null);
   const [proofMsg, setProofMsg] = useState<string | null>(null);
@@ -283,8 +286,10 @@ export default function TransactionsPage() {
                 return (
                   <tr
                     key={i}
+                    onClick={() => setReceiptTx(r.tx)}
+                    title="Klik untuk lihat nota"
                     className={[
-                      "border-t border-black/5 hover:bg-beige/40",
+                      "cursor-pointer border-t border-black/5 hover:bg-beige/40",
                       r.isFirstOfNota ? "border-t-2 border-t-olive/20" : "",
                       voided ? "opacity-50 line-through" : "",
                     ].join(" ")}
@@ -293,6 +298,7 @@ export default function TransactionsPage() {
                       {r.isFirstOfNota ? (
                         <Link
                           href={`/verify/${r.tx.id}`}
+                          onClick={(e) => e.stopPropagation()}
                           className="font-semibold text-apricot hover:underline"
                         >
                           {r.tx.number}
@@ -394,7 +400,7 @@ export default function TransactionsPage() {
                         ""
                       )}
                     </td>
-                    <td className="p-2.5 align-top">
+                    <td className="p-2.5 align-top" onClick={(e) => e.stopPropagation()}>
                       {r.isFirstOfNota ? (
                         r.tx.photoProof || r.tx.hasProof ? (
                           <button
@@ -413,7 +419,7 @@ export default function TransactionsPage() {
                         ""
                       )}
                     </td>
-                    <td className="p-2.5 align-top">
+                    <td className="p-2.5 align-top" onClick={(e) => e.stopPropagation()}>
                       {r.isFirstOfNota && r.tx.status === "partial" && canManage ? (
                         <div className="flex gap-1">
                           <button
@@ -567,6 +573,37 @@ export default function TransactionsPage() {
       )}
 
       {/* Photo proof viewer */}
+      {receiptTx && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onClick={() => setReceiptTx(null)}
+        >
+          <div
+            className="relative max-h-[92vh] w-full max-w-sm overflow-y-auto rounded-3xl bg-white p-5 shadow-soft-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setReceiptTx(null)}
+              className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-beige text-ink"
+              aria-label="Tutup"
+            >
+              <Icon name="close" size={18} />
+            </button>
+            <div className="mb-3 pr-10 text-sm font-bold text-olive">
+              Nota {receiptTx.number}
+              {receiptTx.status === "cancelled" || receiptTx.status === "refunded" ? (
+                <span className="pill-danger ml-2 text-[10px]">
+                  {receiptTx.status === "cancelled" ? "DIBATALKAN" : "REFUND"}
+                </span>
+              ) : receiptTx.status === "partial" ? (
+                <span className="pill-warning ml-2 text-[10px]">BELUM LUNAS</span>
+              ) : null}
+            </div>
+            <Receipt tx={receiptTx} />
+          </div>
+        </div>
+      )}
+
       {photoView && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
