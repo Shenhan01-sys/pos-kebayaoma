@@ -148,9 +148,9 @@ describe("posisi — tiap objek di-center sendiri terhadap sel 33 mm (264 dot)",
       }
     }
   });
-  it("tinggi blok isi ≤ 12 mm & offset atas default 2,5 mm (20 dot)", () => {
+  it("tinggi blok isi ≤ 12 mm & offset atas default 1,5 mm (12 dot)", () => {
     const y0 = (o: object) => Math.min(...parse(buildTsplJob(mk(1), fake, o)).filter((c) => c.y !== undefined).map((c) => c.y!));
-    expect(y0({}) - y0({ topOffsetMm: 0 })).toBe(20);
+    expect(y0({}) - y0({ topOffsetMm: 0 })).toBe(12);
     // isi terbawah (harga) tetap di dalam label 15 mm = 120 dot
     const all = parse(buildTsplJob(mk(1), fake));
     expect(Math.max(...all.filter((c) => c.cmd === "BITMAP").map((c) => c.y! + c.h!))).toBeLessThanOrEqual(120);
@@ -327,10 +327,10 @@ describe("E29 — 1 baris kalibrasi", () => {
       expect([y0, y1]).toEqual([14, 99]);
     }
   });
-  it("ikut kalibrasi default (kiri 1 mm, atas 2,5 mm) dan tetap di dalam label 120 dot", () => {
+  it("ikut kalibrasi default (kiri 1 mm, atas 1,5 mm) dan tetap di dalam label 120 dot", () => {
     const [x0, y0, , y1] = lines().find((x) => x.startsWith("BOX"))!.slice(4).split(",").map(Number);
     expect(x0).toBe(8 + 8 + 12);
-    expect(y0).toBe(20 + 14);
+    expect(y0).toBe(12 + 14);
     expect(y1).toBeLessThanOrEqual(120);
   });
 });
