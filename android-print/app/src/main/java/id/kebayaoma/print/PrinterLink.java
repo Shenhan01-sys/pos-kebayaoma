@@ -67,7 +67,10 @@ final class PrinterLink {
             BluetoothAdapter bt = BluetoothAdapter.getDefaultAdapter();
             if (bt == null || !bt.isEnabled()) throw new IOException("Bluetooth tablet mati");
             BluetoothDevice dev = bt.getRemoteDevice(mac);
-            bt.cancelDiscovery();
+            try {
+                bt.cancelDiscovery(); // Android 12+: butuh BLUETOOTH_SCAN (tidak diminta) -> abaikan
+            } catch (SecurityException ignored) {
+            }
             s = dev.createRfcommSocketToServiceRecord(SPP);
             s.connect();
             synchronized (OPEN) {

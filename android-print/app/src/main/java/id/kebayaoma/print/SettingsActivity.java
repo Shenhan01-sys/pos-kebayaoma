@@ -41,7 +41,6 @@ public class SettingsActivity extends Activity {
         root.setPadding(p, p, p, p);
         scroll.addView(root);
         setContentView(scroll);
-        build();
     }
 
     private void build() {
@@ -109,6 +108,12 @@ public class SettingsActivity extends Activity {
     private boolean hasBtPermission() {
         return Build.VERSION.SDK_INT < 31
                 || checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED;
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        build(); // izin bisa berubah di luar app (Setelan Android / adb)
     }
 
     @Override
